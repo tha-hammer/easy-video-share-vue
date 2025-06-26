@@ -1,5 +1,5 @@
-import ApiService from './ApiService'
-import JwtService from './JwtService'
+import { API_CONFIG } from '@/core/config/config'
+import { authManager } from '@/core/auth/authManager'
 
 export interface AudioMetadata {
   audio_id: string
@@ -36,12 +36,54 @@ export interface AudioUploadResponse {
   upload_url?: string
 }
 
+// Interface for the Lambda response from presigned URL generation
+interface PresignedUrlResponse {
+  success: boolean
+  upload_url: string
+  audio: {
+    video_id: string // Lambda returns video_id, not audio_id
+    user_id: string
+    user_email: string
+    title: string
+    filename: string
+    bucket_location: string
+    upload_date: string
+    file_size?: number
+    content_type?: string
+    duration?: number
+    created_at: string
+    updated_at: string
+    media_type: string
+    transcription_status?: string
+  }
+}
+
 class AudioService {
+  // Helper method to get auth headers (same as VideoService)
+  private static async getAuthHeaders(): Promise<Record<string, string>> {
+    try {
+      const token = await authManager.getAccessToken()
+
+      if (!token) {
+        throw new Error('No authentication token available. User not authenticated.')
+      }
+
+      return {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      }
+    } catch (error) {
+      console.error('❌ Error in getAuthHeaders:', error)
+      throw error
+    }
+  }
+
   /**
    * Upload audio file to S3 audio bucket
    */
   public static async uploadAudio(params: AudioUploadParams): Promise<AudioUploadResponse> {
     const { title, description, file, onProgress } = params
+    // Note: description is available in params but not currently used in this implementation
 
     // Validate file type
     if (!this.isValidAudioFile(file)) {
@@ -62,6 +104,8 @@ class AudioService {
         file_size: file.size,
         content_type: file.type,
         upload_date: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       }
 
       // Get presigned URL for upload
@@ -71,10 +115,18 @@ class AudioService {
       await this.uploadToS3(presignedResponse.upload_url!, file, onProgress)
 
       // Save metadata to database
+      // Note: Lambda returns video_id but frontend expects audio_id
+      const audioId = presignedResponse.audio.video_id
+      const bucketLocation = presignedResponse.audio.bucket_location
+
+      if (!audioId) {
+        throw new Error('No audio ID returned from presigned URL generation')
+      }
+
       const savedAudio = await this.saveAudioMetadata({
         ...audioMetadata,
-        audio_id: presignedResponse.audio.audio_id,
-        bucket_location: presignedResponse.audio.bucket_location,
+        audio_id: audioId,
+        bucket_location: bucketLocation,
       } as AudioMetadata)
 
       return {
@@ -95,15 +147,27 @@ class AudioService {
   /**
    * Get presigned URL for audio upload
    */
-  private static async getPresignedUploadUrl(metadata: Partial<AudioMetadata>): Promise<{
-    upload_url: string
-    audio: AudioMetadata
-  }> {
-    ApiService.setHeader()
-
+  private static async getPresignedUploadUrl(
+    metadata: Partial<AudioMetadata>,
+  ): Promise<PresignedUrlResponse> {
     try {
-      const response = await ApiService.post('audio/upload-url', metadata)
-      return response.data
+      const headers = await this.getAuthHeaders()
+      const audioUploadUrl = `${API_CONFIG.baseUrl}/audio/upload-url`
+
+      const response = await fetch(audioUploadUrl, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(metadata),
+      })
+
+      if (!response.ok) {
+        const responseText = await response.text()
+        console.error('Presigned URL error response:', responseText)
+        throw new Error(`Failed to get upload URL: ${response.statusText}`)
+      }
+
+      const data = await response.json()
+      return data
     } catch (error: unknown) {
       console.error('Presigned URL error:', error)
       throw new Error('Failed to get upload URL')
@@ -157,11 +221,29 @@ class AudioService {
    * Save audio metadata to database
    */
   public static async saveAudioMetadata(metadata: AudioMetadata): Promise<AudioMetadata> {
-    ApiService.setHeader()
-
     try {
-      const response = await ApiService.post('audio', metadata)
-      return response.data.audio
+      const headers = await this.getAuthHeaders()
+      const audioUrl = `${API_CONFIG.baseUrl}/audio`
+
+      console.log('🌐 Saving audio metadata to:', audioUrl)
+      console.log('🌐 Request body:', JSON.stringify(metadata, null, 2))
+
+      const response = await fetch(audioUrl, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(metadata),
+      })
+
+      console.log('🌐 Response status:', response.status, response.statusText)
+
+      if (!response.ok) {
+        const responseText = await response.text()
+        console.error('🌐 Error response body:', responseText)
+        throw new Error(`Failed to save audio metadata: ${response.statusText}`)
+      }
+
+      const data = await response.json()
+      return data.audio
     } catch (error: unknown) {
       console.error('Save metadata error:', error)
       throw new Error('Failed to save audio metadata')
@@ -172,21 +254,26 @@ class AudioService {
    * Get user's audio files
    */
   public static async getUserAudioFiles(): Promise<AudioMetadata[]> {
-    ApiService.setHeader()
-
     try {
-      const response = await ApiService.query('audio', {})
-      return response.data.audio_files || []
-    } catch (error: unknown) {
-      console.error('Get audio files error:', error)
+      const headers = await this.getAuthHeaders()
+      const audioUrl = `${API_CONFIG.baseUrl}/audio`
 
-      if (error && typeof error === 'object' && 'response' in error) {
-        const apiError = error as { response?: { status?: number } }
-        if (apiError.response?.status === 404) {
+      const response = await fetch(audioUrl, {
+        method: 'GET',
+        headers,
+      })
+
+      if (!response.ok) {
+        if (response.status === 404) {
           return [] // No audio files found
         }
+        throw new Error(`Failed to load audio files: ${response.statusText}`)
       }
 
+      const data = await response.json()
+      return data.audio_files || []
+    } catch (error: unknown) {
+      console.error('Get audio files error:', error)
       throw new Error('Failed to load audio files')
     }
   }
@@ -195,10 +282,19 @@ class AudioService {
    * Delete audio file
    */
   public static async deleteAudio(audioId: string): Promise<boolean> {
-    ApiService.setHeader()
-
     try {
-      await ApiService.delete(`audio/${audioId}`)
+      const headers = await this.getAuthHeaders()
+      const audioUrl = `${API_CONFIG.baseUrl}/audio/${audioId}`
+
+      const response = await fetch(audioUrl, {
+        method: 'DELETE',
+        headers,
+      })
+
+      if (!response.ok) {
+        throw new Error(`Failed to delete audio file: ${response.statusText}`)
+      }
+
       return true
     } catch (error: unknown) {
       console.error('Delete audio error:', error)
@@ -210,11 +306,21 @@ class AudioService {
    * Get audio file details
    */
   public static async getAudioDetails(audioId: string): Promise<AudioMetadata> {
-    ApiService.setHeader()
-
     try {
-      const response = await ApiService.query(`audio/${audioId}`, {})
-      return response.data.audio
+      const headers = await this.getAuthHeaders()
+      const audioUrl = `${API_CONFIG.baseUrl}/audio/${audioId}`
+
+      const response = await fetch(audioUrl, {
+        method: 'GET',
+        headers,
+      })
+
+      if (!response.ok) {
+        throw new Error(`Failed to get audio details: ${response.statusText}`)
+      }
+
+      const data = await response.json()
+      return data.audio
     } catch (error: unknown) {
       console.error('Get audio details error:', error)
       throw new Error('Failed to get audio details')

@@ -31,5 +31,9 @@ export default defineConfig({
   // Define global variables for AWS SDK compatibility
   define: {
     global: 'globalThis',
+    // Set API URL from environment or use deployed AWS endpoint
+    'import.meta.env.VITE_APP_API_URL': JSON.stringify(
+      process.env.VITE_APP_API_URL || 'https://ip60d4qmjf.execute-api.us-east-1.amazonaws.com/dev',
+    ),
   },
 })

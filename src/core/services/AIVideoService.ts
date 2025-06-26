@@ -1,47 +1,20 @@
 import ApiService from './ApiService'
-import JwtService from './JwtService'
+import type { AudioMetadata } from './AudioService'
 
 export interface AIVideoGenerationRequest {
-  videoId: string
+  videoId?: string
+  audioId: string
   prompt: string
-  targetDuration?: number
-  style?: 'realistic' | 'cinematic' | 'animated' | 'artistic'
-}
-
-export interface AIVideoStatus {
-  success: boolean
-  video: {
-    video_id: string
-    user_id: string
-    ai_project_type?: 'standard' | 'ai_generated'
-    ai_generation_status?: 'processing' | 'completed' | 'failed'
-    ai_generation_data?: {
-      processing_steps: ProcessingStep[]
-      audio_transcription?: AudioTranscription
-      scene_beats?: SceneBeats
-      vertex_ai_tasks?: VertexAITask[]
-      final_video_url?: string
-      started_at?: string
-      completed_at?: string
-      generation_time?: number
-      error_message?: string
-    }
-  }
+  targetDuration: number
+  style: string
 }
 
 export interface ProcessingStep {
-  step: 'transcription' | 'scene_planning' | 'video_generation' | 'finalization'
+  step: string
   status: 'pending' | 'processing' | 'completed' | 'failed'
   started_at?: string
   completed_at?: string
   error_message?: string
-}
-
-export interface AudioTranscription {
-  full_text: string
-  segments: TranscriptSegment[]
-  confidence: number
-  language_code: string
 }
 
 export interface TranscriptSegment {
@@ -49,12 +22,6 @@ export interface TranscriptSegment {
   end_time: number
   text: string
   confidence: number
-}
-
-export interface SceneBeats {
-  overall_theme: string
-  total_duration: number
-  scenes: SceneBeat[]
 }
 
 export interface SceneBeat {
@@ -68,26 +35,79 @@ export interface SceneBeat {
   visual_style: string
 }
 
-export interface VertexAITask {
-  task_id: string
-  sequence: number
-  status: 'pending' | 'processing' | 'completed' | 'failed'
-  video_url?: string
-  prompt: string
-  created_at: string
-  duration?: number
-  scene_description?: string
+export interface AIGenerationData {
+  audio_transcription?: {
+    full_text: string
+    segments: TranscriptSegment[]
+    confidence: number
+    language_code: string
+  }
+  scene_beats?: {
+    overall_theme: string
+    scenes: SceneBeat[]
+    target_duration: number
+  }
+  vertex_ai_tasks?: {
+    task_id: string
+    status: 'pending' | 'processing' | 'completed' | 'failed'
+    video_url?: string
+    prompt: string
+    created_at: string
+  }[]
+  processing_steps?: ProcessingStep[]
+  final_video_url?: string
+  generation_time?: number
+  cost_breakdown?: {
+    transcription: number
+    scene_generation: number
+    video_generation: number
+    total: number
+  }
+  started_at?: string
+  completed_at?: string
+  user_prompt?: string
+  target_duration?: number
+  style?: string
   error_message?: string
+}
+
+export interface VideoMetadata {
+  video_id: string
+  user_id: string
+  user_email: string
+  title: string
+  filename: string
+  bucket_location: string
+  upload_date: string
+  file_size?: number
+  content_type?: string
+  duration?: number
+  created_at: string
+  updated_at: string
+  ai_project_type?: 'standard' | 'ai_generated'
+  ai_generation_status?: 'processing' | 'completed' | 'failed'
+  ai_generation_data?: AIGenerationData
+}
+
+export interface AIVideoGenerationResponse {
+  success: boolean
+  message: string
+  videoId: string
+  status: string
+}
+
+export interface AIVideoStatusResponse {
+  success: boolean
+  video: VideoMetadata
 }
 
 class AIVideoService {
   /**
-   * Start AI video generation for a given video
+   * Start AI video generation process
    */
   public static async generateAIVideo(
     request: AIVideoGenerationRequest,
-  ): Promise<{ success: boolean; message: string; videoId: string; status: string }> {
-    // Set authorization header
+  ): Promise<AIVideoGenerationResponse> {
     ApiService.setHeader()
 
     try {
@@ -98,9 +118,8 @@ class AIVideoService {
 
       if (error && typeof error === 'object' && 'response' in error) {
         const apiError = error as { response?: { data?: { error?: string } } }
-        if (apiError.response?.data?.error) {
-          throw new Error(apiError.response.data.error)
-        }
+        const errorMessage = apiError.response?.data?.error || 'Failed to start AI video generation'
+        throw new Error(errorMessage)
       }
 
       throw new Error('Failed to start AI video generation')
@@ -110,23 +129,19 @@ class AIVideoService {
   /**
    * Get AI video generation status
    */
-  public static async getAIVideoStatus(videoId: string): Promise<AIVideoStatus> {
-    // Set authorization header
+  public static async getAIVideoStatus(videoId: string): Promise<AIVideoStatusResponse> {
     ApiService.setHeader()
 
     try {
-      const response = await ApiService.query('ai-video', {
-        params: { videoId },
-      })
+      const response = await ApiService.get('ai-video', videoId)
       return response.data
     } catch (error: unknown) {
       console.error('AI video status error:', error)
 
       if (error && typeof error === 'object' && 'response' in error) {
         const apiError = error as { response?: { data?: { error?: string } } }
-        if (apiError.response?.data?.error) {
-          throw new Error(apiError.response.data.error)
-        }
+        const errorMessage = apiError.response?.data?.error || 'Failed to get AI video status'
+        throw new Error(errorMessage)
       }
 
       throw new Error('Failed to get AI video status')
@@ -134,54 +149,77 @@ class AIVideoService {
   }
 
   /**
-   * Calculate processing progress percentage
+   * Poll for AI video completion with automatic retries
    */
-  public static calculateProgress(steps: ProcessingStep[]): number {
-    if (!steps || steps.length === 0) return 0
+  public static async pollForCompletion(
+    videoId: string,
+    onProgress?: (video: VideoMetadata) => void,
+    maxWaitTime: number = 900000, // 15 minutes
+    pollInterval: number = 3000, // 3 seconds
+  ): Promise<VideoMetadata> {
+    const startTime = Date.now()
 
-    const completedSteps = steps.filter((step) => step.status === 'completed').length
-    return Math.round((completedSteps / steps.length) * 100)
-  }
+    return new Promise((resolve, reject) => {
+      const poll = async () => {
+        try {
+          const statusResponse = await this.getAIVideoStatus(videoId)
+          const video = statusResponse.video
 
-  /**
-   * Get current processing step
-   */
-  public static getCurrentProcessingStep(steps: ProcessingStep[]): ProcessingStep | null {
-    if (!steps || steps.length === 0) return null
+          // Call progress callback if provided
+          if (onProgress) {
+            onProgress(video)
+          }
 
-    return steps.find((step) => step.status === 'processing') || null
-  }
+          // Check if completed
+          if (video.ai_generation_status === 'completed') {
+            resolve(video)
+            return
+          }
 
-  /**
-   * Get user-friendly step name
-   */
-  public static getStepDisplayName(step: string): string {
-    const stepNames: Record<string, string> = {
-      transcription: 'Transcribing Audio',
-      scene_planning: 'Planning Scenes',
-      video_generation: 'Generating Video',
-      finalization: 'Finalizing Video',
-    }
+          // Check if failed
+          if (video.ai_generation_status === 'failed') {
+            const errorMessage =
+              video.ai_generation_data?.error_message || 'AI video generation failed'
+            reject(new Error(errorMessage))
+            return
+          }
 
-    return stepNames[step] || step
-  }
+          // Check timeout
+          if (Date.now() - startTime > maxWaitTime) {
+            reject(new Error('AI video generation timed out'))
+            return
+          }
 
-  /**
-   * Get user-friendly processing message
-   */
-  public static getProcessingMessage(steps: ProcessingStep[]): string {
-    const currentStep = this.getCurrentProcessingStep(steps)
-
-    if (!currentStep) {
-      const completedSteps = steps?.filter((s) => s.status === 'completed').length || 0
-      const totalSteps = steps?.length || 0
-
-      if (completedSteps === totalSteps && totalSteps > 0) {
-        return 'AI video generation completed!'
+          // Continue polling
+          setTimeout(poll, pollInterval)
+        } catch (error) {
+          console.error('Polling error:', error)
+          reject(error)
+        }
       }
 
-      return 'Processing...'
-    }
+      // Start polling
+      poll()
+    })
+  }
+
+  /**
+   * Calculate processing progress percentage
+   */
+  public static calculateProgress(processingSteps?: ProcessingStep[]): number {
+    if (!processingSteps || processingSteps.length === 0) return 0
+
+    const completedSteps = processingSteps.filter((step) => step.status === 'completed').length
+    return Math.round((completedSteps / processingSteps.length) * 100)
+  }
+
+  /**
+   * Get current processing step message
+   */
+  public static getCurrentStepMessage(processingSteps?: ProcessingStep[]): string {
+    if (!processingSteps) return 'Initializing...'
+
+    const currentStep = processingSteps.find((step) => step.status === 'processing')
 
     const messages: Record<string, string> = {
       transcription: 'Transcribing audio content...',
@@ -190,28 +228,125 @@ class AIVideoService {
       finalization: 'Finalizing your video...',
     }
 
-    return messages[currentStep.step] || 'Processing...'
+    return currentStep ? messages[currentStep.step] || 'Processing...' : 'Waiting to start...'
   }
 
   /**
-   * Check if AI video generation is available (based on configuration)
+   * Format step name for display
    */
-  public static isAIVideoAvailable(): boolean {
-    // Check if the AI video endpoint is configured
-    // This could be based on environment variables or feature flags
-    return import.meta.env.VITE_AI_VIDEO_ENABLED === 'true'
+  public static formatStepName(step: string): string {
+    const names: Record<string, string> = {
+      transcription: 'Audio Transcription',
+      scene_planning: 'Scene Planning',
+      video_generation: 'Video Generation',
+      finalization: 'Finalization',
+    }
+    return names[step] || step
   }
 
   /**
-   * Get estimated processing time
+   * Get estimated completion time
    */
-  public static getEstimatedProcessingTime(targetDuration: number): string {
-    // Rough estimate based on video duration
-    const baseTime = 2 // Base 2 minutes
-    const additionalTime = Math.ceil(targetDuration / 30) // Additional time per 30s of video
-    const totalMinutes = baseTime + additionalTime
+  public static getEstimatedTime(
+    processingSteps?: ProcessingStep[],
+    targetDuration: number = 30,
+  ): string {
+    if (!processingSteps) return 'Calculating...'
 
-    return `${totalMinutes}-${totalMinutes + 2} minutes`
+    const completedSteps = processingSteps.filter((step) => step.status === 'completed').length
+    const totalSteps = processingSteps.length
+
+    // Rough estimates based on step complexity
+    const stepTimes: Record<string, number> = {
+      transcription: 30, // 30 seconds
+      scene_planning: 60, // 1 minute
+      video_generation: 180 + targetDuration * 3, // 3-6 minutes depending on duration
+      finalization: 30, // 30 seconds
+    }
+
+    const remainingSteps = processingSteps.filter(
+      (step) => step.status === 'pending' || step.status === 'processing',
+    )
+
+    const remainingTime = remainingSteps.reduce((total, step) => {
+      return total + (stepTimes[step.step] || 60)
+    }, 0)
+
+    if (remainingTime < 60) {
+      return `~${remainingTime} seconds`
+    } else {
+      const minutes = Math.ceil(remainingTime / 60)
+      return `~${minutes} minute${minutes === 1 ? '' : 's'}`
+    }
+  }
+
+  /**
+   * Validate AI video generation request
+   */
+  public static validateRequest(request: AIVideoGenerationRequest): string[] {
+    const errors: string[] = []
+
+    if (!request.audioId) {
+      errors.push('Audio ID is required')
+    }
+
+    if (!request.prompt || request.prompt.trim().length === 0) {
+      errors.push('Video description/prompt is required')
+    }
+
+    if (request.prompt && request.prompt.length > 500) {
+      errors.push('Video description must be less than 500 characters')
+    }
+
+    if (!request.targetDuration || request.targetDuration < 15 || request.targetDuration > 60) {
+      errors.push('Target duration must be between 15 and 60 seconds')
+    }
+
+    if (!request.style) {
+      errors.push('Visual style is required')
+    }
+
+    return errors
+  }
+
+  /**
+   * Get default video styles
+   */
+  public static getVideoStyles(): Array<{ value: string; label: string; description: string }> {
+    return [
+      {
+        value: 'realistic',
+        label: 'Realistic',
+        description: 'Photorealistic scenes and environments',
+      },
+      {
+        value: 'cinematic',
+        label: 'Cinematic',
+        description: 'Movie-like dramatic scenes with professional lighting',
+      },
+      {
+        value: 'animated',
+        label: 'Animated',
+        description: 'Cartoon or 3D animated style',
+      },
+      {
+        value: 'artistic',
+        label: 'Artistic',
+        description: 'Stylized and creative artistic interpretations',
+      },
+    ]
+  }
+
+  /**
+   * Get supported durations
+   */
+  public static getSupportedDurations(): Array<{ value: number; label: string }> {
+    return [
+      { value: 15, label: '15 seconds' },
+      { value: 30, label: '30 seconds' },
+      { value: 45, label: '45 seconds' },
+      { value: 60, label: '60 seconds' },
+    ]
   }
 }
 

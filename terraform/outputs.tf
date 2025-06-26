@@ -100,4 +100,15 @@ output "cognito_region" {
 output "aws_region" {
   description = "AWS region where resources are created"
   value       = var.aws_region
+}
+
+# Audio API Endpoints
+output "api_audio_endpoint" {
+  description = "Full API endpoint for audio operations"
+  value       = "https://${aws_api_gateway_rest_api.video_api.id}.execute-api.${var.aws_region}.amazonaws.com/${var.environment}/audio"
+}
+
+output "api_audio_upload_endpoint" {
+  description = "Full API endpoint for audio upload URL generation"
+  value       = "https://${aws_api_gateway_rest_api.video_api.id}.execute-api.${var.aws_region}.amazonaws.com/${var.environment}/audio/upload-url"
 } 

@@ -128,7 +128,7 @@ resource "aws_s3_bucket" "audio_bucket" {
   bucket = var.audio_bucket_name != "" ? var.audio_bucket_name : "${var.bucket_name}-audio"
 
   tags = {
-    Name        = "Audio Files Bucket (AI Shorts)"
+    Name        = "Audio Files Bucket - AI Shorts"
     Environment = var.environment
     Project     = "easy-video-share"
   }
@@ -402,6 +402,7 @@ resource "aws_lambda_function" "video_metadata_api" {
   environment {
     variables = {
       DYNAMODB_TABLE = aws_dynamodb_table.video_metadata.name
+      AUDIO_BUCKET   = aws_s3_bucket.audio_bucket.bucket
       CORS_ORIGIN    = "*"
     }
   }
@@ -796,6 +797,8 @@ resource "aws_api_gateway_integration_response" "videos_options_integration_resp
     "method.response.header.Access-Control-Allow-Methods" = "'GET,POST,OPTIONS'"
     "method.response.header.Access-Control-Allow-Headers" = "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
   }
+
+  depends_on = [aws_api_gateway_integration.videos_options_integration]
 }
 
 # Admin API Gateway Integration Responses
@@ -855,6 +858,8 @@ resource "aws_api_gateway_integration_response" "admin_users_options_integration
     "method.response.header.Access-Control-Allow-Methods" = "'GET,DELETE,OPTIONS'"
     "method.response.header.Access-Control-Allow-Headers" = "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
   }
+
+  depends_on = [aws_api_gateway_integration.admin_users_options_integration]
 }
 
 resource "aws_api_gateway_integration_response" "admin_videos_options_integration_response" {
@@ -868,6 +873,8 @@ resource "aws_api_gateway_integration_response" "admin_videos_options_integratio
     "method.response.header.Access-Control-Allow-Methods" = "'GET,DELETE,OPTIONS'"
     "method.response.header.Access-Control-Allow-Headers" = "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
   }
+
+  depends_on = [aws_api_gateway_integration.admin_videos_options_integration]
 }
 
 resource "aws_api_gateway_integration_response" "admin_user_videos_options_integration_response" {
@@ -881,6 +888,8 @@ resource "aws_api_gateway_integration_response" "admin_user_videos_options_integ
     "method.response.header.Access-Control-Allow-Methods" = "'GET,OPTIONS'"
     "method.response.header.Access-Control-Allow-Headers" = "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
   }
+
+  depends_on = [aws_api_gateway_integration.admin_user_videos_options_integration]
 }
 
 # Lambda permission for API Gateway
@@ -926,6 +935,18 @@ resource "aws_api_gateway_deployment" "video_api_deployment" {
     aws_api_gateway_integration_response.admin_users_options_integration_response,
     aws_api_gateway_integration_response.admin_videos_options_integration_response,
     aws_api_gateway_integration_response.admin_user_videos_options_integration_response,
+    # Add audio integrations
+    aws_api_gateway_integration.audio_post_integration,
+    aws_api_gateway_integration.audio_get_integration,
+    aws_api_gateway_integration.audio_options_integration,
+    aws_api_gateway_integration.audio_upload_url_post_integration,
+    aws_api_gateway_integration.audio_upload_url_options_integration,
+    # Add audio integration responses  
+    aws_api_gateway_integration_response.audio_post_integration_response,
+    aws_api_gateway_integration_response.audio_get_integration_response,
+    aws_api_gateway_integration_response.audio_options_integration_response,
+    aws_api_gateway_integration_response.audio_upload_url_post_integration_response,
+    aws_api_gateway_integration_response.audio_upload_url_options_integration_response,
   ]
 
   rest_api_id = aws_api_gateway_rest_api.video_api.id
@@ -974,6 +995,31 @@ resource "aws_api_gateway_deployment" "video_api_deployment" {
       aws_api_gateway_integration_response.admin_users_options_integration_response.id,
       aws_api_gateway_integration_response.admin_videos_options_integration_response.id,
       aws_api_gateway_integration_response.admin_user_videos_options_integration_response.id,
+      # Audio resources - complete list
+      aws_api_gateway_resource.audio_resource.id,
+      aws_api_gateway_resource.audio_upload_url_resource.id,
+      aws_api_gateway_method.audio_post.id,
+      aws_api_gateway_method.audio_get.id,
+      aws_api_gateway_method.audio_options.id,
+      aws_api_gateway_method.audio_upload_url_post.id,
+      aws_api_gateway_method.audio_upload_url_options.id,
+      aws_api_gateway_integration.audio_post_integration.id,
+      aws_api_gateway_integration.audio_get_integration.id,
+      aws_api_gateway_integration.audio_options_integration.id,
+      aws_api_gateway_integration.audio_upload_url_post_integration.id,
+      aws_api_gateway_integration.audio_upload_url_options_integration.id,
+      # Audio method responses
+      aws_api_gateway_method_response.audio_post_response.id,
+      aws_api_gateway_method_response.audio_get_response.id,
+      aws_api_gateway_method_response.audio_options_response.id,
+      aws_api_gateway_method_response.audio_upload_url_post_response.id,
+      aws_api_gateway_method_response.audio_upload_url_options_response.id,
+      # Audio integration responses
+      aws_api_gateway_integration_response.audio_post_integration_response.id,
+      aws_api_gateway_integration_response.audio_get_integration_response.id,
+      aws_api_gateway_integration_response.audio_options_integration_response.id,
+      aws_api_gateway_integration_response.audio_upload_url_post_integration_response.id,
+      aws_api_gateway_integration_response.audio_upload_url_options_integration_response.id,
     ]))
   }
 
