@@ -1,0 +1,1381 @@
+# Easy Video Share - Cursor Rules
+
+# Captured learnings from CORS, Lambda, DynamoDB, and Cross-Cloud setup
+
+## Project Architecture Overview
+
+- Vue 3 frontend with TypeScript
+- Metronic UI
+- AWS Lambda backend with API Gateway
+- DynamoDB for data storage
+- S3 for file storage (videos and audio)
+- Google Cloud Vertex AI for AI video generation
+- Workload Identity Federation for cross-cloud authentication
+
+## CORS Setup Requirements
+
+### API Gateway CORS Configuration
+
+- MUST include integration responses for all HTTP methods
+- Required headers: Content-Type, Authorization, X-Amz-Date, X-Amz-Security-Token
+- Exposed headers: Content-Length, X-Amz-Request-Id
+- Allow credentials: true
+- Max age: 86400
+
+### Lambda CORS Headers
+
+```javascript
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'Content-Type,Authorization,X-Amz-Date,X-Amz-Security-Token',
+  'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
+  'Access-Control-Allow-Credentials': 'true',
+  'Access-Control-Max-Age': '86400',
+}
+```
+
+### Frontend CORS Handling
+
+- Use proper Content-Type headers
+- Handle preflight OPTIONS requests
+- Include Authorization headers for authenticated requests
+- Handle CORS errors gracefully with user-friendly messages
+
+## Project Data Configuration
+
+### Google Cloud Configuration
+
+- Project ID: easy-video-share
+- Location: us-central1
+- Service Account: easy-vide-share-sa@easy-video-share.iam.gserviceaccount.com
+- Workload Identity Pool: easy-video-share
+- Workload Identity Provider: easy-video-share
+- AWS Account ID: 571960159088
+
+### Environment Variables Structure
+
+```bash
+# Google Cloud Configuration
+VITE_GOOGLE_CLOUD_PROJECT_ID=easy-video-share
+VITE_GOOGLE_CLOUD_LOCATION=us-central1
+VITE_GOOGLE_CLOUD_SERVICE_ACCOUNT_EMAIL=easy-vide-share-sa@easy-video-share.iam.gserviceaccount.com
+
+# OpenAI Configuration
+VITE_OPENAI_API_KEY=sk-your-actual-openai-api-key
+
+# AWS Configuration
+VITE_AWS_REGION=us-east-1
+VITE_AWS_BUCKET_NAME=easy-video-share-silmari-dev
+VITE_AWS_ACCESS_KEY_ID=your-access-key
+VITE_AWS_SECRET_ACCESS_KEY=your-secret-key
+```
+
+## Lambda Requirements and Dependencies
+
+### Core Dependencies
+
+```json
+{
+  "@aws-sdk/client-dynamodb": "^3.x",
+  "@aws-sdk/client-s3": "^3.x",
+  "@aws-sdk/client-secrets-manager": "^3.x",
+  "@aws-sdk/client-transcribe": "^3.x",
+  "@aws-sdk/lib-dynamodb": "^3.x",
+  "google-auth-library": "^9.x",
+  "@google-cloud/vertexai": "^0.x",
+  "openai": "^4.x"
+}
+```
+
+### Lambda Environment Variables
+
+```bash
+AWS_REGION=us-east-1
+DYNAMODB_TABLE=easy-video-share-videos
+S3_BUCKET=easy-video-share-silmari-dev
+SECRETS_MANAGER_ARN=arn:aws:secretsmanager:us-east-1:571960159088:secret:ai-video-secrets
+CORS_ORIGIN=*
+GOOGLE_CLOUD_PROJECT_ID=easy-video-share
+GOOGLE_CLOUD_LOCATION=us-central1
+GOOGLE_CLOUD_SERVICE_ACCOUNT_EMAIL=easy-vide-share-sa@easy-video-share.iam.gserviceaccount.com
+```
+
+### Lambda Authentication Setup
+
+```javascript
+// Modern Google Cloud Authentication with Workload Identity Federation
+const { GoogleAuth } = require('google-auth-library')
+const { VertexAI } = require('@google-cloud/vertexai')
+
+async function initializeGoogleCloud() {
+  const auth = new GoogleAuth({
+    scopes: ['https://www.googleapis.com/auth/cloud-platform'],
+    // Automatically uses Workload Identity Federation in AWS Lambda
+  })
+
+  const vertexAI = new VertexAI({
+    project: process.env.GOOGLE_CLOUD_PROJECT_ID,
+    location: process.env.GOOGLE_CLOUD_LOCATION,
+    googleAuth: auth,
+  })
+
+  return vertexAI
+}
+```
+
+### Lambda Error Handling
+
+```javascript
+const createResponse = (statusCode, body) => ({
+  statusCode,
+  headers: {
+    ...corsHeaders,
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    ...body,
+    ...(process.env.NODE_ENV === 'development' && { stack: error.stack }),
+  }),
+})
+```
+
+## DynamoDB Requirements and Dependencies
+
+### Table Schema
+
+```javascript
+// Videos Table
+{
+  video_id: "string", // Primary key: userId_timestamp_random
+  user_id: "string", // Cognito user sub
+  user_email: "string",
+  title: "string",
+  filename: "string",
+  bucket_location: "string", // S3 object key
+  upload_date: "string", // ISO timestamp
+  file_size: "number",
+  content_type: "string",
+  duration: "number",
+  created_at: "string",
+  updated_at: "string",
+  ai_project_type: "string", // 'standard' | 'ai_generated'
+  ai_generation_status: "string", // 'processing' | 'completed' | 'failed'
+  ai_generation_data: "object" // Complex object with processing steps
+}
+
+// Audio Table (if separate)
+{
+  audio_id: "string", // Primary key: userId_timestamp_random
+  user_id: "string",
+  user_email: "string",
+  title: "string",
+  filename: "string",
+  bucket_location: "string",
+  upload_date: "string",
+  file_size: "number",
+  content_type: "string",
+  duration: "number",
+  created_at: "string",
+  updated_at: "string",
+  transcription_status: "string", // 'pending' | 'processing' | 'completed' | 'failed'
+  transcription_data: "object"
+}
+```
+
+### DynamoDB Operations
+
+```javascript
+// Required imports
+const {
+  DynamoDBClient,
+  GetItemCommand,
+  PutItemCommand,
+  UpdateItemCommand,
+  QueryCommand,
+} = require('@aws-sdk/client-dynamodb')
+const { DynamoDBDocumentClient, GetCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb')
+
+// Client initialization
+const dynamoClient = new DynamoDBClient({ region: process.env.AWS_REGION })
+const docClient = DynamoDBDocumentClient.from(dynamoClient)
+```
+
+### DynamoDB Permissions
+
+- Read/Write access to videos table
+- Query by user_id for user-specific data
+- Update operations for AI generation status
+- Conditional writes for data integrity
+
+## Cross-Cloud Requirements and Dependencies
+
+### Workload Identity Federation Setup
+
+```bash
+# Google Cloud CLI commands
+gcloud config set project easy-video-share
+gcloud iam workload-identity-pools create easy-video-share --location=global
+gcloud iam workload-identity-pools providers create-aws easy-video-share \
+  --workload-identity-pool=easy-video-share \
+  --account-id=571960159088 \
+  --role-session-name=lambda-session
+
+# Service account setup
+gcloud iam service-accounts create easy-video-share-sa \
+  --display-name="Easy Video Share Service Account"
+
+# Grant permissions
+gcloud iam service-accounts add-iam-policy-binding easy-vide-share-sa@easy-video-share.iam.gserviceaccount.com \
+  --role="roles/iam.workloadIdentityUser" \
+  --member="principalSet://iam.googleapis.com/projects/PROJECT_NUMBER/locations/global/workloadIdentityPools/easy-video-share/attribute.service_account/easy-vide-share-sa@easy-video-share.iam.gserviceaccount.com"
+```
+
+### Application Default Credentials (ADC)
+
+- Local development uses ADC file
+- Location: `%APPDATA%\gcloud\application_default_credentials.json` (Windows)
+- Must be configured for correct project: `gcloud config set project easy-video-share`
+- Re-authenticate if wrong project: `gcloud auth application-default login`
+
+### Cross-Cloud Authentication Flow
+
+1. **Local Development**: ADC file → Personal credentials → easy-video-share project
+2. **Production**: AWS Lambda → Workload Identity → Service account → easy-video-share project
+3. **Same Code**: Google Auth library handles switching automatically
+
+### Required Google Cloud APIs
+
+```bash
+gcloud services enable aiplatform.googleapis.com
+gcloud services enable storage.googleapis.com
+gcloud services enable iamcredentials.googleapis.com
+```
+
+### Service Account Permissions
+
+- `roles/aiplatform.user` - Vertex AI access
+- `roles/storage.objectViewer` - Read S3-like storage
+- `roles/storage.objectCreator` - Write to storage
+- `roles/iam.workloadIdentityUser` - Workload Identity Federation
+
+## File Upload Requirements
+
+### S3 Multipart Upload
+
+- Use AWS SDK v3 for multipart uploads
+- Chunk size: 8MB for audio, 16MB for video
+- Progress tracking with onProgress callbacks
+- Proper error handling and cleanup
+
+### File Validation
+
+```javascript
+// Audio validation
+const validAudioTypes = [
+  'audio/mpeg',
+  'audio/mp3',
+  'audio/wav',
+  'audio/wave',
+  'audio/x-wav',
+  'audio/mp4',
+  'audio/m4a',
+  'audio/aac',
+  'audio/x-aac',
+  'audio/ogg',
+  'audio/oga',
+  'audio/webm',
+  'audio/flac',
+  'audio/x-flac',
+]
+
+// Video validation
+const validVideoTypes = ['video/mp4', 'video/mov', 'video/avi', 'video/webm']
+```
+
+## Security Requirements
+
+### Secrets Management
+
+- Use AWS Secrets Manager for sensitive data
+- Store Google Cloud and OpenAI credentials securely
+- Never commit credentials to version control
+
+### Authentication
+
+- Cognito JWT tokens for user authentication
+- Bearer token format: `Authorization: Bearer <token>`
+- Validate tokens in Lambda functions
+
+### CORS Security
+
+- Restrict origins in production
+- Validate Content-Type headers
+- Handle preflight requests properly
+
+## Development Workflow
+
+### Local Development
+
+1. Set up ADC: `gcloud auth application-default login`
+2. Configure project: `gcloud config set project easy-video-share`
+3. Use `.env` file for local configuration
+4. Test with local Lambda functions
+
+### Production Deployment
+
+1. Deploy Terraform infrastructure
+2. Configure Workload Identity Federation
+3. Set up Lambda environment variables
+4. Test cross-cloud authentication
+
+### Testing Requirements
+
+- Test CORS with different origins
+- Test file uploads with various file types
+- Test cross-cloud authentication
+- Test error handling and edge cases
+
+## Common Issues and Solutions
+
+### CORS Issues
+
+- Missing integration responses in API Gateway
+- Incorrect headers in Lambda responses
+- Preflight OPTIONS requests not handled
+
+### Authentication Issues
+
+- Wrong project in ADC file
+- Missing Workload Identity Federation setup
+- Incorrect service account permissions
+
+### File Upload Issues
+
+- S3 bucket permissions
+- Multipart upload configuration
+- File size limits and validation
+
+### Cross-Cloud Issues
+
+- Workload Identity Pool not configured
+- Service account missing required roles
+- AWS account ID mismatch
+
+## Metronic UI Integration and Development
+
+### Vue 3 + Metronic Setup
+
+#### Core Dependencies
+
+```json
+{
+  "vue": "^3.4.0",
+  "vue-router": "^4.2.0",
+  "pinia": "^2.1.0",
+  "element-plus": "^2.4.0",
+  "bootstrap": "^5.3.0",
+  "apexcharts": "^3.45.0",
+  "vee-validate": "^4.10.0",
+  "@aws-sdk/client-s3": "^3.x",
+  "@aws-sdk/lib-storage": "^3.x"
+}
+```
+
+#### Project Structure
+
+```
+src/
+├── assets/
+│   ├── base.css              # Metronic base styles
+│   ├── main.css              # Main application styles
+│   ├── sass/                 # SCSS source files
+│   └── keenicons/            # Metronic icon sets
+├── components/
+│   ├── widgets/              # Dashboard widgets
+│   ├── kt-datatable/         # Data table components
+│   ├── modals/               # Modal components
+│   └── video/                # Video-specific components
+├── layouts/
+│   └── default-layout/       # Main application layout
+├── stores/                   # Pinia stores
+├── views/                    # Page components
+└── core/                     # Core utilities and services
+```
+
+### Metronic Component Patterns
+
+#### Layout Components
+
+```vue
+<!-- DefaultLayout.vue - Main application layout -->
+<template>
+  <div class="d-flex flex-column flex-root app-root">
+    <div class="app-page flex-column flex-column-fluid">
+      <Header />
+      <div class="app-wrapper flex-column flex-row-fluid">
+        <Aside />
+        <div class="app-main flex-column flex-row-fluid">
+          <div class="d-flex flex-column flex-column-fluid">
+            <div class="app-content flex-column-fluid">
+              <div class="app-container container-fluid">
+                <router-view />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+```
+
+#### Widget Components
+
+```vue
+<!-- VideoStatsWidget.vue - Dashboard statistics widget -->
+<template>
+  <div class="card card-custom">
+    <div class="card-header">
+      <div class="card-title">
+        <h3 class="card-label">{{ title }}</h3>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="d-flex align-items-center">
+        <div class="symbol symbol-50px me-3">
+          <span class="symbol-label bg-light-primary">
+            <i :class="iconClass"></i>
+          </span>
+        </div>
+        <div class="d-flex flex-column">
+          <span class="text-gray-900 fs-6 fw-bold">{{ value }}</span>
+          <span class="text-gray-500 fs-7">{{ subtitle }}</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+```
+
+#### Data Table Components
+
+```vue
+<!-- KTDataTable.vue - Reusable data table -->
+<template>
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">
+        <h3 class="card-label">{{ title }}</h3>
+      </div>
+      <div class="card-toolbar">
+        <slot name="toolbar"></slot>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="table-responsive">
+        <table class="table table-row-bordered table-row-gray-100 align-middle gs-0 gy-3">
+          <thead>
+            <tr class="fw-bold text-muted">
+              <th v-for="column in columns" :key="column.key" class="min-w-125px">
+                {{ column.label }}
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="item in data" :key="item.id">
+              <td v-for="column in columns" :key="column.key">
+                <slot :name="column.key" :item="item" :value="item[column.key]">
+                  {{ item[column.key] }}
+                </slot>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</template>
+```
+
+### Video-Specific Components
+
+#### Video Card Component
+
+```vue
+<!-- VideoCard.vue - Individual video display -->
+<template>
+  <div class="card card-custom h-100">
+    <div class="card-body p-0">
+      <div class="video-thumbnail position-relative">
+        <img :src="thumbnailUrl" :alt="video.title" class="w-100 h-200px object-fit-cover" />
+        <div class="video-duration position-absolute bottom-0 end-0 m-2">
+          <span class="badge badge-dark">{{ formatDuration(video.duration) }}</span>
+        </div>
+        <div
+          class="video-overlay position-absolute top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center opacity-0 hover-opacity-100 transition-opacity"
+        >
+          <button @click="$emit('play', video)" class="btn btn-icon btn-light-primary btn-lg">
+            <i class="ki-duotone ki-play fs-2x"></i>
+          </button>
+        </div>
+      </div>
+      <div class="p-6">
+        <h5 class="card-title text-gray-900 fs-6 fw-bold mb-2">{{ video.title }}</h5>
+        <p class="text-gray-500 fs-7 mb-3">{{ formatFileSize(video.file_size) }}</p>
+        <div class="d-flex justify-content-between align-items-center">
+          <span class="text-gray-600 fs-8">{{ formatDate(video.upload_date) }}</span>
+          <div class="dropdown">
+            <button class="btn btn-icon btn-sm btn-light" data-bs-toggle="dropdown">
+              <i class="ki-duotone ki-gear fs-2"></i>
+            </button>
+            <ul class="dropdown-menu">
+              <li><a class="dropdown-item" href="#" @click="$emit('share', video)">Share</a></li>
+              <li>
+                <a class="dropdown-item" href="#" @click="$emit('download', video)">Download</a>
+              </li>
+              <li><hr class="dropdown-divider" /></li>
+              <li>
+                <a class="dropdown-item text-danger" href="#" @click="$emit('delete', video)"
+                  >Delete</a
+                >
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+```
+
+#### Video Upload Component
+
+```vue
+<!-- VideoUploadWidget.vue - Upload interface -->
+<template>
+  <div class="card card-custom">
+    <div class="card-header">
+      <div class="card-title">
+        <h3 class="card-label">Upload Video</h3>
+      </div>
+    </div>
+    <div class="card-body">
+      <div
+        class="upload-zone border-2 border-dashed border-gray-300 rounded p-8 text-center"
+        :class="{ 'border-primary': isDragOver }"
+        @drop.prevent="handleDrop"
+        @dragover.prevent="isDragOver = true"
+        @dragleave.prevent="isDragOver = false"
+      >
+        <div v-if="!uploading">
+          <i class="ki-duotone ki-upload fs-3x text-gray-400 mb-4"></i>
+          <h4 class="text-gray-900 fs-5 fw-bold mb-2">Drop your video here</h4>
+          <p class="text-gray-500 fs-7 mb-4">or click to browse</p>
+          <input
+            ref="fileInput"
+            type="file"
+            accept="video/*"
+            class="d-none"
+            @change="handleFileSelect"
+          />
+          <button @click="$refs.fileInput.click()" class="btn btn-primary">Choose File</button>
+        </div>
+        <div v-else>
+          <div class="upload-progress">
+            <div class="progress mb-3">
+              <div class="progress-bar" :style="{ width: progress + '%' }"></div>
+            </div>
+            <p class="text-gray-600 fs-7">{{ progress }}% Complete</p>
+            <div class="d-flex justify-content-center gap-2">
+              <button @click="pauseUpload" class="btn btn-sm btn-light" :disabled="!canPause">
+                {{ isPaused ? 'Resume' : 'Pause' }}
+              </button>
+              <button @click="cancelUpload" class="btn btn-sm btn-danger">Cancel</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+```
+
+### Metronic Styling Guidelines
+
+#### CSS Classes and Utilities
+
+```scss
+// Metronic utility classes
+.card-custom {
+  border: 1px solid #e1e3ea;
+  border-radius: 0.625rem;
+  box-shadow: 0 0 20px 0 rgba(76, 87, 125, 0.02);
+}
+
+.h-200px {
+  height: 200px;
+}
+.object-fit-cover {
+  object-fit: cover;
+}
+.transition-opacity {
+  transition: opacity 0.3s ease;
+}
+.hover-opacity-100:hover {
+  opacity: 1;
+}
+
+// Icon classes
+.ki-duotone {
+  font-family: 'KeenIcons Duotone';
+}
+.ki-outline {
+  font-family: 'KeenIcons Outline';
+}
+.ki-solid {
+  font-family: 'KeenIcons Solid';
+}
+```
+
+#### Color System
+
+```scss
+// Metronic color variables
+:root {
+  --kt-primary: #009ef7;
+  --kt-primary-light: #f1faff;
+  --kt-success: #50cd89;
+  --kt-info: #7239ea;
+  --kt-warning: #ffc700;
+  --kt-danger: #f1416c;
+  --kt-dark: #181c32;
+  --kt-gray-100: #f9f9f9;
+  --kt-gray-200: #f1f1f2;
+  --kt-gray-300: #e1e3ea;
+  --kt-gray-400: #b5b5c3;
+  --kt-gray-500: #a1a5b7;
+  --kt-gray-600: #7e8299;
+  --kt-gray-700: #5e6278;
+  --kt-gray-800: #3f4254;
+  --kt-gray-900: #181c32;
+}
+```
+
+### State Management with Pinia
+
+#### Video Store
+
+```typescript
+// stores/videos.ts
+export const useVideosStore = defineStore('videos', {
+  state: () => ({
+    userVideos: [] as VideoMetadata[],
+    allVideos: [] as VideoMetadata[], // Admin only
+    loading: false,
+    uploadProgress: new Map<string, UploadProgress>(),
+    selectedVideo: null as VideoMetadata | null,
+  }),
+
+  getters: {
+    totalVideos: (state) => state.userVideos.length,
+    totalSize: (state) => state.userVideos.reduce((sum, video) => sum + video.file_size, 0),
+    recentVideos: (state) => state.userVideos.slice(0, 5),
+  },
+
+  actions: {
+    async fetchUserVideos() {
+      this.loading = true
+      try {
+        const videos = await VideoService.getUserVideos()
+        this.userVideos = videos
+      } catch (error) {
+        console.error('Failed to fetch videos:', error)
+        // Fallback to mock data
+        this.userVideos = mockVideos
+      } finally {
+        this.loading = false
+      }
+    },
+
+    updateUploadProgress(videoId: string, progress: UploadProgress) {
+      this.uploadProgress.set(videoId, progress)
+    },
+
+    removeUploadProgress(videoId: string) {
+      this.uploadProgress.delete(videoId)
+    },
+  },
+})
+```
+
+#### Auth Store
+
+```typescript
+// stores/auth.ts
+export const useAuthStore = defineStore('auth', {
+  state: () => ({
+    user: null as User | null,
+    isAuthenticated: false,
+    isLoading: true,
+    isAdmin: false,
+  }),
+
+  actions: {
+    async initialize() {
+      try {
+        const { authManager } = await import('@/core/auth/authManager')
+        const isAuth = await authManager.initialize()
+        this.isAuthenticated = isAuth
+        if (isAuth) {
+          this.user = authManager.getCurrentUser()
+          this.isAdmin = this.user?.email === 'admin@example.com' // Replace with actual admin check
+        }
+      } catch (error) {
+        console.error('Auth initialization failed:', error)
+        // Fallback to mock auth for development
+        this.user = mockUser
+        this.isAuthenticated = true
+        this.isAdmin = true
+      } finally {
+        this.isLoading = false
+      }
+    },
+
+    async logout() {
+      try {
+        const { authManager } = await import('@/core/auth/authManager')
+        await authManager.logout()
+      } catch (error) {
+        console.error('Logout failed:', error)
+      } finally {
+        this.user = null
+        this.isAuthenticated = false
+        this.isAdmin = false
+      }
+    },
+  },
+})
+```
+
+### Routing and Navigation
+
+#### Router Configuration
+
+```typescript
+// router/index.ts
+const routes = [
+  {
+    path: '/',
+    component: DefaultLayout,
+    meta: { requiresAuth: true },
+    children: [
+      { path: '/', redirect: '/dashboard' },
+      { path: '/dashboard', component: () => import('@/views/Dashboard.vue') },
+      { path: '/videos', component: () => import('@/views/Videos.vue') },
+      { path: '/upload', component: () => import('@/views/Upload.vue') },
+      {
+        path: '/admin',
+        component: () => import('@/views/admin/AdminLayout.vue'),
+        meta: { requiresAdmin: true },
+        children: [
+          { path: '', redirect: '/admin/dashboard' },
+          { path: 'dashboard', component: () => import('@/views/admin/Dashboard.vue') },
+          { path: 'users', component: () => import('@/views/admin/Users.vue') },
+          { path: 'videos', component: () => import('@/views/admin/Videos.vue') },
+        ],
+      },
+    ],
+  },
+  {
+    path: '/auth',
+    component: AuthLayout,
+    children: [
+      { path: 'login', component: () => import('@/views/auth/Login.vue') },
+      { path: 'register', component: () => import('@/views/auth/Register.vue') },
+    ],
+  },
+]
+```
+
+#### Navigation Menu
+
+```vue
+<!-- Menu.vue - Sidebar navigation -->
+<template>
+  <div
+    class="app-aside-menu menu menu-column menu-rounded menu-sub-indention px-3"
+    id="#kt_app_aside_menu"
+  >
+    <div class="menu-item">
+      <router-link to="/dashboard" class="menu-link">
+        <span class="menu-icon">
+          <i class="ki-duotone ki-element-11 fs-2">
+            <span class="path1"></span>
+            <span class="path2"></span>
+            <span class="path3"></span>
+            <span class="path4"></span>
+          </i>
+        </span>
+        <span class="menu-title">Dashboard</span>
+      </router-link>
+    </div>
+
+    <div class="menu-item">
+      <router-link to="/videos" class="menu-link">
+        <span class="menu-icon">
+          <i class="ki-duotone ki-video fs-2">
+            <span class="path1"></span>
+            <span class="path2"></span>
+          </i>
+        </span>
+        <span class="menu-title">My Videos</span>
+      </router-link>
+    </div>
+
+    <div class="menu-item">
+      <router-link to="/upload" class="menu-link">
+        <span class="menu-icon">
+          <i class="ki-duotone ki-upload fs-2">
+            <span class="path1"></span>
+            <span class="path2"></span>
+          </i>
+        </span>
+        <span class="menu-title">Upload Video</span>
+      </router-link>
+    </div>
+
+    <!-- Admin Section -->
+    <div v-if="authStore.isAdmin" class="menu-item pt-5">
+      <div class="menu-content">
+        <div class="separator mx-1 my-4"></div>
+      </div>
+    </div>
+
+    <div v-if="authStore.isAdmin" class="menu-item">
+      <div class="menu-content">
+        <div class="menu-title fs-7 text-uppercase">
+          <span class="menu-heading fw-bold fs-7 text-uppercase">Admin</span>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="authStore.isAdmin" class="menu-item">
+      <router-link to="/admin/users" class="menu-link">
+        <span class="menu-icon">
+          <i class="ki-duotone ki-profile-user fs-2">
+            <span class="path1"></span>
+            <span class="path2"></span>
+          </i>
+        </span>
+        <span class="menu-title">Users</span>
+      </router-link>
+    </div>
+
+    <div v-if="authStore.isAdmin" class="menu-item">
+      <router-link to="/admin/videos" class="menu-link">
+        <span class="menu-icon">
+          <i class="ki-duotone ki-video fs-2">
+            <span class="path1"></span>
+            <span class="path2"></span>
+          </i>
+        </span>
+        <span class="menu-title">All Videos</span>
+      </router-link>
+    </div>
+  </div>
+</template>
+```
+
+### Form Components and Validation
+
+#### Login Form
+
+```vue
+<!-- Login.vue - Authentication form -->
+<template>
+  <div class="d-flex flex-column flex-root">
+    <div
+      class="d-flex flex-column flex-column-fluid bgi-position-y-bottom position-x-center bgi-no-repeat bgi-size-contain bgi-attachment-fixed"
+    >
+      <div class="d-flex flex-center flex-column flex-column-fluid p-10 pb-lg-20">
+        <div class="w-lg-500px bg-body rounded shadow-sm p-10 p-lg-15 mx-auto">
+          <form class="form w-100" @submit.prevent="handleSubmit">
+            <div class="text-center mb-10">
+              <h1 class="text-dark mb-3">Sign In</h1>
+              <div class="text-gray-400 fw-semibold fs-4">Enter your email to continue</div>
+            </div>
+
+            <div class="fv-row mb-8">
+              <label class="form-label fw-bolder text-gray-900 fs-6">Email</label>
+              <input
+                v-model="email"
+                class="form-control bg-transparent"
+                type="email"
+                name="email"
+                autocomplete="off"
+                :disabled="step === 2"
+              />
+            </div>
+
+            <div v-if="step === 2" class="fv-row mb-8">
+              <label class="form-label fw-bolder text-gray-900 fs-6">Verification Code</label>
+              <input
+                v-model="verificationCode"
+                class="form-control bg-transparent"
+                type="text"
+                name="code"
+                autocomplete="off"
+                maxlength="6"
+              />
+              <div class="text-muted fs-7 mt-2">Enter the 6-digit code sent to your email</div>
+            </div>
+
+            <div class="d-flex flex-wrap justify-content-center pb-lg-0">
+              <button type="submit" class="btn btn-primary me-4" :disabled="loading">
+                <span v-if="loading" class="indicator-progress">
+                  Please wait...
+                  <span class="spinner-border spinner-border-sm align-middle ms-2"></span>
+                </span>
+                <span v-else>{{ step === 1 ? 'Send Code' : 'Verify & Sign In' }}</span>
+              </button>
+
+              <button
+                v-if="step === 2"
+                type="button"
+                class="btn btn-light"
+                @click="step = 1"
+                :disabled="loading"
+              >
+                Back
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+```
+
+### Responsive Design Patterns
+
+#### Grid Layouts
+
+```vue
+<!-- Dashboard grid layout -->
+<template>
+  <div class="row g-5 g-xl-8">
+    <!-- Stats Row -->
+    <div class="col-xl-3">
+      <VideoStatsWidget
+        title="Total Videos"
+        :value="videoStats.total"
+        icon="ki-duotone ki-video"
+        color="primary"
+      />
+    </div>
+    <div class="col-xl-3">
+      <VideoStatsWidget
+        title="Total Size"
+        :value="formatFileSize(videoStats.totalSize)"
+        icon="ki-duotone ki-folder"
+        color="success"
+      />
+    </div>
+    <div class="col-xl-3">
+      <VideoStatsWidget
+        title="Today's Uploads"
+        :value="videoStats.todayUploads"
+        icon="ki-duotone ki-upload"
+        color="info"
+      />
+    </div>
+    <div class="col-xl-3">
+      <VideoStatsWidget
+        title="Popular Video"
+        :value="videoStats.popularVideo"
+        icon="ki-duotone ki-star"
+        color="warning"
+      />
+    </div>
+
+    <!-- Content Row -->
+    <div class="col-xl-8">
+      <RecentVideosWidget />
+    </div>
+    <div class="col-xl-4">
+      <VideoUploadWidget />
+    </div>
+  </div>
+</template>
+```
+
+### Error Handling and Loading States
+
+#### Loading Components
+
+```vue
+<!-- Loading.vue - Loading state component -->
+<template>
+  <div class="d-flex justify-content-center align-items-center" :style="{ minHeight: height }">
+    <div class="spinner-border text-primary" role="status">
+      <span class="visually-hidden">Loading...</span>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+interface Props {
+  height?: string
+}
+
+withDefaults(defineProps<Props>(), {
+  height: '200px',
+})
+</script>
+```
+
+#### Error Handling
+
+```vue
+<!-- Error handling in components -->
+<template>
+  <div v-if="error" class="alert alert-danger d-flex align-items-center p-5 mb-10">
+    <i class="ki-duotone ki-information-5 fs-2hx text-danger me-4">
+      <span class="path1"></span>
+      <span class="path2"></span>
+      <span class="path3"></span>
+    </i>
+    <div class="d-flex flex-column">
+      <h4 class="mb-1">Error</h4>
+      <span>{{ error }}</span>
+    </div>
+  </div>
+</template>
+```
+
+### Development Guidelines
+
+#### Component Naming
+
+- Use PascalCase for component names: `VideoCard.vue`, `UploadWidget.vue`
+- Use kebab-case for file names: `video-card.vue`, `upload-widget.vue`
+- Prefix admin components: `AdminUsersTable.vue`, `AdminDashboard.vue`
+
+#### File Organization
+
+```
+src/
+├── components/
+│   ├── video/           # Video-specific components
+│   ├── widgets/         # Dashboard widgets
+│   ├── admin/           # Admin panel components
+│   └── common/          # Reusable components
+├── views/
+│   ├── auth/            # Authentication pages
+│   ├── admin/           # Admin pages
+│   └── video/           # Video management pages
+└── stores/
+    ├── auth.ts          # Authentication state
+    ├── videos.ts        # Video management state
+    └── admin.ts         # Admin panel state
+```
+
+#### TypeScript Interfaces
+
+```typescript
+// types/video.ts
+export interface VideoMetadata {
+  video_id: string
+  user_id: string
+  user_email: string
+  title: string
+  filename: string
+  bucket_location: string
+  upload_date: string
+  file_size: number
+  content_type: string
+  duration: number
+  created_at: string
+  updated_at: string
+  ai_project_type?: 'standard' | 'ai_generated'
+  ai_generation_status?: 'processing' | 'completed' | 'failed'
+  ai_generation_data?: object
+}
+
+export interface UploadProgress {
+  loaded: number
+  total: number
+  percentage: number
+  speed: number
+  eta: number
+  status: 'uploading' | 'paused' | 'completed' | 'error'
+}
+
+export interface User {
+  id: string
+  email: string
+  name: string
+  isAdmin: boolean
+}
+```
+
+#### Testing Patterns
+
+```typescript
+// Component testing with Vue Test Utils
+import { mount } from '@vue/test-utils'
+import VideoCard from '@/components/video/VideoCard.vue'
+
+describe('VideoCard', () => {
+  it('emits play event when play button is clicked', async () => {
+    const wrapper = mount(VideoCard, {
+      props: { video: mockVideo },
+    })
+
+    await wrapper.find('.play-button').trigger('click')
+
+    expect(wrapper.emitted('play')).toBeTruthy()
+    expect(wrapper.emitted('play')[0]).toEqual([mockVideo])
+  })
+})
+```
+
+### Performance Optimization
+
+#### Lazy Loading
+
+```typescript
+// Lazy load components
+const AdminDashboard = () => import('@/views/admin/Dashboard.vue')
+const VideoPlayer = () => import('@/components/video/VideoPlayer.vue')
+
+// Lazy load routes
+const routes = [
+  {
+    path: '/admin',
+    component: () => import('@/views/admin/AdminLayout.vue'),
+    children: [{ path: 'dashboard', component: () => import('@/views/admin/Dashboard.vue') }],
+  },
+]
+```
+
+#### Image Optimization
+
+```vue
+<!-- Optimized image loading -->
+<template>
+  <img
+    :src="thumbnailUrl"
+    :alt="video.title"
+    loading="lazy"
+    class="video-thumbnail"
+    @error="handleImageError"
+  />
+</template>
+
+<script setup>
+const handleImageError = (event) => {
+  event.target.src = '/assets/images/video-placeholder.jpg'
+}
+</script>
+```
+
+### Accessibility Guidelines
+
+#### ARIA Labels and Roles
+
+```vue
+<!-- Accessible video player -->
+<template>
+  <div class="video-player" role="application" aria-label="Video player">
+    <video ref="videoRef" :src="videoUrl" controls preload="metadata" aria-label="Video content">
+      <track kind="captions" src="captions.vtt" srclang="en" label="English" />
+    </video>
+
+    <div class="video-controls" role="group" aria-label="Video controls">
+      <button
+        @click="playPause"
+        :aria-label="isPlaying ? 'Pause video' : 'Play video'"
+        class="btn btn-icon"
+      >
+        <i :class="isPlaying ? 'ki-duotone ki-pause' : 'ki-duotone ki-play'"></i>
+      </button>
+    </div>
+  </div>
+</template>
+```
+
+#### Keyboard Navigation
+
+```vue
+<!-- Keyboard accessible dropdown -->
+<template>
+  <div class="dropdown" @keydown.escape="closeDropdown">
+    <button
+      @click="toggleDropdown"
+      @keydown.enter="toggleDropdown"
+      @keydown.space="toggleDropdown"
+      :aria-expanded="isOpen"
+      :aria-haspopup="true"
+      class="btn btn-icon"
+    >
+      <i class="ki-duotone ki-gear"></i>
+    </button>
+
+    <ul v-show="isOpen" class="dropdown-menu" role="menu">
+      <li role="none">
+        <a
+          @click="shareVideo"
+          @keydown.enter="shareVideo"
+          class="dropdown-item"
+          role="menuitem"
+          tabindex="0"
+        >
+          Share
+        </a>
+      </li>
+    </ul>
+  </div>
+</template>
+```
+
+### AI Video Generation Integration
+
+#### AI Video Service
+
+```typescript
+// services/AIVideoService.ts
+export class AIVideoService {
+  static async generateVideo(audioId: string, prompt: string): Promise<AIVideoResponse> {
+    const response = await fetch('/api/ai-video/generate', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${getAuthToken()}`,
+      },
+      body: JSON.stringify({
+        audio_id: audioId,
+        prompt: prompt,
+        duration: 30,
+        style: 'realistic',
+        aspect_ratio: '9:16',
+      }),
+    })
+
+    if (!response.ok) {
+      throw new Error('Failed to start AI video generation')
+    }
+
+    return response.json()
+  }
+
+  static async getGenerationStatus(projectId: string): Promise<GenerationStatus> {
+    const response = await fetch(`/api/ai-video/status/${projectId}`, {
+      headers: {
+        Authorization: `Bearer ${getAuthToken()}`,
+      },
+    })
+
+    if (!response.ok) {
+      throw new Error('Failed to get generation status')
+    }
+
+    return response.json()
+  }
+}
+```
+
+#### AI Video Component
+
+```vue
+<!-- AIVideoGenerator.vue - AI video generation interface -->
+<template>
+  <div class="card card-custom">
+    <div class="card-header">
+      <div class="card-title">
+        <h3 class="card-label">AI Video Generation</h3>
+      </div>
+    </div>
+    <div class="card-body">
+      <div v-if="!generating" class="ai-setup">
+        <div class="mb-6">
+          <label class="form-label fw-bolder text-gray-900 fs-6">Audio File</label>
+          <div class="audio-selector">
+            <select v-model="selectedAudio" class="form-select">
+              <option value="">Select an audio file</option>
+              <option v-for="audio in audioFiles" :key="audio.audio_id" :value="audio.audio_id">
+                {{ audio.title }}
+              </option>
+            </select>
+          </div>
+        </div>
+
+        <div class="mb-6">
+          <label class="form-label fw-bolder text-gray-900 fs-6">Video Prompt</label>
+          <textarea
+            v-model="prompt"
+            class="form-control"
+            rows="4"
+            placeholder="Describe the video you want to generate..."
+          ></textarea>
+        </div>
+
+        <div class="d-flex justify-content-end">
+          <button @click="startGeneration" :disabled="!canStartGeneration" class="btn btn-primary">
+            Generate Video
+          </button>
+        </div>
+      </div>
+
+      <div v-else class="generation-progress">
+        <div class="progress mb-4">
+          <div class="progress-bar" :style="{ width: progress + '%' }"></div>
+        </div>
+        <div class="text-center">
+          <h4 class="text-gray-900 fs-5 fw-bold mb-2">{{ currentStage }}</h4>
+          <p class="text-gray-600 fs-7">{{ stageMessage }}</p>
+          <div class="mt-4">
+            <span class="badge badge-primary fs-8">{{ progress }}% Complete</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+```
+
+### Metronic Development Best Practices
+
+#### Component Structure
+
+1. **Always use TypeScript** for type safety and better IDE support
+2. **Follow Metronic naming conventions** for CSS classes and components
+3. **Use Pinia stores** for state management instead of Vuex
+4. **Implement responsive design** using Bootstrap grid system
+5. **Use Metronic icons** (ki-duotone, ki-outline, ki-solid) consistently
+6. **Follow accessibility guidelines** with proper ARIA labels and keyboard navigation
+
+#### Styling Guidelines
+
+1. **Use Metronic color variables** instead of hardcoded colors
+2. **Apply consistent spacing** using Bootstrap utility classes
+3. **Use card-custom class** for consistent card styling
+4. **Implement hover effects** with transition classes
+5. **Follow Metronic typography** with proper font sizes and weights
+
+#### Performance Considerations
+
+1. **Lazy load components** and routes for better initial load times
+2. **Optimize images** with lazy loading and error handling
+3. **Use Vue 3 Composition API** for better performance and tree-shaking
+4. **Implement proper error boundaries** and loading states
+5. **Cache API responses** when appropriate
+
+#### Testing Strategy
+
+1. **Unit test components** using Vue Test Utils
+2. **Test user interactions** and component events
+3. **Mock API calls** for consistent testing
+4. **Test responsive behavior** across different screen sizes
+5. **Validate accessibility** with automated testing tools

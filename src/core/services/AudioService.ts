@@ -1,5 +1,13 @@
 import { API_CONFIG } from '@/core/config/config'
 import { authManager } from '@/core/auth/authManager'
+import {
+  S3Client,
+  CreateMultipartUploadCommand,
+  UploadPartCommand,
+  CompleteMultipartUploadCommand,
+  AbortMultipartUploadCommand,
+} from '@aws-sdk/client-s3'
+import { config } from '@/core/config/config'
 
 export interface AudioMetadata {
   audio_id: string
@@ -33,29 +41,6 @@ export interface AudioUploadParams {
 export interface AudioUploadResponse {
   success: boolean
   audio: AudioMetadata
-  upload_url?: string
-}
-
-// Interface for the Lambda response from presigned URL generation
-interface PresignedUrlResponse {
-  success: boolean
-  upload_url: string
-  audio: {
-    video_id: string // Lambda returns video_id, not audio_id
-    user_id: string
-    user_email: string
-    title: string
-    filename: string
-    bucket_location: string
-    upload_date: string
-    file_size?: number
-    content_type?: string
-    duration?: number
-    created_at: string
-    updated_at: string
-    media_type: string
-    transcription_status?: string
-  }
 }
 
 class AudioService {
@@ -78,8 +63,16 @@ class AudioService {
     }
   }
 
+  // Initialize S3 client for audio uploads
+  private static getS3Client(): S3Client {
+    return new S3Client({
+      region: config.aws.region,
+      credentials: config.aws.credentials,
+    })
+  }
+
   /**
-   * Upload audio file to S3 audio bucket
+   * Upload audio file to S3 audio bucket using multipart upload
    */
   public static async uploadAudio(params: AudioUploadParams): Promise<AudioUploadResponse> {
     const { title, description, file, onProgress } = params
@@ -97,37 +90,31 @@ class AudioService {
     }
 
     try {
-      // Create audio metadata first
-      const audioMetadata: Partial<AudioMetadata> = {
+      // Generate unique audio ID (same pattern as video upload)
+      const user = await this.getCurrentUser()
+      const audioId = `${user.userId}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+
+      // Create audio metadata
+      const audioMetadata: AudioMetadata = {
+        audio_id: audioId,
+        user_id: user.userId,
+        user_email: user.email,
         title,
         filename: file.name,
+        bucket_location: `audio/${audioId}/${file.name}`,
+        upload_date: new Date().toISOString(),
         file_size: file.size,
         content_type: file.type,
-        upload_date: new Date().toISOString(),
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
+        transcription_status: 'pending',
       }
 
-      // Get presigned URL for upload
-      const presignedResponse = await this.getPresignedUploadUrl(audioMetadata)
-
-      // Upload file to S3 using presigned URL
-      await this.uploadToS3(presignedResponse.upload_url!, file, onProgress)
+      // Upload file to S3 using multipart upload
+      await this.uploadToS3(file, audioMetadata.bucket_location, onProgress)
 
       // Save metadata to database
-      // Note: Lambda returns video_id but frontend expects audio_id
-      const audioId = presignedResponse.audio.video_id
-      const bucketLocation = presignedResponse.audio.bucket_location
-
-      if (!audioId) {
-        throw new Error('No audio ID returned from presigned URL generation')
-      }
-
-      const savedAudio = await this.saveAudioMetadata({
-        ...audioMetadata,
-        audio_id: audioId,
-        bucket_location: bucketLocation,
-      } as AudioMetadata)
+      const savedAudio = await this.saveAudioMetadata(audioMetadata)
 
       return {
         success: true,
@@ -145,76 +132,117 @@ class AudioService {
   }
 
   /**
-   * Get presigned URL for audio upload
+   * Upload file to S3 using multipart upload (following video upload pattern)
    */
-  private static async getPresignedUploadUrl(
-    metadata: Partial<AudioMetadata>,
-  ): Promise<PresignedUrlResponse> {
-    try {
-      const headers = await this.getAuthHeaders()
-      const audioUploadUrl = `${API_CONFIG.baseUrl}/audio/upload-url`
+  private static async uploadToS3(
+    file: File,
+    key: string,
+    onProgress?: (progress: number) => void,
+  ): Promise<void> {
+    const s3Client = this.getS3Client()
+    const bucketName = config.aws.bucketName // Use the same bucket as videos
+    const chunkSize = 8 * 1024 * 1024 // 8MB chunks for audio files
+    const totalChunks = Math.ceil(file.size / chunkSize)
 
-      const response = await fetch(audioUploadUrl, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(metadata),
+    let uploadId: string | undefined
+    const uploadedParts: { ETag: string; PartNumber: number }[] = []
+
+    try {
+      // Step 1: Create multipart upload
+      const createCommand = new CreateMultipartUploadCommand({
+        Bucket: bucketName,
+        Key: key,
+        ContentType: file.type,
+        Metadata: {
+          'original-filename': file.name,
+        },
       })
 
-      if (!response.ok) {
-        const responseText = await response.text()
-        console.error('Presigned URL error response:', responseText)
-        throw new Error(`Failed to get upload URL: ${response.statusText}`)
+      const createResponse = await s3Client.send(createCommand)
+      uploadId = createResponse.UploadId!
+
+      // Step 2: Upload parts
+      for (let partNumber = 1; partNumber <= totalChunks; partNumber++) {
+        const startByte = (partNumber - 1) * chunkSize
+        const endByte = Math.min(startByte + chunkSize, file.size)
+        const chunk = file.slice(startByte, endByte)
+
+        // Convert Blob to ArrayBuffer for AWS SDK v3
+        const arrayBuffer = await chunk.arrayBuffer()
+        const uint8Array = new Uint8Array(arrayBuffer)
+
+        const uploadCommand = new UploadPartCommand({
+          Bucket: bucketName,
+          Key: key,
+          PartNumber: partNumber,
+          UploadId: uploadId,
+          Body: uint8Array,
+        })
+
+        const response = await s3Client.send(uploadCommand)
+
+        uploadedParts.push({
+          ETag: response.ETag!,
+          PartNumber: partNumber,
+        })
+
+        // Update progress
+        if (onProgress) {
+          const progress = Math.round((partNumber / totalChunks) * 100)
+          onProgress(progress)
+        }
       }
 
-      const data = await response.json()
-      return data
-    } catch (error: unknown) {
-      console.error('Presigned URL error:', error)
-      throw new Error('Failed to get upload URL')
+      // Step 3: Complete multipart upload
+      const completeCommand = new CompleteMultipartUploadCommand({
+        Bucket: bucketName,
+        Key: key,
+        UploadId: uploadId,
+        MultipartUpload: {
+          Parts: uploadedParts.sort((a, b) => a.PartNumber - b.PartNumber),
+        },
+      })
+
+      await s3Client.send(completeCommand)
+      console.log(`✅ Audio upload completed for ${key}`)
+    } catch (error) {
+      // Clean up failed upload
+      if (uploadId) {
+        try {
+          const abortCommand = new AbortMultipartUploadCommand({
+            Bucket: bucketName,
+            Key: key,
+            UploadId: uploadId,
+          })
+          await s3Client.send(abortCommand)
+        } catch (abortError) {
+          console.error('Error aborting multipart upload:', abortError)
+        }
+      }
+      throw error
     }
   }
 
   /**
-   * Upload file directly to S3
+   * Get current user info
    */
-  private static async uploadToS3(
-    uploadUrl: string,
-    file: File,
-    onProgress?: (progress: number) => void,
-  ): Promise<void> {
-    return new Promise((resolve, reject) => {
-      const xhr = new XMLHttpRequest()
+  private static async getCurrentUser(): Promise<{ userId: string; email: string }> {
+    // This should get user info from auth store or token
+    // For now, we'll extract from the JWT token
+    const token = await authManager.getAccessToken()
+    if (!token) {
+      throw new Error('No authentication token available')
+    }
 
-      // Track upload progress
-      if (onProgress) {
-        xhr.upload.addEventListener('progress', (event) => {
-          if (event.lengthComputable) {
-            const progress = Math.round((event.loaded / event.total) * 100)
-            onProgress(progress)
-          }
-        })
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]))
+      return {
+        userId: payload.sub,
+        email: payload.email,
       }
-
-      xhr.addEventListener('load', () => {
-        if (xhr.status >= 200 && xhr.status < 300) {
-          resolve()
-        } else {
-          reject(new Error(`Upload failed with status: ${xhr.status}`))
-        }
-      })
-
-      xhr.addEventListener('error', () => {
-        reject(new Error('Upload failed due to network error'))
-      })
-
-      xhr.addEventListener('abort', () => {
-        reject(new Error('Upload was aborted'))
-      })
-
-      xhr.open('PUT', uploadUrl)
-      xhr.setRequestHeader('Content-Type', file.type)
-      xhr.send(file)
-    })
+    } catch (error) {
+      throw new Error('Invalid authentication token')
+    }
   }
 
   /**

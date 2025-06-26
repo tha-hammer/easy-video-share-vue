@@ -780,7 +780,10 @@ const previousStep = () => {
 }
 
 const startAIGeneration = async () => {
-  if (!selectedAudio.value) return
+  if (!selectedAudio.value) {
+    alert('Please select an audio file first')
+    return
+  }
 
   // Validate request
   const request: AIVideoGenerationRequest = {

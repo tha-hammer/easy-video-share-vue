@@ -2,7 +2,6 @@
 
 # Secrets Manager for AI service credentials
 resource "aws_secretsmanager_secret" "ai_video_secrets" {
-  count       = var.google_cloud_credentials_json != "" ? 1 : 0
   name        = "${var.project_name}-ai-video-secrets"
   description = "API keys and secrets for AI video generation"
 
@@ -15,19 +14,17 @@ resource "aws_secretsmanager_secret" "ai_video_secrets" {
 
 # Store AI service credentials
 resource "aws_secretsmanager_secret_version" "ai_video_secrets" {
-  count     = var.google_cloud_credentials_json != "" ? 1 : 0
-  secret_id = aws_secretsmanager_secret.ai_video_secrets[0].id
+  secret_id = aws_secretsmanager_secret.ai_video_secrets.id
   secret_string = jsonencode({
-    google_cloud_credentials = var.google_cloud_credentials_json
-    openai_api_key          = var.openai_api_key
-    vertex_ai_project_id    = var.vertex_ai_project_id
-    vertex_ai_location      = var.vertex_ai_location
+    openai_api_key = var.openai_api_key
+    google_cloud_project_id = var.google_cloud_project_id
+    google_cloud_location = var.google_cloud_location
+    google_cloud_service_account_email = var.google_cloud_service_account_email
   })
 }
 
 # Lambda Layer for AI video dependencies
 resource "aws_lambda_layer_version" "ai_video_layer" {
-  count           = var.google_cloud_credentials_json != "" ? 1 : 0
   filename        = "ai_video_layer.zip"
   layer_name      = "${var.project_name}-ai-video-layer"
   compatible_runtimes = ["nodejs18.x"]
@@ -41,7 +38,6 @@ resource "aws_lambda_layer_version" "ai_video_layer" {
 
 # Lambda function for AI video processing
 resource "aws_lambda_function" "ai_video_processor" {
-  count            = var.google_cloud_credentials_json != "" ? 1 : 0
   filename         = "ai_video_lambda.zip"
   function_name    = "${var.project_name}-ai-video-processor"
   role            = aws_iam_role.lambda_execution_role.arn
@@ -50,15 +46,18 @@ resource "aws_lambda_function" "ai_video_processor" {
   timeout         = 900  # 15 minutes for AI processing
   memory_size     = 2048 # Increased for video processing
 
-  layers = var.google_cloud_credentials_json != "" ? [aws_lambda_layer_version.ai_video_layer[0].arn] : []
+  layers = [aws_lambda_layer_version.ai_video_layer.arn]
 
   environment {
     variables = {
       DYNAMODB_TABLE      = aws_dynamodb_table.video_metadata.name
-      SECRETS_MANAGER_ARN = var.google_cloud_credentials_json != "" ? aws_secretsmanager_secret.ai_video_secrets[0].arn : ""
+      SECRETS_MANAGER_ARN = aws_secretsmanager_secret.ai_video_secrets.arn
       S3_BUCKET          = aws_s3_bucket.video_bucket.bucket
       AUDIO_BUCKET       = aws_s3_bucket.audio_bucket.bucket
       CORS_ORIGIN        = "*"
+      GOOGLE_CLOUD_PROJECT_ID = var.google_cloud_project_id
+      GOOGLE_CLOUD_LOCATION = var.google_cloud_location
+      GOOGLE_CLOUD_SERVICE_ACCOUNT_EMAIL = var.google_cloud_service_account_email
     }
   }
 
@@ -75,7 +74,6 @@ resource "aws_lambda_function" "ai_video_processor" {
 
 # CloudWatch Log Group for AI video processing
 resource "aws_cloudwatch_log_group" "ai_video_logs" {
-  count             = var.google_cloud_credentials_json != "" ? 1 : 0
   name              = "/aws/lambda/${var.project_name}-ai-video-processor"
   retention_in_days = 14
 
@@ -88,7 +86,6 @@ resource "aws_cloudwatch_log_group" "ai_video_logs" {
 
 # API Gateway resource for AI video endpoints
 resource "aws_api_gateway_resource" "ai_video_resource" {
-  count       = var.google_cloud_credentials_json != "" ? 1 : 0
   rest_api_id = aws_api_gateway_rest_api.video_api.id
   parent_id   = aws_api_gateway_rest_api.video_api.root_resource_id
   path_part   = "ai-video"
@@ -96,9 +93,8 @@ resource "aws_api_gateway_resource" "ai_video_resource" {
 
 # POST method for starting AI video generation
 resource "aws_api_gateway_method" "ai_video_post" {
-  count         = var.google_cloud_credentials_json != "" ? 1 : 0
   rest_api_id   = aws_api_gateway_rest_api.video_api.id
-  resource_id   = aws_api_gateway_resource.ai_video_resource[0].id
+  resource_id   = aws_api_gateway_resource.ai_video_resource.id
   http_method   = "POST"
   authorization = "COGNITO_USER_POOLS"
   authorizer_id = aws_api_gateway_authorizer.cognito_authorizer.id
@@ -106,9 +102,8 @@ resource "aws_api_gateway_method" "ai_video_post" {
 
 # GET method for checking AI video status
 resource "aws_api_gateway_method" "ai_video_get" {
-  count         = var.google_cloud_credentials_json != "" ? 1 : 0
   rest_api_id   = aws_api_gateway_rest_api.video_api.id
-  resource_id   = aws_api_gateway_resource.ai_video_resource[0].id
+  resource_id   = aws_api_gateway_resource.ai_video_resource.id
   http_method   = "GET"
   authorization = "COGNITO_USER_POOLS"
   authorizer_id = aws_api_gateway_authorizer.cognito_authorizer.id
@@ -116,52 +111,47 @@ resource "aws_api_gateway_method" "ai_video_get" {
 
 # OPTIONS method for CORS
 resource "aws_api_gateway_method" "ai_video_options" {
-  count         = var.google_cloud_credentials_json != "" ? 1 : 0
   rest_api_id   = aws_api_gateway_rest_api.video_api.id
-  resource_id   = aws_api_gateway_resource.ai_video_resource[0].id
+  resource_id   = aws_api_gateway_resource.ai_video_resource.id
   http_method   = "OPTIONS"
   authorization = "NONE"
 }
 
 # Integration for POST method
 resource "aws_api_gateway_integration" "ai_video_post_integration" {
-  count                   = var.google_cloud_credentials_json != "" ? 1 : 0
   rest_api_id             = aws_api_gateway_rest_api.video_api.id
-  resource_id             = aws_api_gateway_resource.ai_video_resource[0].id
-  http_method             = aws_api_gateway_method.ai_video_post[0].http_method
+  resource_id             = aws_api_gateway_resource.ai_video_resource.id
+  http_method             = aws_api_gateway_method.ai_video_post.http_method
   integration_http_method = "POST"
   type                    = "AWS_PROXY"
-  uri                     = aws_lambda_function.ai_video_processor[0].invoke_arn
+  uri                     = aws_lambda_function.ai_video_processor.invoke_arn
 }
 
 # Integration for GET method
 resource "aws_api_gateway_integration" "ai_video_get_integration" {
-  count                   = var.google_cloud_credentials_json != "" ? 1 : 0
   rest_api_id             = aws_api_gateway_rest_api.video_api.id
-  resource_id             = aws_api_gateway_resource.ai_video_resource[0].id
-  http_method             = aws_api_gateway_method.ai_video_get[0].http_method
+  resource_id             = aws_api_gateway_resource.ai_video_resource.id
+  http_method             = aws_api_gateway_method.ai_video_get.http_method
   integration_http_method = "POST"
   type                    = "AWS_PROXY"
-  uri                     = aws_lambda_function.ai_video_processor[0].invoke_arn
+  uri                     = aws_lambda_function.ai_video_processor.invoke_arn
 }
 
 # Integration for OPTIONS method
 resource "aws_api_gateway_integration" "ai_video_options_integration" {
-  count                   = var.google_cloud_credentials_json != "" ? 1 : 0
   rest_api_id             = aws_api_gateway_rest_api.video_api.id
-  resource_id             = aws_api_gateway_resource.ai_video_resource[0].id
-  http_method             = aws_api_gateway_method.ai_video_options[0].http_method
+  resource_id             = aws_api_gateway_resource.ai_video_resource.id
+  http_method             = aws_api_gateway_method.ai_video_options.http_method
   integration_http_method = "POST"
   type                    = "AWS_PROXY"
-  uri                     = aws_lambda_function.ai_video_processor[0].invoke_arn
+  uri                     = aws_lambda_function.ai_video_processor.invoke_arn
 }
 
 # Lambda permissions for API Gateway
 resource "aws_lambda_permission" "ai_video_api_gateway_lambda" {
-  count         = var.google_cloud_credentials_json != "" ? 1 : 0
   statement_id  = "AllowExecutionFromAPIGateway"
   action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.ai_video_processor[0].function_name
+  function_name = aws_lambda_function.ai_video_processor.function_name
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_api_gateway_rest_api.video_api.execution_arn}/*/*"
 }
@@ -401,7 +391,6 @@ resource "aws_api_gateway_integration_response" "audio_upload_url_options_integr
 
 # Update IAM role policy for AI video capabilities
 resource "aws_iam_role_policy" "ai_video_lambda_policy" {
-  count = var.google_cloud_credentials_json != "" ? 1 : 0
   name  = "${var.project_name}-ai-video-lambda-policy"
   role  = aws_iam_role.lambda_execution_role.id
 
@@ -413,7 +402,7 @@ resource "aws_iam_role_policy" "ai_video_lambda_policy" {
         Action = [
           "secretsmanager:GetSecretValue"
         ]
-        Resource = aws_secretsmanager_secret.ai_video_secrets[0].arn
+        Resource = aws_secretsmanager_secret.ai_video_secrets.arn
       },
       {
         Effect = "Allow"

@@ -1,180 +1,200 @@
 #!/bin/bash
 
-# AI Video Generation Feature Deployment Script
-# This script deploys the AI video generation Lambda function and infrastructure
+# AI Video Deployment Script for Easy Video Share
+# This script builds the Lambda layer and deploys the AI video infrastructure
 
-set -e
+echo "🚀 Deploying AI Video Infrastructure for Easy Video Share"
+echo ""
 
-echo "🎬 Starting AI Video Generation Feature Deployment..."
+# Configuration
+PROJECT_ROOT=$(pwd)
+LAMBDA_LAYER_DIR="lambda-layer"
+LAMBDA_LAYER_ZIP="terraform/ai_video_layer.zip"
+LAMBDA_ZIP="terraform/ai_video_lambda.zip"
 
-# Color codes for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+# Step 1: Create Lambda layer directory
+echo "🔧 Step 1: Creating Lambda layer..."
+if [ -d "$LAMBDA_LAYER_DIR" ]; then
+    rm -rf "$LAMBDA_LAYER_DIR"
+fi
+mkdir -p "$LAMBDA_LAYER_DIR/nodejs"
 
-# Check if running in terraform directory
-if [ ! -f "main.tf" ]; then
-    echo -e "${RED}Error: This script must be run from the terraform directory${NC}"
+# Step 2: Create package.json for Lambda layer
+echo "🔧 Step 2: Creating package.json for Lambda layer..."
+cat > "$LAMBDA_LAYER_DIR/nodejs/package.json" << 'EOF'
+{
+  "name": "ai-video-layer",
+  "version": "1.0.0",
+  "description": "AI Video Generation Dependencies",
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.450.0",
+    "@aws-sdk/client-s3": "^3.450.0",
+    "@aws-sdk/client-secrets-manager": "^3.450.0",
+    "@aws-sdk/client-transcribe": "^3.450.0",
+    "@aws-sdk/lib-dynamodb": "^3.450.0",
+    "google-auth-library": "^9.0.0",
+    "@google-cloud/vertexai": "^0.1.0",
+    "openai": "^4.20.0"
+  }
+}
+EOF
+
+# Step 3: Install dependencies
+echo "🔧 Step 3: Installing Lambda layer dependencies..."
+cd "$LAMBDA_LAYER_DIR/nodejs"
+npm install --production
+if [ $? -ne 0 ]; then
+    echo "❌ Failed to install dependencies"
+    cd "$PROJECT_ROOT"
+    exit 1
+fi
+cd "$PROJECT_ROOT"
+
+# Step 4: Create Lambda layer ZIP using PowerShell
+echo "🔧 Step 4: Creating Lambda layer ZIP..."
+if [ -f "$LAMBDA_LAYER_ZIP" ]; then
+    rm "$LAMBDA_LAYER_ZIP"
+fi
+
+# Use PowerShell to create ZIP file in terraform directory
+powershell -Command "Compress-Archive -Path '$LAMBDA_LAYER_DIR/nodejs/node_modules' -DestinationPath '$LAMBDA_LAYER_ZIP' -Force"
+if [ $? -ne 0 ]; then
+    echo "❌ Failed to create Lambda layer ZIP"
+    cd "$PROJECT_ROOT"
     exit 1
 fi
 
-# Function to print colored output
-print_status() {
-    echo -e "${BLUE}[INFO]${NC} $1"
-}
+echo "✅ Lambda layer ZIP created: $LAMBDA_LAYER_ZIP"
 
-print_success() {
-    echo -e "${GREEN}[SUCCESS]${NC} $1"
-}
+# Step 5: Create Lambda function ZIP
+echo "🔧 Step 5: Creating Lambda function ZIP..."
+if [ -f "$LAMBDA_ZIP" ]; then
+    rm "$LAMBDA_ZIP"
+fi
 
-print_warning() {
-    echo -e "${YELLOW}[WARNING]${NC} $1"
-}
+# Copy Lambda function to a temporary directory
+TEMP_LAMBDA_DIR="temp-lambda"
+if [ -d "$TEMP_LAMBDA_DIR" ]; then
+    rm -rf "$TEMP_LAMBDA_DIR"
+fi
+mkdir -p "$TEMP_LAMBDA_DIR"
 
-print_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
-}
+cp "terraform/lambda-ai-video/ai-video.js" "$TEMP_LAMBDA_DIR/ai-video.js"
 
-# Check if AI video variables are configured
-print_status "Checking AI video configuration..."
-if [ -f "terraform.tfvars" ]; then
-    if grep -q "google_cloud_credentials_json" terraform.tfvars && \
-       grep -q "openai_api_key" terraform.tfvars; then
-        print_success "AI video configuration found in terraform.tfvars"
-    else
-        print_warning "AI video variables not found in terraform.tfvars"
-        print_warning "The infrastructure will be deployed but AI features will be disabled"
-        print_warning "Add the following variables to enable AI video generation:"
-        echo ""
-        echo "google_cloud_credentials_json = \"...\""
-        echo "openai_api_key = \"...\""
-        echo "vertex_ai_project_id = \"...\""
-        echo "vertex_ai_location = \"us-central1\""
-        echo ""
-    fi
-else
-    print_error "terraform.tfvars file not found!"
-    print_error "Copy terraform.tfvars.example to terraform.tfvars and configure your values"
+# Create ZIP using PowerShell in terraform directory
+powershell -Command "Compress-Archive -Path '$TEMP_LAMBDA_DIR/*' -DestinationPath '$LAMBDA_ZIP' -Force"
+if [ $? -ne 0 ]; then
+    echo "❌ Failed to create Lambda function ZIP"
+    cd "$PROJECT_ROOT"
     exit 1
 fi
 
-# Create Lambda deployment package for AI video processor
-print_status "Building AI video Lambda function..."
+cd "$PROJECT_ROOT"
 
-# Create temporary build directory
-BUILD_DIR="./build-ai-video"
-rm -rf $BUILD_DIR
-mkdir -p $BUILD_DIR
+echo "✅ Lambda function ZIP created: $LAMBDA_ZIP"
 
-# Copy Lambda function code
-if [ -d "lambda-ai-video" ]; then
-    cp -r lambda-ai-video/* $BUILD_DIR/
-    print_success "Lambda function code copied"
-else
-    print_error "lambda-ai-video directory not found!"
+# Clean up temporary files
+rm -rf "$TEMP_LAMBDA_DIR"
+rm -rf "$LAMBDA_LAYER_DIR"
+
+# Step 6: Check Terraform configuration
+echo "🔧 Step 6: Checking Terraform configuration..."
+if [ ! -f "terraform/terraform.tfvars" ]; then
+    echo "❌ terraform.tfvars not found. Please run the Google Cloud setup script first:"
+    echo "   ./scripts/setup-google-cloud.sh"
     exit 1
 fi
 
-# Install dependencies
-cd $BUILD_DIR
-if [ -f "package.json" ]; then
-    print_status "Installing Lambda dependencies..."
-    npm install --production
-    print_success "Dependencies installed"
-else
-    print_error "package.json not found in Lambda function directory"
+# Check if required variables are set
+if ! grep -q "google_cloud_project_id" "terraform/terraform.tfvars"; then
+    echo "❌ google_cloud_project_id not found in terraform.tfvars"
+    echo "   Please run the Google Cloud setup script first"
     exit 1
 fi
 
-# Create deployment zip
-print_status "Creating Lambda deployment package..."
-zip -r ../ai_video_lambda.zip . -x "*.git*" "*.DS_Store*" "node_modules/.cache/*"
-cd ..
+if ! grep -q "openai_api_key" "terraform/terraform.tfvars"; then
+    echo "⚠️  openai_api_key not found in terraform.tfvars"
+    echo "   Please add your OpenAI API key to terraform.tfvars"
+fi
 
-print_success "Lambda deployment package created: ai_video_lambda.zip"
-
-# Clean up build directory
-rm -rf $BUILD_DIR
-
-# Create Lambda Layer (placeholder - in production this would contain Google Cloud SDK)
-print_status "Creating Lambda layer package..."
-mkdir -p layer-build/nodejs
-echo '{"name": "ai-video-layer", "version": "1.0.0"}' > layer-build/nodejs/package.json
-cd layer-build
-zip -r ../ai_video_layer.zip . 
-cd ..
-rm -rf layer-build
-print_success "Lambda layer package created: ai_video_layer.zip"
+# Step 7: Deploy with Terraform
+echo "🔧 Step 7: Deploying with Terraform..."
+cd terraform
 
 # Initialize Terraform if needed
 if [ ! -d ".terraform" ]; then
-    print_status "Initializing Terraform..."
+    echo "   Initializing Terraform..."
     terraform init
-    print_success "Terraform initialized"
+    if [ $? -ne 0 ]; then
+        echo "❌ Terraform initialization failed"
+        cd "$PROJECT_ROOT"
+        exit 1
+    fi
 fi
 
 # Plan the deployment
-print_status "Planning Terraform deployment..."
+echo "   Planning deployment..."
 terraform plan -out=tfplan
-
-# Ask for confirmation
-echo ""
-read -p "Do you want to apply these changes? (y/N): " -n 1 -r
-echo ""
-
-if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-    print_warning "Deployment cancelled by user"
-    rm -f tfplan ai_video_lambda.zip ai_video_layer.zip
-    exit 0
+if [ $? -ne 0 ]; then
+    echo "❌ Terraform plan failed"
+    cd "$PROJECT_ROOT"
+    exit 1
 fi
 
-# Apply the changes
-print_status "Applying Terraform configuration..."
+# Apply the deployment
+echo "   Applying deployment..."
 terraform apply tfplan
+if [ $? -ne 0 ]; then
+    echo "❌ Terraform apply failed"
+    cd "$PROJECT_ROOT"
+    exit 1
+fi
 
-print_success "AI Video Generation infrastructure deployed successfully!"
+cd "$PROJECT_ROOT"
 
-# Clean up
-rm -f tfplan
-
-# Display deployment information
-echo ""
-echo "================================"
-echo "🎬 AI VIDEO GENERATION DEPLOYED"
-echo "================================"
-echo ""
-
-# Get API Gateway URL
-API_URL=$(terraform output -raw api_gateway_url 2>/dev/null || echo "Not available")
-echo "API Gateway URL: $API_URL"
-
-# Check if AI features are enabled
-if terraform show | grep -q "ai_video_secrets"; then
-    print_success "✅ AI Video Generation: ENABLED"
-    echo "- Audio transcription: AWS Transcribe"
-    echo "- Scene planning: OpenAI GPT-4"
-    echo "- Video generation: Vertex AI Veo 2 (placeholder)"
+# Step 8: Get API Gateway URL
+echo "🔧 Step 8: Getting API Gateway URL..."
+API_URL=$(cd terraform && terraform output -raw api_gateway_url 2>/dev/null)
+if [ $? -eq 0 ]; then
+    echo "✅ API Gateway URL: $API_URL"
+    echo "   AI Video endpoint: $API_URL/ai-video"
 else
-    print_warning "⚠️  AI Video Generation: DISABLED"
-    echo "Configure AI credentials in terraform.tfvars to enable"
+    echo "⚠️  Could not get API Gateway URL"
+fi
+
+# Step 9: Update frontend configuration
+echo "🔧 Step 9: Updating frontend configuration..."
+ENV_FILE=".env"
+if [ -f "$ENV_FILE" ]; then
+    if ! grep -q "VITE_API_BASE_URL" "$ENV_FILE"; then
+        echo "" >> "$ENV_FILE"
+        echo "# API Configuration" >> "$ENV_FILE"
+        echo "VITE_API_BASE_URL=$API_URL" >> "$ENV_FILE"
+        echo "✅ Added API base URL to .env file"
+    fi
+else
+    echo "# API Configuration" > "$ENV_FILE"
+    echo "VITE_API_BASE_URL=$API_URL" >> "$ENV_FILE"
+    echo "✅ Created .env file with API base URL"
 fi
 
 echo ""
-echo "Next Steps:"
-echo "1. Update your frontend environment variables:"
-echo "   VITE_APP_API_URL=$API_URL"
-echo "   VITE_AI_VIDEO_ENABLED=true"
+echo "🎉 AI Video infrastructure deployment completed!"
 echo ""
-echo "2. Deploy your Vue.js frontend with the AI video components"
+echo "📋 What was deployed:"
+echo "   ✅ Lambda function for AI video processing"
+echo "   ✅ Lambda layer with dependencies"
+echo "   ✅ API Gateway endpoints"
+echo "   ✅ Secrets Manager for credentials"
+echo "   ✅ CloudWatch logging"
 echo ""
-echo "3. Test the AI video generation workflow"
+echo "🔗 Test your AI video features:"
+echo "   1. Start your Vue development server: npm run dev"
+echo "   2. Upload an audio file"
+echo "   3. Navigate to AI Video generation"
+echo "   4. Test the AI video generation workflow"
 echo ""
-
-# Display resource cleanup command
-echo "To clean up resources later, run:"
-echo "  terraform destroy"
-echo ""
-
-print_success "Deployment complete! 🚀" 
+echo "📊 Monitor your deployment:"
+echo "   - CloudWatch Logs: /aws/lambda/easy-video-share-ai-video-processor"
+echo "   - API Gateway Console: https://console.aws.amazon.com/apigateway"
+echo "   - Lambda Console: https://console.aws.amazon.com/lambda" 

@@ -223,7 +223,22 @@ async function handleAudioMetadataCreate(event, userId, userEmail) {
     return createResponse(201, {
       success: true,
       message: 'Audio metadata saved successfully',
-      audio: audioMetadata,
+      audio: {
+        audio_id: audioMetadata.video_id, // Map video_id back to audio_id for frontend
+        user_id: audioMetadata.user_id,
+        user_email: audioMetadata.user_email,
+        title: audioMetadata.title,
+        filename: audioMetadata.filename,
+        bucket_location: audioMetadata.bucket_location,
+        upload_date: audioMetadata.upload_date,
+        file_size: audioMetadata.file_size,
+        content_type: audioMetadata.content_type,
+        duration: audioMetadata.duration,
+        created_at: audioMetadata.created_at,
+        updated_at: audioMetadata.updated_at,
+        transcription_status: audioMetadata.transcription_status,
+        transcription_data: audioMetadata.transcription_data,
+      },
     })
   } catch (error) {
     console.error('Error saving audio metadata:', error)
