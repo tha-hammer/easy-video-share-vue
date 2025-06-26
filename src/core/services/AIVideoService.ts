@@ -1,4 +1,5 @@
-import ApiService from './ApiService'
+import { API_CONFIG } from '@/core/config/config'
+import { authManager } from '@/core/auth/authManager'
 import type { AudioMetadata } from './AudioService'
 
 export interface AIVideoGenerationRequest {
@@ -102,17 +103,72 @@ export interface AIVideoStatusResponse {
 }
 
 class AIVideoService {
+  // Helper method to get auth headers (same as VideoService)
+  private static async getAuthHeaders(): Promise<Record<string, string>> {
+    console.log('🔑 Getting auth headers for AI video service...')
+
+    try {
+      const token = await authManager.getAccessToken()
+      console.log('🔑 Token retrieved:', !!token, 'Length:', token?.length || 0)
+
+      if (!token) {
+        console.error('❌ No token returned from authManager.getAccessToken()')
+        throw new Error('No authentication token available. User not authenticated.')
+      }
+
+      return {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      }
+    } catch (error) {
+      console.error('❌ Error in getAuthHeaders:', error)
+      throw error
+    }
+  }
+
   /**
    * Start AI video generation process
    */
   public static async generateAIVideo(
     request: AIVideoGenerationRequest,
   ): Promise<AIVideoGenerationResponse> {
-    ApiService.setHeader()
-
     try {
-      const response = await ApiService.post('ai-video', request)
-      return response.data
+      const headers = await this.getAuthHeaders()
+      const url = `${API_CONFIG.baseUrl}/ai-video`
+
+      console.log('🌐 Making POST request to:', url)
+      console.log('🌐 Request headers:', JSON.stringify(headers, null, 2))
+      console.log('🌐 Request body:', JSON.stringify(request, null, 2))
+      console.log('🌐 API_CONFIG.baseUrl:', API_CONFIG.baseUrl)
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(request),
+      })
+
+      console.log('🌐 Response status:', response.status, response.statusText)
+      console.log('🌐 Response headers:', Object.fromEntries(response.headers.entries()))
+
+      if (!response.ok) {
+        const responseText = await response.text()
+        console.log('🌐 Error response body:', responseText)
+        throw new Error(
+          `Failed to start AI video generation: ${response.statusText} - ${responseText}`,
+        )
+      }
+
+      const data = await response.json()
+      console.log('🌐 Response data:', JSON.stringify(data, null, 2))
+
+      // Handle API Gateway Lambda proxy response format
+      if (data.body) {
+        const body = typeof data.body === 'string' ? JSON.parse(data.body) : data.body
+        console.log('🌐 Parsed body from API Gateway:', JSON.stringify(body, null, 2))
+        return body
+      }
+
+      return data
     } catch (error: unknown) {
       console.error('AI video generation error:', error)
 
@@ -130,11 +186,40 @@ class AIVideoService {
    * Get AI video generation status
    */
   public static async getAIVideoStatus(videoId: string): Promise<AIVideoStatusResponse> {
-    ApiService.setHeader()
-
     try {
-      const response = await ApiService.get('ai-video', videoId)
-      return response.data
+      const headers = await this.getAuthHeaders()
+      const url = `${API_CONFIG.baseUrl}/ai-video/${videoId}`
+
+      console.log('🌐 Making GET request to:', url)
+      console.log('🌐 Request headers:', JSON.stringify(headers, null, 2))
+      console.log('🌐 Video ID:', videoId)
+      console.log('🌐 API_CONFIG.baseUrl:', API_CONFIG.baseUrl)
+
+      const response = await fetch(url, {
+        method: 'GET',
+        headers,
+      })
+
+      console.log('🌐 Response status:', response.status, response.statusText)
+      console.log('🌐 Response headers:', Object.fromEntries(response.headers.entries()))
+
+      if (!response.ok) {
+        const responseText = await response.text()
+        console.log('🌐 Error response body:', responseText)
+        throw new Error(`Failed to get AI video status: ${response.statusText} - ${responseText}`)
+      }
+
+      const data = await response.json()
+      console.log('🌐 Response data:', JSON.stringify(data, null, 2))
+
+      // Handle API Gateway Lambda proxy response format
+      if (data.body) {
+        const body = typeof data.body === 'string' ? JSON.parse(data.body) : data.body
+        console.log('🌐 Parsed body from API Gateway:', JSON.stringify(body, null, 2))
+        return body
+      }
+
+      return data
     } catch (error: unknown) {
       console.error('AI video status error:', error)
 
