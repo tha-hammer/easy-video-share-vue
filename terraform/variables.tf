@@ -29,19 +29,50 @@ variable "project_name" {
   default     = "easy-video-share"
 }
 
-# AI Video Generation Variables
-variable "google_cloud_credentials_json" {
-  description = "Google Cloud service account credentials JSON"
+# Cognito Configuration
+variable "cognito_domain_prefix" {
+  description = "Cognito domain prefix for hosted UI"
   type        = string
-  sensitive   = true
+  default     = "easy-video-share"
+  validation {
+    condition     = length(var.cognito_domain_prefix) > 3 && length(var.cognito_domain_prefix) < 64
+    error_message = "Cognito domain prefix must be between 3 and 63 characters."
+  }
+}
+
+# Google Cloud Configuration (Modern Authentication)
+variable "google_cloud_project_id" {
+  description = "Google Cloud Project ID for Vertex AI"
+  type        = string
   default     = ""
 }
 
-variable "openai_api_key" {
-  description = "OpenAI API key for scene generation"
+variable "google_cloud_location" {
+  description = "Google Cloud location for Vertex AI (e.g., us-central1)"
   type        = string
-  sensitive   = true
+  default     = "us-central1"
+}
+
+variable "google_cloud_service_account_email" {
+  description = "Google Cloud Service Account email for Vertex AI"
+  type        = string
   default     = ""
+}
+
+# OpenAI Configuration
+variable "openai_api_key" {
+  description = "OpenAI API key for AI video generation"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+# Legacy JSON key support (optional, for backward compatibility)
+variable "google_cloud_credentials_json" {
+  description = "Google Cloud service account JSON credentials (legacy, prefer ADC)"
+  type        = string
+  default     = ""
+  sensitive   = true
 }
 
 variable "vertex_ai_project_id" {
@@ -64,4 +95,23 @@ variable "audio_bucket_name" {
     condition     = var.audio_bucket_name == "" || (length(var.audio_bucket_name) > 3 && length(var.audio_bucket_name) < 64)
     error_message = "Audio bucket name must be between 3 and 63 characters or empty to auto-generate."
   }
+}
+
+# Workload Identity Federation Configuration
+variable "workload_identity_pool_id" {
+  description = "Workload Identity Pool ID for AWS to Google Cloud federation"
+  type        = string
+  default     = "easy-video-share"
+}
+
+variable "workload_identity_provider_id" {
+  description = "Workload Identity Provider ID for AWS"
+  type        = string
+  default     = "easy-video-share"
+}
+
+variable "aws_account_id" {
+  description = "AWS Account ID for Workload Identity Federation"
+  type        = string
+  default     = "571960159088"
 } 

@@ -50,8 +50,17 @@ API_AUDIO_UPLOAD_ENDPOINT=$(terraform output -raw api_audio_upload_endpoint 2>/d
 COGNITO_USER_POOL_ID=$(terraform output -raw cognito_user_pool_id 2>/dev/null)
 COGNITO_CLIENT_ID=$(terraform output -raw cognito_user_pool_client_id 2>/dev/null)
 
-# AI Video Configuration (Future expansion)
+# AI Video Configuration (Modern Authentication)
 API_AI_VIDEO_ENDPOINT="${API_ENDPOINT}/ai-video"
+
+# Google Cloud Configuration (Modern Authentication)
+# These will be set from environment or user input
+GOOGLE_CLOUD_PROJECT_ID=${GOOGLE_CLOUD_PROJECT_ID:-"easy-video-share"}
+GOOGLE_CLOUD_LOCATION=${GOOGLE_CLOUD_LOCATION:-"us-central1"}
+GOOGLE_CLOUD_SERVICE_ACCOUNT_EMAIL=${GOOGLE_CLOUD_SERVICE_ACCOUNT_EMAIL:-"easy-vide-share-sa@easy-video-share.iam.gserviceaccount.com"}
+
+# OpenAI Configuration
+OPENAI_API_KEY=${OPENAI_API_KEY:-"sk-your-openai-api-key"}
 
 cd ..
 
@@ -98,6 +107,14 @@ VITE_API_ADMIN_VIDEOS_ENDPOINT=${API_ADMIN_VIDEOS_ENDPOINT}
 VITE_COGNITO_USER_POOL_ID=${COGNITO_USER_POOL_ID}
 VITE_COGNITO_CLIENT_ID=${COGNITO_CLIENT_ID}
 VITE_COGNITO_REGION=${AWS_REGION}
+
+# Google Cloud Configuration (Modern Authentication)
+VITE_GOOGLE_CLOUD_PROJECT_ID=${GOOGLE_CLOUD_PROJECT_ID}
+VITE_GOOGLE_CLOUD_LOCATION=${GOOGLE_CLOUD_LOCATION}
+VITE_GOOGLE_CLOUD_SERVICE_ACCOUNT_EMAIL=${GOOGLE_CLOUD_SERVICE_ACCOUNT_EMAIL}
+
+# OpenAI Configuration
+VITE_OPENAI_API_KEY=${OPENAI_API_KEY}
 
 # Feature Flags
 VITE_ENABLE_AI_VIDEO=true
