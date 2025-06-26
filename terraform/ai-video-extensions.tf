@@ -91,6 +91,13 @@ resource "aws_api_gateway_resource" "ai_video_resource" {
   path_part   = "ai-video"
 }
 
+# API Gateway resource for individual AI video status (path parameter)
+resource "aws_api_gateway_resource" "ai_video_id_resource" {
+  rest_api_id = aws_api_gateway_rest_api.video_api.id
+  parent_id   = aws_api_gateway_resource.ai_video_resource.id
+  path_part   = "{videoId}"
+}
+
 # POST method for starting AI video generation
 resource "aws_api_gateway_method" "ai_video_post" {
   rest_api_id   = aws_api_gateway_rest_api.video_api.id
@@ -109,10 +116,27 @@ resource "aws_api_gateway_method" "ai_video_get" {
   authorizer_id = aws_api_gateway_authorizer.cognito_authorizer.id
 }
 
+# GET method for checking individual AI video status
+resource "aws_api_gateway_method" "ai_video_id_get" {
+  rest_api_id   = aws_api_gateway_rest_api.video_api.id
+  resource_id   = aws_api_gateway_resource.ai_video_id_resource.id
+  http_method   = "GET"
+  authorization = "COGNITO_USER_POOLS"
+  authorizer_id = aws_api_gateway_authorizer.cognito_authorizer.id
+}
+
 # OPTIONS method for CORS
 resource "aws_api_gateway_method" "ai_video_options" {
   rest_api_id   = aws_api_gateway_rest_api.video_api.id
   resource_id   = aws_api_gateway_resource.ai_video_resource.id
+  http_method   = "OPTIONS"
+  authorization = "NONE"
+}
+
+# OPTIONS method for CORS (individual AI video)
+resource "aws_api_gateway_method" "ai_video_id_options" {
+  rest_api_id   = aws_api_gateway_rest_api.video_api.id
+  resource_id   = aws_api_gateway_resource.ai_video_id_resource.id
   http_method   = "OPTIONS"
   authorization = "NONE"
 }
@@ -137,6 +161,16 @@ resource "aws_api_gateway_integration" "ai_video_get_integration" {
   uri                     = aws_lambda_function.ai_video_processor.invoke_arn
 }
 
+# Integration for individual AI video GET method
+resource "aws_api_gateway_integration" "ai_video_id_get_integration" {
+  rest_api_id             = aws_api_gateway_rest_api.video_api.id
+  resource_id             = aws_api_gateway_resource.ai_video_id_resource.id
+  http_method             = aws_api_gateway_method.ai_video_id_get.http_method
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = aws_lambda_function.ai_video_processor.invoke_arn
+}
+
 # Integration for OPTIONS method
 resource "aws_api_gateway_integration" "ai_video_options_integration" {
   rest_api_id             = aws_api_gateway_rest_api.video_api.id
@@ -145,6 +179,148 @@ resource "aws_api_gateway_integration" "ai_video_options_integration" {
   integration_http_method = "POST"
   type                    = "AWS_PROXY"
   uri                     = aws_lambda_function.ai_video_processor.invoke_arn
+}
+
+# Integration for individual AI video OPTIONS method
+resource "aws_api_gateway_integration" "ai_video_id_options_integration" {
+  rest_api_id             = aws_api_gateway_rest_api.video_api.id
+  resource_id             = aws_api_gateway_resource.ai_video_id_resource.id
+  http_method             = aws_api_gateway_method.ai_video_id_options.http_method
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = aws_lambda_function.ai_video_processor.invoke_arn
+}
+
+# Method responses for AI video endpoints
+resource "aws_api_gateway_method_response" "ai_video_post_response" {
+  rest_api_id = aws_api_gateway_rest_api.video_api.id
+  resource_id = aws_api_gateway_resource.ai_video_resource.id
+  http_method = aws_api_gateway_method.ai_video_post.http_method
+  status_code = "200"
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Origin" = true
+  }
+}
+
+resource "aws_api_gateway_method_response" "ai_video_get_response" {
+  rest_api_id = aws_api_gateway_rest_api.video_api.id
+  resource_id = aws_api_gateway_resource.ai_video_resource.id
+  http_method = aws_api_gateway_method.ai_video_get.http_method
+  status_code = "200"
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Origin" = true
+  }
+}
+
+resource "aws_api_gateway_method_response" "ai_video_options_response" {
+  rest_api_id = aws_api_gateway_rest_api.video_api.id
+  resource_id = aws_api_gateway_resource.ai_video_resource.id
+  http_method = aws_api_gateway_method.ai_video_options.http_method
+  status_code = "200"
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Origin"  = true
+    "method.response.header.Access-Control-Allow-Methods" = true
+    "method.response.header.Access-Control-Allow-Headers" = true
+  }
+}
+
+# Method responses for individual AI video endpoints
+resource "aws_api_gateway_method_response" "ai_video_id_get_response" {
+  rest_api_id = aws_api_gateway_rest_api.video_api.id
+  resource_id = aws_api_gateway_resource.ai_video_id_resource.id
+  http_method = aws_api_gateway_method.ai_video_id_get.http_method
+  status_code = "200"
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Origin" = true
+  }
+}
+
+resource "aws_api_gateway_method_response" "ai_video_id_options_response" {
+  rest_api_id = aws_api_gateway_rest_api.video_api.id
+  resource_id = aws_api_gateway_resource.ai_video_id_resource.id
+  http_method = aws_api_gateway_method.ai_video_id_options.http_method
+  status_code = "200"
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Origin"  = true
+    "method.response.header.Access-Control-Allow-Methods" = true
+    "method.response.header.Access-Control-Allow-Headers" = true
+  }
+}
+
+# Integration responses for AI video endpoints
+resource "aws_api_gateway_integration_response" "ai_video_post_integration_response" {
+  rest_api_id = aws_api_gateway_rest_api.video_api.id
+  resource_id = aws_api_gateway_resource.ai_video_resource.id
+  http_method = aws_api_gateway_method.ai_video_post.http_method
+  status_code = aws_api_gateway_method_response.ai_video_post_response.status_code
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Origin" = "'*'"
+  }
+
+  depends_on = [aws_api_gateway_integration.ai_video_post_integration]
+}
+
+resource "aws_api_gateway_integration_response" "ai_video_get_integration_response" {
+  rest_api_id = aws_api_gateway_rest_api.video_api.id
+  resource_id = aws_api_gateway_resource.ai_video_resource.id
+  http_method = aws_api_gateway_method.ai_video_get.http_method
+  status_code = aws_api_gateway_method_response.ai_video_get_response.status_code
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Origin" = "'*'"
+  }
+
+  depends_on = [aws_api_gateway_integration.ai_video_get_integration]
+}
+
+resource "aws_api_gateway_integration_response" "ai_video_options_integration_response" {
+  rest_api_id = aws_api_gateway_rest_api.video_api.id
+  resource_id = aws_api_gateway_resource.ai_video_resource.id
+  http_method = aws_api_gateway_method.ai_video_options.http_method
+  status_code = aws_api_gateway_method_response.ai_video_options_response.status_code
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Origin"  = "'*'"
+    "method.response.header.Access-Control-Allow-Methods" = "'GET,POST,PUT,DELETE,OPTIONS'"
+    "method.response.header.Access-Control-Allow-Headers" = "'Content-Type,Authorization,X-Amz-Date,X-Amz-Security-Token'"
+  }
+
+  depends_on = [aws_api_gateway_integration.ai_video_options_integration]
+}
+
+# Integration responses for individual AI video endpoints
+resource "aws_api_gateway_integration_response" "ai_video_id_get_integration_response" {
+  rest_api_id = aws_api_gateway_rest_api.video_api.id
+  resource_id = aws_api_gateway_resource.ai_video_id_resource.id
+  http_method = aws_api_gateway_method.ai_video_id_get.http_method
+  status_code = aws_api_gateway_method_response.ai_video_id_get_response.status_code
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Origin" = "'*'"
+  }
+
+  depends_on = [aws_api_gateway_integration.ai_video_id_get_integration]
+}
+
+resource "aws_api_gateway_integration_response" "ai_video_id_options_integration_response" {
+  rest_api_id = aws_api_gateway_rest_api.video_api.id
+  resource_id = aws_api_gateway_resource.ai_video_id_resource.id
+  http_method = aws_api_gateway_method.ai_video_id_options.http_method
+  status_code = aws_api_gateway_method_response.ai_video_id_options_response.status_code
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Origin"  = "'*'"
+    "method.response.header.Access-Control-Allow-Methods" = "'GET,POST,PUT,DELETE,OPTIONS'"
+    "method.response.header.Access-Control-Allow-Headers" = "'Content-Type,Authorization,X-Amz-Date,X-Amz-Security-Token'"
+  }
+
+  depends_on = [aws_api_gateway_integration.ai_video_id_options_integration]
 }
 
 # Lambda permissions for API Gateway
@@ -439,4 +615,50 @@ resource "aws_iam_role_policy" "ai_video_lambda_policy" {
       }
     ]
   })
+}
+
+# API Gateway deployment for AI video resources
+resource "aws_api_gateway_deployment" "ai_video_deployment" {
+  depends_on = [
+    aws_api_gateway_integration.ai_video_post_integration,
+    aws_api_gateway_integration.ai_video_get_integration,
+    aws_api_gateway_integration.ai_video_options_integration,
+    aws_api_gateway_integration.ai_video_id_get_integration,
+    aws_api_gateway_integration.ai_video_id_options_integration,
+    aws_api_gateway_integration_response.ai_video_post_integration_response,
+    aws_api_gateway_integration_response.ai_video_get_integration_response,
+    aws_api_gateway_integration_response.ai_video_options_integration_response,
+    aws_api_gateway_integration_response.ai_video_id_get_integration_response,
+    aws_api_gateway_integration_response.ai_video_id_options_integration_response,
+  ]
+
+  rest_api_id = aws_api_gateway_rest_api.video_api.id
+
+  triggers = {
+    redeployment = sha1(jsonencode([
+      aws_api_gateway_resource.ai_video_resource.id,
+      aws_api_gateway_resource.ai_video_id_resource.id,
+      aws_api_gateway_method.ai_video_post.id,
+      aws_api_gateway_method.ai_video_get.id,
+      aws_api_gateway_method.ai_video_options.id,
+      aws_api_gateway_method.ai_video_id_get.id,
+      aws_api_gateway_method.ai_video_id_options.id,
+    ]))
+  }
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
+# Update the existing stage to use the new deployment
+resource "aws_api_gateway_stage" "video_api_stage" {
+  deployment_id = aws_api_gateway_deployment.ai_video_deployment.id
+  rest_api_id   = aws_api_gateway_rest_api.video_api.id
+  stage_name    = var.environment
+
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+  }
 } 

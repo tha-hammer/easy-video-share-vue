@@ -347,6 +347,64 @@
             </div>
           </div>
         </div>
+
+        <!-- Debug Panel (Development Only) -->
+        <div v-if="isDevelopment" class="card bg-light-warning border-warning mt-6">
+          <div class="card-header">
+            <h6 class="card-title mb-0">Debug Information</h6>
+          </div>
+          <div class="card-body">
+            <div class="row g-3">
+              <div class="col-md-6">
+                <p class="mb-1"><strong>Current Step:</strong> {{ currentStep }}</p>
+                <p class="mb-1"><strong>Polling Active:</strong> {{ pollingActive }}</p>
+                <p class="mb-1"><strong>Fallback Progress:</strong> {{ fallbackProgress }}%</p>
+                <p class="mb-1">
+                  <strong>API Progress:</strong>
+                  {{ AIVideoService.calculateProgress(processingSteps) }}%
+                </p>
+              </div>
+              <div class="col-md-6">
+                <p class="mb-1">
+                  <strong>Processing Status:</strong>
+                  {{ processingStatus?.ai_generation_status || 'none' }}
+                </p>
+                <p class="mb-1"><strong>Processing Steps:</strong> {{ processingSteps.length }}</p>
+                <p class="mb-1">
+                  <strong>Last Successful Poll:</strong>
+                  {{
+                    lastSuccessfulPoll ? new Date(lastSuccessfulPoll).toLocaleTimeString() : 'never'
+                  }}
+                </p>
+                <p class="mb-1">
+                  <strong>Selected Audio:</strong> {{ selectedAudio?.audio_id || 'none' }}
+                </p>
+              </div>
+            </div>
+            <div class="mt-3">
+              <button
+                class="btn btn-sm btn-warning me-2"
+                @click="manualRefresh"
+                :disabled="!processingStatus?.video_id"
+              >
+                <KTIcon icon-name="arrow-clockwise" icon-class="fs-4 me-1" />
+                Manual Refresh
+              </button>
+              <button class="btn btn-sm btn-info" @click="stopPolling" :disabled="!pollingActive">
+                <KTIcon icon-name="stop" icon-class="fs-4 me-1" />
+                Stop Polling
+              </button>
+              <button class="btn btn-sm btn-danger ms-2" @click="resetComponent">
+                <KTIcon icon-name="cross" icon-class="fs-4 me-1" />
+                Reset Component
+              </button>
+              <button class="btn btn-sm btn-success ms-2" @click="testEndpoints">
+                <KTIcon icon-name="abstract-26" icon-class="fs-4 me-1" />
+                Test Endpoints
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- Step 4: Scene Plan Display -->
@@ -641,6 +699,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useAudioStore } from '@/stores/audio'
 import AudioService from '@/core/services/AudioService'
 import AIVideoService from '@/core/services/AIVideoService'
+import { API_CONFIG } from '@/core/config/config'
 import type { AIVideoGenerationRequest, VideoMetadata } from '@/core/services/AIVideoService'
 import type { AudioMetadata } from '@/core/services/AudioService'
 import KTIcon from '@/core/helpers/kt-icon/KTIcon.vue'
@@ -669,6 +728,8 @@ const processingStatus = ref<VideoMetadata | null>(null)
 const generatedVideo = ref<VideoMetadata | null>(null)
 const pollingInterval = ref<NodeJS.Timeout | null>(null)
 const pollingActive = ref(false)
+const fallbackProgress = ref(0)
+const lastSuccessfulPoll = ref<Date | null>(null)
 
 // Computed properties
 const userAudioFiles = computed(() => audioStore.userAudioFiles)
@@ -679,11 +740,28 @@ const processingSteps = computed(
   () => processingStatus.value?.ai_generation_data?.processing_steps || [],
 )
 
-const processingProgress = computed(() => AIVideoService.calculateProgress(processingSteps.value))
+const processingProgress = computed(() => {
+  const apiProgress = AIVideoService.calculateProgress(processingSteps.value)
+  // Use fallback progress if API progress is 0 and we're actively polling
+  return pollingActive.value && apiProgress === 0 ? fallbackProgress.value : apiProgress
+})
 
-const currentProcessingMessage = computed(() =>
-  AIVideoService.getCurrentStepMessage(processingSteps.value),
-)
+const currentProcessingMessage = computed(() => {
+  const apiMessage = AIVideoService.getCurrentStepMessage(processingSteps.value)
+  // Use fallback message if no API data and we're polling
+  if (pollingActive.value && (!processingSteps.value || processingSteps.value.length === 0)) {
+    const timeSinceLastPoll = lastSuccessfulPoll.value
+      ? Math.floor((Date.now() - lastSuccessfulPoll.value.getTime()) / 1000)
+      : 0
+
+    if (timeSinceLastPoll > 30) {
+      return 'Connecting to AI services...'
+    } else {
+      return 'Initializing AI processing...'
+    }
+  }
+  return apiMessage
+})
 
 const scenePlan = computed(() => processingStatus.value?.ai_generation_data?.scene_beats || null)
 
@@ -702,6 +780,9 @@ const estimatedTime = computed(() =>
 const videoStyles = computed(() => AIVideoService.getVideoStyles())
 
 const supportedDurations = computed(() => AIVideoService.getSupportedDurations())
+
+// Development mode check
+const isDevelopment = computed(() => import.meta.env.DEV)
 
 // Audio upload methods
 const triggerFileSelect = () => {
@@ -793,22 +874,33 @@ const startAIGeneration = async () => {
     style: aiConfig.value.style,
   }
 
+  console.log('🚀 Starting AI generation with request:', request)
+
   const errors = AIVideoService.validateRequest(request)
   if (errors.length > 0) {
+    console.error('❌ Validation errors:', errors)
     alert(`Please fix the following errors:\n- ${errors.join('\n- ')}`)
     return
   }
 
   try {
+    console.log('🔄 Moving to processing step (step 3)')
     currentStep.value = 3
     pollingActive.value = true
 
+    console.log('🌐 Calling AIVideoService.generateAIVideo...')
     const response = await AIVideoService.generateAIVideo(request)
+    console.log('✅ AI generation started successfully:', response)
 
     // Start polling for completion
+    console.log('🔄 Starting polling with video ID:', response.videoId)
     startPolling(response.videoId)
   } catch (error) {
-    console.error('Error starting AI generation:', error)
+    console.error('❌ Error starting AI generation:', error)
+    console.error('❌ Error details:', {
+      message: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
+    })
     pollingActive.value = false
     alert('Failed to start AI video generation. Please try again.')
     currentStep.value = 2
@@ -818,10 +910,33 @@ const startAIGeneration = async () => {
 const startPolling = (videoId: string) => {
   if (!pollingActive.value) return
 
+  console.log('🔄 Starting polling for video ID:', videoId)
+  console.log('🔄 Polling interval: 3000ms')
+  console.log('🔄 Max wait time: 15 minutes')
+
+  // Initialize fallback progress
+  fallbackProgress.value = 5
+  lastSuccessfulPoll.value = new Date()
+
   pollingInterval.value = setInterval(async () => {
     try {
+      console.log('🔄 Polling status for video:', videoId)
       const status = await AIVideoService.getAIVideoStatus(videoId)
+      console.log('✅ Polling response received:', status)
+
+      // Update processing status and reset fallback
       processingStatus.value = status.video
+      lastSuccessfulPoll.value = new Date()
+      fallbackProgress.value = Math.min(fallbackProgress.value + 10, 90) // Increment fallback progress
+
+      console.log('📊 Updated processing status:', {
+        ai_generation_status: status.video.ai_generation_status,
+        processing_steps: status.video.ai_generation_data?.processing_steps?.length || 0,
+        current_step:
+          status.video.ai_generation_data?.processing_steps?.find((s) => s.status === 'processing')
+            ?.step || 'none',
+        fallback_progress: fallbackProgress.value,
+      })
 
       // Check for transcription and scene planning completion
       const steps = status.video.ai_generation_data?.processing_steps || []
@@ -832,33 +947,65 @@ const startPolling = (videoId: string) => {
       const videoGenerationDone =
         steps.find((s) => s.step === 'video_generation')?.status === 'completed'
 
+      console.log('📋 Step completion status:', {
+        transcriptionDone,
+        scenePlanningDone,
+        videoGenerationDone,
+        currentStep: currentStep.value,
+      })
+
       if (transcriptionDone && scenePlanningDone && currentStep.value === 3) {
+        console.log('🎬 Moving to scene plan step (step 4)')
         currentStep.value = 4 // Show scene plan
       }
 
       if (videoGenerationDone && currentStep.value < 5) {
+        console.log('🎥 Moving to video generation step (step 5)')
         currentStep.value = 5 // Show video generation grid
       }
 
       if (status.video.ai_generation_status === 'completed') {
+        console.log('✅ AI generation completed successfully')
+        fallbackProgress.value = 100
         stopPolling()
         generatedVideo.value = status.video
         currentStep.value = 6
       } else if (status.video.ai_generation_status === 'failed') {
+        console.error('❌ AI generation failed')
         stopPolling()
         const errorMessage =
           status.video.ai_generation_data?.error_message || 'AI video generation failed'
         alert(`AI video generation failed: ${errorMessage}`)
         currentStep.value = 2
+      } else {
+        console.log('⏳ AI generation still in progress...')
       }
     } catch (error) {
-      console.error('Error polling status:', error)
+      console.error('❌ Error polling status:', error)
+      console.error('❌ Error details:', {
+        message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined,
+      })
+
+      // Increment fallback progress even on errors to show activity
+      fallbackProgress.value = Math.min(fallbackProgress.value + 5, 95)
+      console.log('📊 Fallback progress updated to:', fallbackProgress.value)
+
+      // Don't stop polling on network errors, but log them
+      // Only stop if it's a persistent authentication error
+      if (error instanceof Error && error.message.includes('authentication')) {
+        console.error('❌ Authentication error detected, stopping polling')
+        stopPolling()
+        alert('Authentication error. Please refresh the page and try again.')
+        currentStep.value = 2
+      }
     }
   }, 3000)
 
   // Stop polling after 15 minutes
   setTimeout(() => {
     if (pollingActive.value) {
+      console.log('⏰ Polling timeout reached (15 minutes)')
       stopPolling()
       alert('AI video generation timed out. Please try again.')
       currentStep.value = 2
@@ -1002,6 +1149,90 @@ const createAnother = () => {
   stopPolling()
 }
 
+// Missing methods that are called in the template
+const getStepCardClass = (step: { status: string }) => {
+  switch (step.status) {
+    case 'completed':
+      return 'border-success bg-light-success'
+    case 'processing':
+      return 'border-warning bg-light-warning'
+    case 'failed':
+      return 'border-danger bg-light-danger'
+    default:
+      return 'border-light bg-light'
+  }
+}
+
+const getStepIconClass = (step: { status: string }) => {
+  switch (step.status) {
+    case 'completed':
+      return 'bg-success'
+    case 'processing':
+      return 'bg-warning'
+    case 'failed':
+      return 'bg-danger'
+    default:
+      return 'bg-light'
+  }
+}
+
+const getStepIcon = (step: { step: string; status: string }) => {
+  if (step.status === 'failed') return 'fa-times'
+  if (step.status === 'completed') return 'fa-check'
+  if (step.status === 'processing') return 'fa-spinner fa-spin'
+
+  // Default icons based on step type
+  switch (step.step) {
+    case 'transcription':
+      return 'fa-microphone'
+    case 'scene_planning':
+      return 'fa-lightbulb'
+    case 'video_generation':
+      return 'fa-video'
+    default:
+      return 'fa-cog'
+  }
+}
+
+const getStepDisplayName = (step: string) => {
+  switch (step) {
+    case 'transcription':
+      return 'Audio Transcription'
+    case 'scene_planning':
+      return 'Scene Planning'
+    case 'video_generation':
+      return 'Video Generation'
+    default:
+      return step.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase())
+  }
+}
+
+const getStepDescription = (step: string) => {
+  switch (step) {
+    case 'transcription':
+      return 'Converting audio to text with high accuracy'
+    case 'scene_planning':
+      return 'Creating intelligent scene breakdown'
+    case 'video_generation':
+      return 'Generating video scenes with AI'
+    default:
+      return 'Processing step'
+  }
+}
+
+const getStepStatusBadge = (step: { status: string }) => {
+  switch (step.status) {
+    case 'completed':
+      return 'badge-light-success'
+    case 'processing':
+      return 'badge-light-warning'
+    case 'failed':
+      return 'badge-light-danger'
+    default:
+      return 'badge-light-secondary'
+  }
+}
+
 // Lifecycle
 onMounted(async () => {
   await audioStore.loadUserAudioFiles()
@@ -1010,6 +1241,126 @@ onMounted(async () => {
 onUnmounted(() => {
   stopPolling()
 })
+
+// New methods
+const manualRefresh = async () => {
+  if (!processingStatus.value?.video_id) {
+    alert('No video ID available for refresh')
+    return
+  }
+
+  try {
+    console.log('🔄 Manual refresh requested for video:', processingStatus.value.video_id)
+    const status = await AIVideoService.getAIVideoStatus(processingStatus.value.video_id)
+    console.log('✅ Manual refresh response:', status)
+
+    processingStatus.value = status.video
+    lastSuccessfulPoll.value = new Date()
+
+    alert(
+      `Manual refresh successful!\nStatus: ${status.video.ai_generation_status}\nSteps: ${status.video.ai_generation_data?.processing_steps?.length || 0}`,
+    )
+  } catch (error) {
+    console.error('❌ Manual refresh failed:', error)
+    alert(`Manual refresh failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+  }
+}
+
+const resetComponent = () => {
+  console.log('🔄 Resetting component state')
+
+  // Stop polling
+  stopPolling()
+
+  // Reset all state
+  currentStep.value = 1
+  selectedAudio.value = null
+  processingStatus.value = null
+  generatedVideo.value = null
+  fallbackProgress.value = 0
+  lastSuccessfulPoll.value = null
+  pollingActive.value = false
+
+  // Reset upload state
+  audioUploading.value = false
+  currentUploadFile.value = null
+  uploadProgress.value = 0
+  uploadedBytes.value = 0
+  totalBytes.value = 0
+
+  // Reset AI config
+  aiConfig.value = {
+    prompt:
+      'Create an engaging vertical video optimized for social media with dynamic visuals and modern aesthetics',
+    targetDuration: 30,
+    style: 'cinematic',
+  }
+
+  console.log('✅ Component reset complete')
+  alert('Component has been reset to initial state')
+}
+
+const testEndpoints = async () => {
+  console.log('🚀 Testing AI video API endpoints')
+
+  try {
+    // Test 1: Check if we can get auth headers
+    console.log('🔑 Testing authentication...')
+    const headers = await AIVideoService['getAuthHeaders']()
+    console.log('✅ Auth headers obtained:', !!headers.Authorization)
+
+    // Test 2: Test the base URL
+    const baseUrl = `${API_CONFIG.baseUrl}/ai-video`
+    console.log('🌐 Testing base URL:', baseUrl)
+
+    // Test 3: Make a simple OPTIONS request to check CORS
+    console.log('🔄 Testing CORS with OPTIONS request...')
+    const optionsResponse = await fetch(baseUrl, {
+      method: 'OPTIONS',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    })
+    console.log('✅ OPTIONS response status:', optionsResponse.status)
+
+    // Test 4: Try to make a POST request with minimal data
+    console.log('📤 Testing POST endpoint...')
+    const testRequest = {
+      audioId: 'test-audio-id',
+      prompt: 'Test prompt',
+      targetDuration: 30,
+      style: 'cinematic',
+    }
+
+    const postResponse = await fetch(baseUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: headers.Authorization,
+      },
+      body: JSON.stringify(testRequest),
+    })
+
+    console.log('✅ POST response status:', postResponse.status)
+
+    if (postResponse.ok) {
+      const postData = await postResponse.json()
+      console.log('✅ POST response data:', postData)
+      alert(
+        `✅ Endpoints are working!\n\nPOST Status: ${postResponse.status}\nResponse: ${JSON.stringify(postData, null, 2)}`,
+      )
+    } else {
+      const errorText = await postResponse.text()
+      console.log('❌ POST error response:', errorText)
+      alert(`❌ POST endpoint failed!\n\nStatus: ${postResponse.status}\nError: ${errorText}`)
+    }
+  } catch (error) {
+    console.error('❌ Endpoint test failed:', error)
+    alert(
+      `❌ Endpoint test failed!\n\nError: ${error instanceof Error ? error.message : 'Unknown error'}`,
+    )
+  }
+}
 </script>
 
 <style scoped>

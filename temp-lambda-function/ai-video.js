@@ -287,43 +287,27 @@ async function handleAIVideoGeneration(event, userId) {
   })
 }
 
-// Asynchronous AI video processing pipeline (REAL implementation - Step 1: Transcription)
+// Asynchronous AI video processing pipeline (mock implementation)
 async function processAIVideoAsync(videoId, userId, request) {
-  console.log(`🎬 Starting REAL AI video processing for video ${videoId}`)
-  console.log(`📋 Request details:`, JSON.stringify(request, null, 2))
+  console.log(`Starting async processing for video ${videoId}`)
 
   try {
-    // Step 1: REAL Audio Transcription with AWS Transcribe
-    console.log(`🎤 Step 1: Starting REAL audio transcription for audio ID: ${request.audioId}`)
+    // Step 1: Simulate transcription (30 seconds)
     await updateProcessingStep(videoId, 'transcription', 'processing')
-
-    const transcriptionResult = await performRealTranscription(request.audioId, userId)
-    console.log(
-      `✅ Transcription completed successfully:`,
-      JSON.stringify(transcriptionResult, null, 2),
-    )
-
-    // Store transcription results in AI generation data
-    await updateAIGenerationStatus(videoId, 'processing', {
-      audio_transcription: transcriptionResult,
-    })
-
+    await simulateProcessing(30000) // 30 seconds
     await updateProcessingStep(videoId, 'transcription', 'completed')
 
-    // Step 2: Simulate scene planning (60 seconds) - TODO: Implement in Step 2
-    console.log(`🎭 Step 2: Starting scene planning (currently simulated)`)
+    // Step 2: Simulate scene planning (60 seconds)
     await updateProcessingStep(videoId, 'scene_planning', 'processing')
     await simulateProcessing(60000) // 60 seconds
     await updateProcessingStep(videoId, 'scene_planning', 'completed')
 
-    // Step 3: Simulate video generation (120 seconds) - TODO: Implement in Step 3
-    console.log(`🎥 Step 3: Starting video generation (currently simulated)`)
+    // Step 3: Simulate video generation (120 seconds)
     await updateProcessingStep(videoId, 'video_generation', 'processing')
     await simulateProcessing(120000) // 120 seconds
     await updateProcessingStep(videoId, 'video_generation', 'completed')
 
-    // Step 4: Simulate finalization (30 seconds) - TODO: Implement in Step 4
-    console.log(`🎬 Step 4: Starting finalization (currently simulated)`)
+    // Step 4: Simulate finalization (30 seconds)
     await updateProcessingStep(videoId, 'finalization', 'processing')
     await simulateProcessing(30000) // 30 seconds
     await updateProcessingStep(videoId, 'finalization', 'completed')
@@ -335,9 +319,9 @@ async function processAIVideoAsync(videoId, userId, request) {
       final_video_url: `https://example.com/mock-video-${videoId}.mp4`, // Mock URL
     })
 
-    console.log(`✅ AI video generation completed for ${videoId}`)
+    console.log(`AI video generation completed for ${videoId}`)
   } catch (error) {
-    console.error(`❌ AI video generation failed for ${videoId}:`, error)
+    console.error(`AI video generation failed for ${videoId}:`, error)
     await updateAIGenerationStatus(videoId, 'failed', {
       error_message: error.message,
       failed_at: new Date().toISOString(),
@@ -345,353 +329,35 @@ async function processAIVideoAsync(videoId, userId, request) {
   }
 }
 
-// REAL Audio Transcription with AWS Transcribe
-async function performRealTranscription(audioId, userId) {
-  console.log(`🎤 Starting REAL transcription for audio ID: ${audioId}`)
-
-  try {
-    // Step 1: Get audio metadata from DynamoDB
-    console.log(`📋 Step 1.1: Retrieving audio metadata for audio ID: ${audioId}`)
-    const audioMetadata = await getAudioMetadata(audioId, userId)
-    console.log(`✅ Audio metadata retrieved:`, JSON.stringify(audioMetadata, null, 2))
-
-    // Step 2: Start AWS Transcribe job
-    console.log(`🎤 Step 1.2: Starting AWS Transcribe job`)
-    const transcriptionJobName = `transcription-${audioId}-${Date.now()}`
-    const transcriptionJob = await startTranscriptionJob(transcriptionJobName, audioMetadata)
-    console.log(`✅ Transcription job started:`, JSON.stringify(transcriptionJob, null, 2))
-
-    // Step 3: Poll for job completion
-    console.log(`⏳ Step 1.3: Polling for transcription job completion`)
-    const transcriptionResult = await pollTranscriptionJob(transcriptionJobName)
-    console.log(`✅ Transcription job completed:`, JSON.stringify(transcriptionResult, null, 2))
-
-    // Step 4: Parse and store transcription results
-    console.log(`💾 Step 1.4: Storing transcription results`)
-    const processedTranscription = await processTranscriptionResults(transcriptionResult, audioId)
-    console.log(
-      `✅ Transcription results processed and stored:`,
-      JSON.stringify(processedTranscription, null, 2),
-    )
-
-    return processedTranscription
-  } catch (error) {
-    console.error(`❌ Transcription failed for audio ${audioId}:`, error)
-    throw error
-  }
-}
-
-// Get audio metadata from DynamoDB
-async function getAudioMetadata(audioId, userId) {
-  console.log(`🔍 Retrieving audio metadata for audio ID: ${audioId}, user ID: ${userId}`)
-
-  try {
-    // Query for audio file in the audio table (assuming separate audio table)
-    // If using same table, we'll need to filter by audio_id pattern
-    const queryCommand = new QueryCommand({
-      TableName: process.env.DYNAMODB_TABLE, // Using same table for now
-      KeyConditionExpression: 'video_id = :audioId',
-      FilterExpression: 'user_id = :userId',
-      ExpressionAttributeValues: {
-        ':audioId': audioId,
-        ':userId': userId,
-      },
-    })
-
-    const result = await docClient.send(queryCommand)
-    console.log(`📋 Query result:`, JSON.stringify(result, null, 2))
-
-    if (!result.Items || result.Items.length === 0) {
-      throw new Error(`Audio file not found: ${audioId}`)
-    }
-
-    const audioItem = result.Items[0]
-    console.log(`✅ Audio metadata found:`, JSON.stringify(audioItem, null, 2))
-
-    return {
-      audio_id: audioItem.video_id, // Using video_id field for audio_id
-      user_id: audioItem.user_id,
-      title: audioItem.title,
-      filename: audioItem.filename,
-      bucket_location: audioItem.bucket_location,
-      file_size: audioItem.file_size,
-      content_type: audioItem.content_type,
-      duration: audioItem.duration,
-    }
-  } catch (error) {
-    console.error(`❌ Error retrieving audio metadata:`, error)
-    throw error
-  }
-}
-
-// Start AWS Transcribe job
-async function startTranscriptionJob(jobName, audioMetadata) {
-  console.log(`🎤 Starting AWS Transcribe job: ${jobName}`)
-  console.log(`📋 Audio metadata:`, JSON.stringify(audioMetadata, null, 2))
-
-  try {
-    // Use AUDIO_BUCKET for audio files, fallback to S3_BUCKET if not set
-    const audioBucket = process.env.AUDIO_BUCKET || process.env.S3_BUCKET
-    const s3Uri = `s3://${audioBucket}/${audioMetadata.bucket_location}`
-    console.log(`📁 S3 URI for transcription: ${s3Uri}`)
-    console.log(`📦 Using bucket: ${audioBucket}`)
-
-    const startCommand = new StartTranscriptionJobCommand({
-      TranscriptionJobName: jobName,
-      LanguageCode: 'en-US', // Default to English, could be made configurable
-      MediaFormat: getMediaFormatFromContentType(audioMetadata.content_type),
-      Media: {
-        MediaFileUri: s3Uri,
-      },
-      OutputBucketName: audioBucket, // Use same bucket for output
-      OutputKey: `transcriptions/${jobName}.json`,
-      Settings: {
-        ShowSpeakerLabels: true,
-        MaxSpeakerLabels: 2, // Assuming single speaker for now
-        ShowConfidence: true,
-      },
-    })
-
-    console.log(
-      `🚀 Sending StartTranscriptionJobCommand:`,
-      JSON.stringify(startCommand.input, null, 2),
-    )
-    const result = await transcribeClient.send(startCommand)
-    console.log(`✅ Transcription job started successfully:`, JSON.stringify(result, null, 2))
-
-    return result
-  } catch (error) {
-    console.error(`❌ Error starting transcription job:`, error)
-    throw error
-  }
-}
-
-// Poll for transcription job completion
-async function pollTranscriptionJob(jobName) {
-  console.log(`⏳ Polling for transcription job completion: ${jobName}`)
-
-  const maxWaitTime = 10 * 60 * 1000 // 10 minutes
-  const pollInterval = 5000 // 5 seconds
-  const startTime = Date.now()
-
-  return new Promise((resolve, reject) => {
-    const poll = async () => {
-      try {
-        console.log(`🔄 Polling transcription job status: ${jobName}`)
-
-        const getCommand = new GetTranscriptionJobCommand({
-          TranscriptionJobName: jobName,
-        })
-
-        const result = await transcribeClient.send(getCommand)
-        const job = result.TranscriptionJob
-        console.log(`📊 Job status: ${job.TranscriptionJobStatus}`)
-
-        if (job.TranscriptionJobStatus === 'COMPLETED') {
-          console.log(`✅ Transcription job completed successfully`)
-          console.log(`📁 Output location: ${job.Transcript.TranscriptFileUri}`)
-          resolve(job)
-          return
-        }
-
-        if (job.TranscriptionJobStatus === 'FAILED') {
-          console.error(`❌ Transcription job failed:`, job.FailureReason)
-          reject(new Error(`Transcription failed: ${job.FailureReason}`))
-          return
-        }
-
-        // Check timeout
-        if (Date.now() - startTime > maxWaitTime) {
-          console.error(`⏰ Transcription job timed out after ${maxWaitTime / 1000} seconds`)
-          reject(new Error('Transcription job timed out'))
-          return
-        }
-
-        // Continue polling
-        console.log(`⏳ Job still in progress, polling again in ${pollInterval / 1000} seconds...`)
-        setTimeout(poll, pollInterval)
-      } catch (error) {
-        console.error(`❌ Error polling transcription job:`, error)
-        reject(error)
-      }
-    }
-
-    // Start polling
-    poll()
-  })
-}
-
-// Process transcription results
-async function processTranscriptionResults(transcriptionJob, audioId) {
-  console.log(`🔍 Processing transcription results for audio: ${audioId}`)
-
-  try {
-    // Get the transcription file from S3
-    const transcriptUri = transcriptionJob.Transcript.TranscriptFileUri
-    console.log(`📁 Transcript URI: ${transcriptUri}`)
-
-    // Use AUDIO_BUCKET for audio files, fallback to S3_BUCKET if not set
-    const audioBucket = process.env.AUDIO_BUCKET || process.env.S3_BUCKET
-
-    // Extract the S3 key from the URI
-    const s3Key = transcriptUri.replace(
-      `https://${audioBucket}.s3.${process.env.AWS_REGION}.amazonaws.com/`,
-      '',
-    )
-    console.log(`🔑 S3 Key: ${s3Key}`)
-    console.log(`📦 Using bucket: ${audioBucket}`)
-
-    // Download the transcript file
-    const getObjectCommand = new GetObjectCommand({
-      Bucket: audioBucket,
-      Key: s3Key,
-    })
-
-    const transcriptResponse = await s3Client.send(getObjectCommand)
-    const transcriptText = await transcriptResponse.Body.transformToString()
-    const transcriptData = JSON.parse(transcriptText)
-    console.log(`📄 Raw transcript data:`, JSON.stringify(transcriptData, null, 2))
-
-    // Process the transcript data
-    const processedTranscription = {
-      full_text: transcriptData.results.transcripts[0].transcript,
-      confidence: transcriptData.results.transcripts[0].confidence || 0.95,
-      language_code: transcriptData.results.language_code || 'en-US',
-      segments: transcriptData.results.items.map((item) => ({
-        start_time: parseFloat(item.start_time),
-        end_time: parseFloat(item.end_time),
-        text: item.alternatives[0].content,
-        confidence: parseFloat(item.alternatives[0].confidence),
-      })),
-      speaker_labels: transcriptData.results.speaker_labels?.segments || [],
-      created_at: new Date().toISOString(),
-    }
-
-    console.log(`✅ Processed transcription:`, JSON.stringify(processedTranscription, null, 2))
-
-    // Store transcription results in DynamoDB
-    await storeTranscriptionResults(audioId, processedTranscription)
-
-    return processedTranscription
-  } catch (error) {
-    console.error(`❌ Error processing transcription results:`, error)
-    throw error
-  }
-}
-
-// Store transcription results in DynamoDB
-async function storeTranscriptionResults(audioId, transcriptionData) {
-  console.log(`💾 Storing transcription results for audio: ${audioId}`)
-
-  try {
-    const updateCommand = new UpdateCommand({
-      TableName: process.env.DYNAMODB_TABLE,
-      Key: { video_id: audioId },
-      UpdateExpression: `
-        SET transcription_status = :status,
-            transcription_data = :data,
-            updated_at = :updated
-      `,
-      ExpressionAttributeValues: {
-        ':status': 'completed',
-        ':data': transcriptionData,
-        ':updated': new Date().toISOString(),
-      },
-    })
-
-    await docClient.send(updateCommand)
-    console.log(`✅ Transcription results stored successfully`)
-  } catch (error) {
-    console.error(`❌ Error storing transcription results:`, error)
-    throw error
-  }
-}
-
-// Helper function to get media format from content type
-function getMediaFormatFromContentType(contentType) {
-  console.log(`🔍 Determining media format from content type: ${contentType}`)
-
-  const formatMap = {
-    'audio/mpeg': 'mp3',
-    'audio/mp3': 'mp3',
-    'audio/wav': 'wav',
-    'audio/wave': 'wav',
-    'audio/x-wav': 'wav',
-    'audio/mp4': 'mp4',
-    'audio/m4a': 'm4a',
-    'audio/aac': 'aac',
-    'audio/x-aac': 'aac',
-    'audio/ogg': 'ogg',
-    'audio/oga': 'oga',
-    'audio/webm': 'webm',
-    'audio/flac': 'flac',
-    'audio/x-flac': 'flac',
-  }
-
-  const format = formatMap[contentType] || 'mp3'
-  console.log(`✅ Determined media format: ${format}`)
-  return format
+// Simulate processing time
+function simulateProcessing(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 // Update processing step status
 async function updateProcessingStep(videoId, stepName, status) {
   try {
-    // First, get the current video record to see existing steps
-    const getCommand = new GetCommand({
-      TableName: process.env.DYNAMODB_TABLE,
-      Key: { video_id: videoId },
-    })
-
-    const result = await docClient.send(getCommand)
-    if (!result.Item) {
-      console.error(`Video ${videoId} not found for step update`)
-      return
-    }
-
-    // Get existing processing steps or create new ones
-    let processingSteps = result.Item.ai_generation_data?.processing_steps || []
-
-    // Find the step to update
-    let stepIndex = processingSteps.findIndex((step) => step.step === stepName)
-
-    if (stepIndex === -1) {
-      // Step doesn't exist, add it
-      processingSteps.push({
-        step: stepName,
-        status: status,
-        started_at: status === 'processing' ? new Date().toISOString() : undefined,
-        completed_at: status === 'completed' ? new Date().toISOString() : undefined,
-      })
-    } else {
-      // Update existing step
-      processingSteps[stepIndex] = {
-        ...processingSteps[stepIndex],
-        status: status,
-        started_at:
-          status === 'processing'
-            ? new Date().toISOString()
-            : processingSteps[stepIndex].started_at,
-        completed_at:
-          status === 'completed'
-            ? new Date().toISOString()
-            : processingSteps[stepIndex].completed_at,
-      }
-    }
-
-    // Update the entire processing_steps array
     const updateCommand = new UpdateCommand({
       TableName: process.env.DYNAMODB_TABLE,
       Key: { video_id: videoId },
-      UpdateExpression: 'SET ai_generation_data.processing_steps = :steps, updated_at = :updated',
+      UpdateExpression:
+        'SET ai_generation_data.processing_steps = list_append(if_not_exists(ai_generation_data.processing_steps, :empty_list), :new_step), updated_at = :updated',
       ExpressionAttributeValues: {
-        ':steps': processingSteps,
+        ':empty_list': [],
+        ':new_step': [
+          {
+            step: stepName,
+            status: status,
+            started_at: status === 'processing' ? new Date().toISOString() : undefined,
+            completed_at: status === 'completed' ? new Date().toISOString() : undefined,
+          },
+        ],
         ':updated': new Date().toISOString(),
       },
     })
 
     await docClient.send(updateCommand)
     console.log(`Updated step ${stepName} to ${status} for video ${videoId}`)
-    console.log(`Current processing steps:`, JSON.stringify(processingSteps, null, 2))
   } catch (error) {
     console.error(`Error updating processing step ${stepName}:`, error)
   }

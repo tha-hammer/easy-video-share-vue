@@ -383,6 +383,22 @@ resource "aws_iam_role_policy" "lambda_policy" {
           aws_s3_bucket.audio_bucket.arn,
           "${aws_s3_bucket.audio_bucket.arn}/*"
         ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "transcribe:StartTranscriptionJob",
+          "transcribe:GetTranscriptionJob",
+          "transcribe:ListTranscriptionJobs"
+        ]
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "secretsmanager:GetSecretValue"
+        ]
+        Resource = "*"
       }
     ]
   })
@@ -1025,18 +1041,6 @@ resource "aws_api_gateway_deployment" "video_api_deployment" {
 
   lifecycle {
     create_before_destroy = true
-  }
-}
-
-# API Gateway stage
-resource "aws_api_gateway_stage" "video_api_stage" {
-  deployment_id = aws_api_gateway_deployment.video_api_deployment.id
-  rest_api_id   = aws_api_gateway_rest_api.video_api.id
-  stage_name    = var.environment
-
-  tags = {
-    Environment = var.environment
-    Project     = var.project_name
   }
 }
 

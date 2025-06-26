@@ -56,8 +56,9 @@ if [ -f "$LAMBDA_LAYER_ZIP" ]; then
     rm "$LAMBDA_LAYER_ZIP"
 fi
 
-# Use PowerShell to create ZIP file in terraform directory
-powershell -Command "Compress-Archive -Path '$LAMBDA_LAYER_DIR/nodejs/node_modules' -DestinationPath '$LAMBDA_LAYER_ZIP' -Force"
+# Use PowerShell to create ZIP file with correct Lambda layer structure: nodejs/node_modules/
+# The path should be the nodejs directory, not just node_modules
+powershell -Command "Compress-Archive -Path '$LAMBDA_LAYER_DIR/nodejs' -DestinationPath '$LAMBDA_LAYER_ZIP' -Force"
 if [ $? -ne 0 ]; then
     echo "❌ Failed to create Lambda layer ZIP"
     cd "$PROJECT_ROOT"
@@ -132,6 +133,23 @@ if [ ! -d ".terraform" ]; then
     fi
 fi
 
+# Delete existing Lambda function if it exists (to avoid conflicts)
+echo "   Checking for existing Lambda function..."
+EXISTING_FUNCTION=$(aws lambda get-function --function-name "easy-video-share-ai-video-processor" 2>/dev/null)
+if [ $? -eq 0 ]; then
+    echo "   Found existing Lambda function, deleting it..."
+    aws lambda delete-function --function-name "easy-video-share-ai-video-processor"
+    if [ $? -eq 0 ]; then
+        echo "   ✅ Existing Lambda function deleted"
+        # Wait a moment for deletion to complete
+        sleep 5
+    else
+        echo "   ⚠️  Failed to delete existing function, continuing anyway..."
+    fi
+else
+    echo "   No existing Lambda function found"
+fi
+
 # Plan the deployment
 echo "   Planning deployment..."
 terraform plan -out=tfplan
@@ -154,7 +172,7 @@ cd "$PROJECT_ROOT"
 
 # Step 8: Get API Gateway URL
 echo "🔧 Step 8: Getting API Gateway URL..."
-API_URL=$(cd terraform && terraform output -raw api_gateway_url 2>/dev/null)
+API_URL=$(cd terraform && terraform output -raw api_gateway_endpoint 2>/dev/null)
 if [ $? -eq 0 ]; then
     echo "✅ API Gateway URL: $API_URL"
     echo "   AI Video endpoint: $API_URL/ai-video"
