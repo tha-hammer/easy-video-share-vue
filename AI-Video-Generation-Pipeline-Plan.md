@@ -26,6 +26,11 @@ The final video will likely need a python module.
 
 Terraform will be used to deploy to aws.
 
+The UI should have an upload facility for the audio file and an animation for the UI while the LLM is processing and the file is uploading.
+After the app processes the audio into a short-form script, the LLM plan should be displayed on-screen.
+Once the APP has made each part, the part should be displayed in a grid with the corresponding part of the LLM scene beat.
+Under the grid of the video beats the UI should display the completed video.
+
 ## **Comprehensive Implementation Plan**
 
 ---
