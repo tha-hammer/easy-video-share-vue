@@ -1,4 +1,7 @@
+/* eslint-disable */
 // Complete Lambda function for AI video generation with Vertex AI Veo 2
+// Note: This file uses CommonJS modules (require) as it's a Lambda function
+
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb')
 const { DynamoDBDocumentClient, GetCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb')
 const { SecretsManagerClient, GetSecretValueCommand } = require('@aws-sdk/client-secrets-manager')
@@ -7,7 +10,7 @@ const {
   StartTranscriptionJobCommand,
   GetTranscriptionJobCommand,
 } = require('@aws-sdk/client-transcribe')
-const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3')
+const { S3Client, GetObjectCommand, PutObjectCommand } = require('@aws-sdk/client-s3')
 const { VertexAI, HarmCategory, HarmBlockThreshold } = require('@google-cloud/vertexai')
 const OpenAI = require('openai')
 
@@ -129,10 +132,10 @@ async function handleAIVideoGeneration(event, userId) {
   // Initialize AI generation data
   const aiGenerationData = {
     processing_steps: [
-      { step: 'transcription', status: 'pending' },
-      { step: 'scene_planning', status: 'pending' },
-      { step: 'video_generation', status: 'pending' },
-      { step: 'finalization', status: 'pending' },
+      { step: 'transcription', status: 'pending', started_at: null, completed_at: null },
+      { step: 'scene_planning', status: 'pending', started_at: null, completed_at: null },
+      { step: 'video_generation', status: 'pending', started_at: null, completed_at: null },
+      { step: 'finalization', status: 'pending', started_at: null, completed_at: null },
     ],
     started_at: new Date().toISOString(),
     user_prompt: body.prompt,
@@ -175,16 +178,19 @@ async function processAIVideoAsync(videoId, userId, videoRecord) {
     // Step 1: Transcribe audio
     await updateProcessingStep(videoId, 'transcription', 'processing')
     const transcription = await transcribeAudio(videoRecord)
+    await updateAIGenerationData(videoId, { audio_transcription: transcription })
 
     // Step 2: Generate scene plan
     await updateProcessingStep(videoId, 'transcription', 'completed')
     await updateProcessingStep(videoId, 'scene_planning', 'processing')
     const scenePlan = await generateScenePlan(transcription, videoRecord)
+    await updateAIGenerationData(videoId, { scene_beats: scenePlan })
 
     // Step 3: Generate video with Vertex AI
     await updateProcessingStep(videoId, 'scene_planning', 'completed')
     await updateProcessingStep(videoId, 'video_generation', 'processing')
-    const generatedVideo = await generateVideoWithVertexAI(scenePlan)
+    const generatedVideo = await generateVideoWithVertexAI(scenePlan, videoRecord)
+    await updateAIGenerationData(videoId, { vertex_ai_tasks: generatedVideo })
 
     // Step 4: Finalize
     await updateProcessingStep(videoId, 'video_generation', 'completed')
@@ -193,7 +199,11 @@ async function processAIVideoAsync(videoId, userId, videoRecord) {
 
     // Complete
     await updateProcessingStep(videoId, 'finalization', 'completed')
-    await updateAIGenerationStatus(videoId, 'completed', { final_video_url: finalVideoUrl })
+    await updateAIGenerationStatus(videoId, 'completed', {
+      final_video_url: finalVideoUrl,
+      generation_time:
+        Date.now() - new Date(videoRecord.ai_generation_data?.started_at || Date.now()).getTime(),
+    })
   } catch (error) {
     console.error(`AI video processing failed for ${videoId}:`, error)
     await updateAIGenerationStatus(videoId, 'failed', { error_message: error.message })
@@ -202,83 +212,110 @@ async function processAIVideoAsync(videoId, userId, videoRecord) {
 
 // Transcribe audio using AWS Transcribe
 async function transcribeAudio(videoRecord) {
-  const jobName = `ai-video-${videoRecord.video_id}-${Date.now()}`
+  console.log('Starting transcription for:', videoRecord.video_id)
 
-  await transcribeClient.send(
-    new StartTranscriptionJobCommand({
-      TranscriptionJobName: jobName,
-      Media: {
-        MediaFileUri: `s3://${process.env.S3_BUCKET}/${videoRecord.bucket_location}`,
-      },
-      MediaFormat: getMediaFormat(videoRecord.filename),
-      LanguageCode: 'en-US',
-    }),
-  )
+  const jobName = `transcribe-${videoRecord.video_id}-${Date.now()}`
+
+  const startCommand = new StartTranscriptionJobCommand({
+    TranscriptionJobName: jobName,
+    Media: {
+      MediaFileUri: `s3://${process.env.S3_BUCKET}/${videoRecord.bucket_location}`,
+    },
+    MediaFormat: getMediaFormat(videoRecord.filename),
+    LanguageCode: 'en-US',
+  })
+
+  await transcribeClient.send(startCommand)
 
   // Poll for completion
   let jobStatus = 'IN_PROGRESS'
-  let attempts = 0
+  let transcriptionResult = null
+  let pollCount = 0
+  const maxPolls = 60 // 5 minutes timeout
 
-  while (jobStatus === 'IN_PROGRESS' && attempts < 60) {
-    await new Promise((resolve) => setTimeout(resolve, 5000))
+  while (jobStatus === 'IN_PROGRESS' && pollCount < maxPolls) {
+    await new Promise((resolve) => setTimeout(resolve, 5000)) // Wait 5 seconds
+    pollCount++
 
-    const result = await transcribeClient.send(
-      new GetTranscriptionJobCommand({
-        TranscriptionJobName: jobName,
-      }),
-    )
+    const getCommand = new GetTranscriptionJobCommand({
+      TranscriptionJobName: jobName,
+    })
 
+    const result = await transcribeClient.send(getCommand)
     jobStatus = result.TranscriptionJob.TranscriptionJobStatus
 
     if (jobStatus === 'COMPLETED') {
+      // Download transcription results
       const transcriptUri = result.TranscriptionJob.Transcript.TranscriptFileUri
       const response = await fetch(transcriptUri)
-      const transcriptionResult = await response.json()
-
-      return {
-        full_text: transcriptionResult.results.transcripts[0].transcript,
-        segments: transcriptionResult.results.items.map((item) => ({
-          start_time: parseFloat(item.start_time || 0),
-          end_time: parseFloat(item.end_time || 0),
-          text: item.alternatives[0].content,
-          confidence: item.alternatives[0].confidence,
-        })),
-      }
+      transcriptionResult = await response.json()
     } else if (jobStatus === 'FAILED') {
       throw new Error('Transcription failed')
     }
-
-    attempts++
   }
 
-  throw new Error('Transcription timed out')
+  if (jobStatus === 'IN_PROGRESS') {
+    throw new Error('Transcription timeout')
+  }
+
+  return {
+    full_text: transcriptionResult.results.transcripts[0].transcript,
+    segments: transcriptionResult.results.items
+      .filter((item) => item.type === 'pronunciation')
+      .map((item) => ({
+        start_time: parseFloat(item.start_time || 0),
+        end_time: parseFloat(item.end_time || 0),
+        text: item.alternatives[0].content,
+        confidence: parseFloat(item.alternatives[0].confidence || 0),
+      })),
+    confidence: parseFloat(transcriptionResult.results.transcripts[0].confidence || 0),
+    language_code: 'en-US',
+  }
 }
 
 // Generate scene plan using OpenAI GPT-4
 async function generateScenePlan(transcription, videoRecord) {
-  const prompt = `
-Create a ${videoRecord.ai_generation_data.target_duration}-second vertical video plan for social media.
+  console.log('Generating scene plan for:', videoRecord.video_id)
 
-TRANSCRIPT: "${transcription.full_text}"
-USER PROMPT: "${videoRecord.ai_generation_data.user_prompt}"
-STYLE: ${videoRecord.ai_generation_data.style}
+  const targetDuration = videoRecord.ai_generation_data?.target_duration || 30
+  const style = videoRecord.ai_generation_data?.style || 'realistic'
+  const userPrompt = videoRecord.ai_generation_data?.user_prompt || ''
 
-Create 2-4 engaging scenes that total ${videoRecord.ai_generation_data.target_duration} seconds.
+  const prompt = `Create a ${targetDuration}-second vertical video plan for social media based on the provided audio transcript.
 
-OUTPUT FORMAT (JSON):
+TRANSCRIPT:
+${transcription.full_text}
+
+REQUIREMENTS:
+- Exactly ${targetDuration} seconds duration
+- Vertical 9:16 format optimized for Instagram Reels/YouTube Shorts/TikTok
+- 2-4 engaging visual scenes that sync with the audio
+- Each scene should be compelling and visually interesting
+- Style: ${style}
+- User's creative direction: ${userPrompt}
+
+Create scenes that complement and enhance the audio content. Think about:
+- What visual elements would make this content more engaging?
+- How can we break up the audio into distinct visual segments?
+- What scenes would capture viewer attention on social media?
+
+OUTPUT FORMAT (JSON only, no other text):
 {
-  "overall_theme": "Video theme description",
-  "total_duration": ${videoRecord.ai_generation_data.target_duration},
+  "overall_theme": "Brief description of video theme",
+  "total_duration": ${targetDuration},
   "scenes": [
     {
       "sequence": 1,
-      "duration": 10,
-      "scene_description": "Visual description",
-      "vertex_ai_prompt": "Optimized prompt for Vertex AI Veo 2"
+      "start_time": 0,
+      "end_time": 12,
+      "duration": 12,
+      "audio_text": "Relevant transcript portion for this scene",
+      "scene_description": "Detailed visual description for AI video generation",
+      "vertex_ai_prompt": "Optimized prompt for Vertex AI Veo 2 video generation",
+      "visual_style": "Specific style notes (lighting, mood, camera angles, etc.)"
     }
   ]
-}
-`
+}`
 
   const response = await openai.chat.completions.create({
     model: 'gpt-4',
@@ -291,55 +328,168 @@ OUTPUT FORMAT (JSON):
 }
 
 // Generate video using Vertex AI (placeholder implementation)
-async function generateVideoWithVertexAI(scenePlan) {
-  // Note: This is a placeholder for when Vertex AI Veo 2 becomes available
-  // For now, create a simple placeholder
+async function generateVideoWithVertexAI(scenePlan, videoRecord) {
+  console.log('Generating video with Vertex AI for:', videoRecord.video_id)
 
-  const mainScene = scenePlan.scenes[0]
+  // This is a placeholder implementation
+  // In a real implementation, you would:
+  // 1. Use Google Cloud Vertex AI SDK
+  // 2. Call the Veo 2 model for each scene
+  // 3. Handle video generation and polling for completion
 
-  // Placeholder video generation
-  return [
-    {
-      sequence: 1,
-      video_url: `placeholder://generated-video-${Date.now()}`,
-      duration: scenePlan.total_duration,
-      scene_description: mainScene.scene_description,
-    },
-  ]
+  const generatedScenes = []
+
+  for (const scene of scenePlan.scenes) {
+    try {
+      console.log(`Generating scene ${scene.sequence}:`, scene.vertex_ai_prompt)
+
+      // Placeholder for Vertex AI Veo 2 call
+      // const vertexResponse = await vertexAI.generateVideo({
+      //   prompt: scene.vertex_ai_prompt,
+      //   duration: scene.duration,
+      //   aspectRatio: '9:16',
+      //   style: scene.visual_style
+      // })
+
+      // For now, create a placeholder response
+      const mockVideoUrl = `https://placeholder-video-${scene.sequence}.mp4`
+
+      generatedScenes.push({
+        task_id: `vertex-ai-${Date.now()}-${scene.sequence}`,
+        sequence: scene.sequence,
+        status: 'completed',
+        video_url: mockVideoUrl,
+        prompt: scene.vertex_ai_prompt,
+        created_at: new Date().toISOString(),
+        duration: scene.duration,
+        scene_description: scene.scene_description,
+      })
+
+      // Simulate processing time
+      await new Promise((resolve) => setTimeout(resolve, 2000))
+    } catch (error) {
+      console.error(`Error generating scene ${scene.sequence}:`, error)
+      generatedScenes.push({
+        task_id: `vertex-ai-${Date.now()}-${scene.sequence}`,
+        sequence: scene.sequence,
+        status: 'failed',
+        error_message: error.message,
+        prompt: scene.vertex_ai_prompt,
+        created_at: new Date().toISOString(),
+      })
+    }
+  }
+
+  return generatedScenes
 }
 
 // Finalize video
 async function finalizeVideo(videoId, generatedScenes) {
-  const scene = generatedScenes[0]
+  console.log('Finalizing video for:', videoId)
 
-  // For placeholder implementation, return a data URL
-  const placeholderData = {
-    videoId,
-    timestamp: new Date().toISOString(),
-    scene: scene.scene_description,
+  // For the MVP, we'll use the first successfully generated scene
+  const successfulScene = generatedScenes.find((scene) => scene.status === 'completed')
+
+  if (!successfulScene) {
+    throw new Error('No successful video generation found')
   }
 
-  return `data:application/json;base64,${Buffer.from(JSON.stringify(placeholderData)).toString('base64')}`
+  // In a full implementation, this would:
+  // 1. Download all generated scene videos
+  // 2. Use FFmpeg to combine scenes with the original audio
+  // 3. Apply transitions and effects
+  // 4. Upload the final video to S3
+
+  // For now, return a placeholder URL
+  const finalVideoKey = `ai-generated/${videoId}/final_video_${Date.now()}.mp4`
+  const finalVideoUrl = `s3://${process.env.S3_BUCKET}/${finalVideoKey}`
+
+  console.log('Final video would be stored at:', finalVideoUrl)
+
+  return finalVideoUrl
 }
 
 // Helper functions
 async function updateProcessingStep(videoId, step, status) {
-  // Implementation to update specific processing step
-  console.log(`Updating ${videoId} step ${step} to ${status}`)
+  // Get current data first
+  const getCommand = new GetCommand({
+    TableName: process.env.DYNAMODB_TABLE,
+    Key: { video_id: videoId },
+  })
+
+  const result = await docClient.send(getCommand)
+  if (!result.Item) return
+
+  const currentData = result.Item.ai_generation_data || {}
+  const steps = currentData.processing_steps || []
+
+  // Update the specific step
+  const updatedSteps = steps.map((s) => {
+    if (s.step === step) {
+      return {
+        ...s,
+        status,
+        started_at: status === 'processing' ? new Date().toISOString() : s.started_at,
+        completed_at: status === 'completed' ? new Date().toISOString() : s.completed_at,
+      }
+    }
+    return s
+  })
+
+  const updateCommand = new UpdateCommand({
+    TableName: process.env.DYNAMODB_TABLE,
+    Key: { video_id: videoId },
+    UpdateExpression: 'SET ai_generation_data.processing_steps = :steps, updated_at = :updated',
+    ExpressionAttributeValues: {
+      ':steps': updatedSteps,
+      ':updated': new Date().toISOString(),
+    },
+  })
+
+  await docClient.send(updateCommand)
+}
+
+async function updateAIGenerationData(videoId, additionalData) {
+  // Get current data first
+  const getCommand = new GetCommand({
+    TableName: process.env.DYNAMODB_TABLE,
+    Key: { video_id: videoId },
+  })
+
+  const result = await docClient.send(getCommand)
+  if (!result.Item) return
+
+  const currentData = result.Item.ai_generation_data || {}
+  const updatedData = { ...currentData, ...additionalData }
+
+  const updateCommand = new UpdateCommand({
+    TableName: process.env.DYNAMODB_TABLE,
+    Key: { video_id: videoId },
+    UpdateExpression: 'SET ai_generation_data = :data, updated_at = :updated',
+    ExpressionAttributeValues: {
+      ':data': updatedData,
+      ':updated': new Date().toISOString(),
+    },
+  })
+
+  await docClient.send(updateCommand)
 }
 
 async function updateAIGenerationStatus(videoId, status, additionalData = {}) {
-  await docClient.send(
-    new UpdateCommand({
-      TableName: process.env.DYNAMODB_TABLE,
-      Key: { video_id: videoId },
-      UpdateExpression: 'SET ai_generation_status = :status, updated_at = :updated',
-      ExpressionAttributeValues: {
-        ':status': status,
-        ':updated': new Date().toISOString(),
-      },
-    }),
-  )
+  const updateCommand = new UpdateCommand({
+    TableName: process.env.DYNAMODB_TABLE,
+    Key: { video_id: videoId },
+    UpdateExpression:
+      'SET ai_generation_status = :status, ai_generation_data.completed_at = :completed, ai_generation_data.final_video_url = :url, updated_at = :updated',
+    ExpressionAttributeValues: {
+      ':status': status,
+      ':completed': new Date().toISOString(),
+      ':url': additionalData.final_video_url || null,
+      ':updated': new Date().toISOString(),
+    },
+  })
+
+  await docClient.send(updateCommand)
 }
 
 function getMediaFormat(filename) {
@@ -349,26 +499,36 @@ function getMediaFormat(filename) {
     wav: 'wav',
     m4a: 'm4a',
     aac: 'mp3',
+    ogg: 'ogg',
+    webm: 'webm',
+    mp4: 'mp4',
+    mov: 'mov',
+    avi: 'mp4',
   }
   return formatMap[extension] || 'mp3'
 }
 
 async function handleGetAIVideoStatus(event, userId) {
-  const videoId = event.pathParameters?.videoId || event.queryStringParameters?.videoId
+  const queryParams = event.queryStringParameters || {}
+  const videoId = queryParams.videoId
 
   if (!videoId) {
     return createResponse(400, { error: 'Video ID required' })
   }
 
-  const result = await docClient.send(
-    new GetCommand({
-      TableName: process.env.DYNAMODB_TABLE,
-      Key: { video_id: videoId },
-    }),
-  )
+  const getCommand = new GetCommand({
+    TableName: process.env.DYNAMODB_TABLE,
+    Key: { video_id: videoId },
+  })
 
-  if (!result.Item || result.Item.user_id !== userId) {
-    return createResponse(404, { error: 'Video not found or access denied' })
+  const result = await docClient.send(getCommand)
+
+  if (!result.Item) {
+    return createResponse(404, { error: 'Video not found' })
+  }
+
+  if (result.Item.user_id !== userId) {
+    return createResponse(403, { error: 'Access denied' })
   }
 
   return createResponse(200, {

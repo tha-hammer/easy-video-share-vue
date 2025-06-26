@@ -1,5 +1,31 @@
 # 🎬 **AI-Powered Short-Form Video Generation Pipeline - REVISED PLAN**
 
+The workflow and features for the app is as follows:
+
+User uploads audio. The audio will be used for short-form videos for instagram and youtube shorts. Audio is transcribed. Transcription is used to generate 30-60 second short video scene beats using an llm.
+
+The scene beats are used to generate text-to-video and text-to-image assets.
+
+Those assets are then compiled into a final video.
+
+We will use the kling model for the video and image. here is the documentation for the api@https://app.klingai.com/global/dev/document-api/apiReference/model/textToVideo
+
+@https://app.klingai.com/global/dev/document-api/apiReference/model/imageGeneration
+
+The final video will need to be compiled, with transitions between each asset, and include the original audio.
+
+The audio will probably be longer than the 30-60 second video so an LLM will need to use the time-codedd transcript to decide what portions of audio to use.
+
+The final video will need to have captions applied in a safe zone for the target video platform.
+
+The final video will need to be in a vertical orientation.
+
+The final video will likely need a python module.
+
+Terraform will be used to deploy to aws.
+
+The UI should have an upload facility for the audio file and an animation for the UI while the LLM is processing and the file is uploading. After the app processes the audio into a short-form script, the LLM plan should be displayed on-screen. Once the APP has made each part, the part should be displayed in a grid with the corresponding part of the LLM scene beat. Under the grid of the video beats the UI should display the completed video.
+
 ## **Critical Issues Identified in Original Plan**
 
 ### ❌ **Infrastructure Misalignment**

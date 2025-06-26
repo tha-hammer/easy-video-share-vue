@@ -1,0 +1,26 @@
+{
+  "name": "ai-video-processor",
+  "version": "1.0.0",
+  "description": "AI video generation Lambda function",
+  "main": "ai-video.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.490.0",
+    "@aws-sdk/lib-dynamodb": "^3.490.0",
+    "@aws-sdk/client-secrets-manager": "^3.490.0",
+    "@aws-sdk/client-transcribe": "^3.490.0",
+    "@aws-sdk/client-s3": "^3.490.0",
+    "openai": "^4.20.0"
+  },
+  "keywords": [
+    "aws",
+    "lambda",
+    "ai",
+    "video",
+    "generation"
+  ],
+  "author": "Easy Video Share",
+  "license": "MIT"
+}

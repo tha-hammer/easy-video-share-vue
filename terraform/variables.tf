@@ -27,4 +27,31 @@ variable "project_name" {
   description = "Name of the project"
   type        = string
   default     = "easy-video-share"
+}
+
+# AI Video Generation Variables
+variable "google_cloud_credentials_json" {
+  description = "Google Cloud service account credentials JSON"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "openai_api_key" {
+  description = "OpenAI API key for scene generation"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "vertex_ai_project_id" {
+  description = "Google Cloud project ID for Vertex AI"
+  type        = string
+  default     = ""
+}
+
+variable "vertex_ai_location" {
+  description = "Google Cloud location for Vertex AI"
+  type        = string
+  default     = "us-central1"
 } 

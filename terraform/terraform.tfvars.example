@@ -6,10 +6,25 @@ aws_region = "us-east-1"
 
 # S3 bucket name - must be globally unique
 # Include your name/initials to make it unique
-bucket_name = "easy-video-share-silmari-dev"
+bucket_name = "your-unique-bucket-name-here"
 
 # Environment (dev, staging, prod)
 environment = "dev"
 
 # Project name
-project_name = "easy-video-share" 
+project_name = "easy-video-share"
+
+# Cognito Configuration
+cognito_domain_prefix = "your-unique-domain-prefix"
+
+# Optional: Admin user configuration
+admin_user_email = "admin@yourdomain.com"
+admin_user_password = "TempPassword123!"
+
+# AI Video Generation Configuration (Optional)
+# Uncomment and configure these if you want to enable AI video generation
+
+# google_cloud_credentials_json = "{'type': 'service_account', 'project_id': 'your-project'...}"
+# openai_api_key = "sk-your-openai-api-key-here"
+# vertex_ai_project_id = "your-google-cloud-project-id"
+# vertex_ai_location = "us-central1" 

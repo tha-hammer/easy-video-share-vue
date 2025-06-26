@@ -38,6 +38,15 @@ const routes: Array<RouteRecordRaw> = [
         },
       },
       {
+        path: '/ai-video',
+        name: 'ai-video',
+        component: () => import('@/components/ai-video/AIVideoGenerator.vue'),
+        meta: {
+          pageTitle: 'AI Video Generation',
+          breadcrumbs: ['Videos', 'AI Generation'],
+        },
+      },
+      {
         path: '/admin',
         name: 'admin',
         component: () => import('@/views/admin/AdminDashboard.vue'),
