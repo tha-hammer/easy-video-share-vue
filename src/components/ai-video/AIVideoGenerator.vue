@@ -242,12 +242,15 @@
                   class="form-select form-select-lg form-select-solid"
                   v-model="aiConfig.targetDuration"
                 >
-                  <option value="15">15 seconds - Quick & Punchy</option>
-                  <option value="30">30 seconds - Standard</option>
-                  <option value="45">45 seconds - Extended</option>
-                  <option value="60">60 seconds - Full Length</option>
+                  <option
+                    v-for="duration in supportedDurations"
+                    :key="duration.value"
+                    :value="duration.value"
+                  >
+                    {{ duration.label }}
+                  </option>
                 </select>
-                <div class="form-text">Estimated processing time: {{ getEstimatedTime() }}</div>
+                <div class="form-text">Estimated processing time: {{ estimatedTime }}</div>
               </div>
 
               <div class="col-md-6">
@@ -256,10 +259,9 @@
                   class="form-select form-select-lg form-select-solid"
                   v-model="aiConfig.style"
                 >
-                  <option value="realistic">Realistic - Photographic quality</option>
-                  <option value="cinematic">Cinematic - Movie-like scenes</option>
-                  <option value="animated">Animated - Stylized animation</option>
-                  <option value="artistic">Artistic - Creative & abstract</option>
+                  <option v-for="style in videoStyles" :key="style.value" :value="style.value">
+                    {{ style.label }} - {{ style.description }}
+                  </option>
                 </select>
               </div>
             </div>
@@ -341,7 +343,7 @@
             </div>
             <div class="mt-4 text-center">
               <p class="fw-bold text-primary mb-1">{{ currentProcessingMessage }}</p>
-              <p class="text-muted fs-7 mb-0">Estimated time remaining: {{ getEstimatedTime() }}</p>
+              <p class="text-muted fs-7 mb-0">Estimated time remaining: {{ estimatedTime }}</p>
             </div>
           </div>
         </div>
@@ -639,12 +641,9 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useAudioStore } from '@/stores/audio'
 import AudioService from '@/core/services/AudioService'
 import AIVideoService from '@/core/services/AIVideoService'
-import type {
-  AIVideoGenerationRequest,
-  ProcessingStep,
-  AIVideoStatus,
-} from '@/core/services/AIVideoService'
+import type { AIVideoGenerationRequest, VideoMetadata } from '@/core/services/AIVideoService'
 import type { AudioMetadata } from '@/core/services/AudioService'
+import KTIcon from '@/core/helpers/kt-icon/KTIcon.vue'
 
 // Stores
 const audioStore = useAudioStore()
@@ -659,17 +658,17 @@ const uploadedBytes = ref(0)
 const totalBytes = ref(0)
 const audioFileInput = ref<HTMLInputElement | null>(null)
 
-const aiConfig = ref<AIVideoGenerationRequest>({
-  videoId: '',
+const aiConfig = ref({
   prompt:
     'Create an engaging vertical video optimized for social media with dynamic visuals and modern aesthetics',
   targetDuration: 30,
   style: 'cinematic',
 })
 
-const processingStatus = ref<AIVideoStatus | null>(null)
-const generatedVideo = ref<AudioMetadata | null>(null)
+const processingStatus = ref<VideoMetadata | null>(null)
+const generatedVideo = ref<VideoMetadata | null>(null)
 const pollingInterval = ref<NodeJS.Timeout | null>(null)
+const pollingActive = ref(false)
 
 // Computed properties
 const userAudioFiles = computed(() => audioStore.userAudioFiles)
@@ -677,26 +676,32 @@ const userAudioFiles = computed(() => audioStore.userAudioFiles)
 const supportedFormats = computed(() => AudioService.getSupportedFormats())
 
 const processingSteps = computed(
-  () => processingStatus.value?.video.ai_generation_data?.processing_steps || [],
+  () => processingStatus.value?.ai_generation_data?.processing_steps || [],
 )
 
 const processingProgress = computed(() => AIVideoService.calculateProgress(processingSteps.value))
 
 const currentProcessingMessage = computed(() =>
-  AIVideoService.getProcessingMessage(processingSteps.value),
+  AIVideoService.getCurrentStepMessage(processingSteps.value),
 )
 
-const scenePlan = computed(
-  () => processingStatus.value?.video.ai_generation_data?.scene_beats || null,
-)
+const scenePlan = computed(() => processingStatus.value?.ai_generation_data?.scene_beats || null)
 
 const generatedScenes = computed(
-  () => processingStatus.value?.video.ai_generation_data?.vertex_ai_tasks || [],
+  () => processingStatus.value?.ai_generation_data?.vertex_ai_tasks || [],
 )
 
 const finalVideoUrl = computed(
   () => generatedVideo.value?.ai_generation_data?.final_video_url || null,
 )
+
+const estimatedTime = computed(() =>
+  AIVideoService.getEstimatedTime(processingSteps.value, aiConfig.value.targetDuration),
+)
+
+const videoStyles = computed(() => AIVideoService.getVideoStyles())
+
+const supportedDurations = computed(() => AIVideoService.getSupportedDurations())
 
 // Audio upload methods
 const triggerFileSelect = () => {
@@ -777,32 +782,43 @@ const previousStep = () => {
 const startAIGeneration = async () => {
   if (!selectedAudio.value) return
 
+  // Validate request
+  const request: AIVideoGenerationRequest = {
+    audioId: selectedAudio.value.audio_id,
+    prompt: aiConfig.value.prompt,
+    targetDuration: aiConfig.value.targetDuration,
+    style: aiConfig.value.style,
+  }
+
+  const errors = AIVideoService.validateRequest(request)
+  if (errors.length > 0) {
+    alert(`Please fix the following errors:\n- ${errors.join('\n- ')}`)
+    return
+  }
+
   try {
     currentStep.value = 3
+    pollingActive.value = true
 
-    const request: AIVideoGenerationRequest = {
-      videoId: selectedAudio.value.audio_id,
-      prompt: aiConfig.value.prompt,
-      targetDuration: aiConfig.value.targetDuration,
-      style: aiConfig.value.style,
-    }
+    const response = await AIVideoService.generateAIVideo(request)
 
-    await AIVideoService.generateAIVideo(request)
-    startPolling()
+    // Start polling for completion
+    startPolling(response.videoId)
   } catch (error) {
     console.error('Error starting AI generation:', error)
+    pollingActive.value = false
     alert('Failed to start AI video generation. Please try again.')
     currentStep.value = 2
   }
 }
 
-const startPolling = () => {
-  if (!selectedAudio.value) return
+const startPolling = (videoId: string) => {
+  if (!pollingActive.value) return
 
   pollingInterval.value = setInterval(async () => {
     try {
-      const status = await AIVideoService.getAIVideoStatus(selectedAudio.value!.audio_id)
-      processingStatus.value = status
+      const status = await AIVideoService.getAIVideoStatus(videoId)
+      processingStatus.value = status.video
 
       // Check for transcription and scene planning completion
       const steps = status.video.ai_generation_data?.processing_steps || []
@@ -827,127 +843,98 @@ const startPolling = () => {
         currentStep.value = 6
       } else if (status.video.ai_generation_status === 'failed') {
         stopPolling()
-        alert('AI video generation failed. Please try again.')
+        const errorMessage =
+          status.video.ai_generation_data?.error_message || 'AI video generation failed'
+        alert(`AI video generation failed: ${errorMessage}`)
         currentStep.value = 2
       }
     } catch (error) {
       console.error('Error polling status:', error)
     }
   }, 3000)
+
+  // Stop polling after 15 minutes
+  setTimeout(() => {
+    if (pollingActive.value) {
+      stopPolling()
+      alert('AI video generation timed out. Please try again.')
+      currentStep.value = 2
+    }
+  }, 900000)
 }
 
 const stopPolling = () => {
+  pollingActive.value = false
   if (pollingInterval.value) {
     clearInterval(pollingInterval.value)
     pollingInterval.value = null
   }
 }
 
-const approveScenePlan = () => {
-  currentStep.value = 5
-}
-
-const regenerateScenePlan = async () => {
-  // Implement regeneration logic
-  alert('Scene plan regeneration would be implemented here')
-}
-
-// Utility methods
+// Status and display methods
 const getStatusBadgeClass = () => {
-  switch (currentStep.value) {
-    case 2:
-      return 'badge-light-info'
-    case 3:
+  if (!processingStatus.value) return 'badge-light-primary'
+
+  switch (processingStatus.value.ai_generation_status) {
+    case 'processing':
       return 'badge-light-warning'
-    case 4:
-      return 'badge-light-info'
-    case 5:
-      return 'badge-light-primary'
-    case 6:
+    case 'completed':
       return 'badge-light-success'
+    case 'failed':
+      return 'badge-light-danger'
     default:
-      return 'badge-light'
+      return 'badge-light-primary'
   }
 }
 
 const getStatusText = () => {
-  switch (currentStep.value) {
-    case 2:
-      return 'Configuring'
-    case 3:
-      return 'Processing Audio'
-    case 4:
-      return 'Scene Plan Ready'
-    case 5:
-      return 'Generating Video'
-    case 6:
+  if (!processingStatus.value) return 'Ready'
+
+  switch (processingStatus.value.ai_generation_status) {
+    case 'processing':
+      return 'Processing'
+    case 'completed':
       return 'Complete'
+    case 'failed':
+      return 'Failed'
     default:
       return 'Ready'
   }
 }
 
-const getStepDisplayName = (step: string): string => {
-  return AIVideoService.getStepDisplayName(step)
-}
-
-const getStepDescription = (step: string): string => {
-  const descriptions = {
-    transcription: 'Converting audio to text with timestamps',
-    scene_planning: 'Creating intelligent scene breakdown',
-    video_generation: 'AI generating video scenes',
-    finalization: 'Compiling final video with audio',
-  }
-  return descriptions[step as keyof typeof descriptions] || ''
-}
-
-const getStepCardClass = (step: ProcessingStep) => {
-  if (step.status === 'completed') return 'border-success'
-  if (step.status === 'processing') return 'border-primary'
-  if (step.status === 'failed') return 'border-danger'
-  return 'border-light'
-}
-
-const getStepIconClass = (step: ProcessingStep) => {
-  if (step.status === 'completed') return 'bg-success'
-  if (step.status === 'processing') return 'bg-primary'
-  if (step.status === 'failed') return 'bg-danger'
-  return 'bg-light'
-}
-
-const getStepIcon = (step: ProcessingStep) => {
-  if (step.status === 'completed') return 'fa-check text-white'
-  if (step.status === 'processing') return 'fa-spinner fa-spin text-white'
-  if (step.status === 'failed') return 'fa-times text-white'
-  return 'fa-clock text-muted'
-}
-
-const getStepStatusBadge = (step: ProcessingStep) => {
-  if (step.status === 'completed') return 'badge-success'
-  if (step.status === 'processing') return 'badge-primary'
-  if (step.status === 'failed') return 'badge-danger'
-  return 'badge-light'
-}
-
 const getSceneStatusBadge = (scene: { status: string }) => {
-  if (scene.status === 'completed') return 'badge-success'
-  if (scene.status === 'processing') return 'badge-primary'
-  if (scene.status === 'failed') return 'badge-danger'
-  return 'badge-secondary'
+  switch (scene.status) {
+    case 'completed':
+      return 'badge-light-success'
+    case 'processing':
+      return 'badge-light-warning'
+    case 'failed':
+      return 'badge-light-danger'
+    default:
+      return 'badge-light-secondary'
+  }
 }
 
 const getGenerationProgress = () => {
-  if (!generatedScenes.value?.length) return 0
-  const completed = generatedScenes.value.filter((s) => s.status === 'completed').length
-  return Math.round((completed / generatedScenes.value.length) * 100)
+  const scenes = generatedScenes.value
+  if (!scenes.length) return 0
+
+  const completedScenes = scenes.filter((s) => s.status === 'completed').length
+  return Math.round((completedScenes / scenes.length) * 100)
 }
 
-const getEstimatedTime = (): string => {
-  return AIVideoService.getEstimatedProcessingTime(aiConfig.value.targetDuration || 30)
+const regenerateScenePlan = async () => {
+  // This would trigger a new scene plan generation
+  alert('Scene plan regeneration will be implemented in the full AI processing Lambda')
+}
+
+const approveScenePlan = () => {
+  // Move to video generation step
+  currentStep.value = 5
 }
 
 const getFinalDuration = () => {
-  return scenePlan.value?.total_duration || aiConfig.value.targetDuration || 30
+  return scenePlan.value?.target_duration || aiConfig.value.targetDuration || 30
 }
 
 const formatDate = (dateString?: string): string => {

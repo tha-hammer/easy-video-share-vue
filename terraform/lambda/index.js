@@ -1,170 +1,396 @@
-const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
-const { DynamoDBDocumentClient, PutCommand, QueryCommand, ScanCommand } = require("@aws-sdk/lib-dynamodb");
+const { DynamoDBClient } = require('@aws-sdk/client-dynamodb')
+const {
+  DynamoDBDocumentClient,
+  PutCommand,
+  QueryCommand,
+  ScanCommand,
+} = require('@aws-sdk/lib-dynamodb')
+const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3')
+const { getSignedUrl } = require('@aws-sdk/s3-request-presigner')
 
-const dynamoClient = new DynamoDBClient({ region: process.env.AWS_REGION });
-const docClient = DynamoDBDocumentClient.from(dynamoClient);
+const dynamoClient = new DynamoDBClient({ region: process.env.AWS_REGION })
+const docClient = DynamoDBDocumentClient.from(dynamoClient)
+const s3Client = new S3Client({ region: process.env.AWS_REGION })
 
-const tableName = process.env.DYNAMODB_TABLE;
-const corsOrigin = process.env.CORS_ORIGIN || "*";
+const tableName = process.env.DYNAMODB_TABLE
+const audioBucket = process.env.AUDIO_BUCKET
+const corsOrigin = process.env.CORS_ORIGIN || '*'
 
 // CORS headers
 const corsHeaders = {
-  "Access-Control-Allow-Origin": corsOrigin,
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, X-Amz-Date, Authorization, X-Api-Key, X-Amz-Security-Token"
-};
+  'Access-Control-Allow-Origin': corsOrigin,
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Headers':
+    'Content-Type, X-Amz-Date, Authorization, X-Api-Key, X-Amz-Security-Token',
+}
 
 // Response helper
 const createResponse = (statusCode, body) => ({
   statusCode,
   headers: corsHeaders,
-  body: JSON.stringify(body)
-});
+  body: JSON.stringify(body),
+})
+
+// Audio table structure (extends video_metadata table)
+const createAudioMetadata = (audioId, userId, userEmail, data) => ({
+  video_id: audioId, // Reusing video_id field for audio
+  user_id: userId,
+  user_email: userEmail,
+  title: data.title.trim(),
+  filename: data.filename,
+  bucket_location: `audio/${userId}/${audioId}/${data.filename}`,
+  upload_date: new Date().toISOString(),
+  file_size: data.file_size || null,
+  content_type: data.content_type || null,
+  duration: data.duration || null,
+  created_at: new Date().toISOString(),
+  updated_at: new Date().toISOString(),
+  // Audio-specific fields
+  media_type: 'audio', // Distinguish from video entries
+  transcription_status: 'pending',
+})
 
 exports.handler = async (event) => {
-  console.log("Event:", JSON.stringify(event, null, 2));
+  console.log('Event:', JSON.stringify(event, null, 2))
 
   try {
-    const httpMethod = event.httpMethod;
-    
+    const httpMethod = event.httpMethod
+    const path = event.resource || event.path
+
     // Handle CORS preflight
-    if (httpMethod === "OPTIONS") {
-      return createResponse(200, { message: "CORS preflight" });
+    if (httpMethod === 'OPTIONS') {
+      return createResponse(200, { message: 'CORS preflight' })
     }
 
     // Extract user ID from Cognito JWT token
-    let userId = null;
-    console.log("Request context:", JSON.stringify(event.requestContext, null, 2));
-    
+    let userId = null
+    let userEmail = null
+    console.log('Request context:', JSON.stringify(event.requestContext, null, 2))
+
     if (event.requestContext && event.requestContext.authorizer) {
-      console.log("Authorizer context:", JSON.stringify(event.requestContext.authorizer, null, 2));
+      console.log('Authorizer context:', JSON.stringify(event.requestContext.authorizer, null, 2))
       // Cognito puts user info in the authorizer context
-      const claims = event.requestContext.authorizer.claims;
+      const claims = event.requestContext.authorizer.claims
       if (claims) {
-        userId = claims.sub; // 'sub' is the unique user ID in Cognito
-        console.log("Authenticated user:", userId);
-        console.log("User email:", claims.email);
+        userId = claims.sub // 'sub' is the unique user ID in Cognito
+        userEmail = claims.email
+        console.log('Authenticated user:', userId, userEmail)
       } else {
-        console.log("No claims found in authorizer context");
+        console.log('No claims found in authorizer context')
       }
     } else {
-      console.log("No authorizer context found");
+      console.log('No authorizer context found')
     }
 
-    // Handle POST - Create video metadata
-    if (httpMethod === "POST") {
-      // Check if user is authenticated
-      if (!userId) {
-        return createResponse(401, {
-          error: "Authentication required"
-        });
-      }
-
-      const body = JSON.parse(event.body || "{}");
-      
-      // Validate required fields (username no longer required - comes from JWT)
-      if (!body.title || !body.filename || !body.bucketLocation) {
-        return createResponse(400, {
-          error: "Missing required fields: title, filename, bucketLocation"
-        });
-      }
-
-      // Check if this is an admin upload for another user
-      const targetUserId = body.adminUploadUserId || userId;
-      const isAdminUpload = body.adminUploadUserId && body.adminUploadUserId !== userId;
-      
-      // If admin upload, verify user is admin
-      if (isAdminUpload) {
-        const userGroups = event.requestContext.authorizer.claims['cognito:groups'] || [];
-        const isAdmin = userGroups.includes('admin');
-        
-        if (!isAdmin) {
-          return createResponse(403, {
-            error: "Admin privileges required to upload videos for other users"
-          });
-        }
-      }
-      
-      // Generate unique video ID using target user ID
-      const videoId = `${targetUserId}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      
-      // Get user email from JWT claims for display purposes
-      const userEmail = event.requestContext.authorizer.claims.email;
-      
-      // Create metadata record
-      const videoMetadata = {
-        video_id: videoId,
-        user_id: targetUserId, // Use target user ID (could be different from authenticated user)
-        user_email: isAdminUpload ? `Admin upload by ${userEmail}` : userEmail, // Indicate admin upload
-        title: body.title.trim(),
-        filename: body.filename,
-        bucket_location: body.bucketLocation,
-        upload_date: new Date().toISOString(),
-        file_size: body.fileSize || null,
-        content_type: body.contentType || null,
-        duration: body.duration || null,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      };
-
-      // Save to DynamoDB
-      const putCommand = new PutCommand({
-        TableName: tableName,
-        Item: videoMetadata
-      });
-
-      await docClient.send(putCommand);
-
-      return createResponse(201, {
-        success: true,
-        videoId: videoId,
-        message: "Video metadata saved successfully",
-        data: videoMetadata
-      });
+    // Route audio requests
+    if (path.includes('/audio')) {
+      return await handleAudioRequest(httpMethod, path, event, userId, userEmail)
     }
 
-    // Handle GET - List videos (for authenticated user only)
-    if (httpMethod === "GET") {
-      // Check if user is authenticated
-      if (!userId) {
-        return createResponse(401, {
-          error: "Authentication required"
-        });
-      }
-
-      // Query videos by user_id using GSI (we'll need to update the GSI)
-      const queryCommand = new QueryCommand({
-        TableName: tableName,
-        IndexName: "user_id-upload_date-index",
-        KeyConditionExpression: "user_id = :userId",
-        ExpressionAttributeValues: {
-          ":userId": userId
-        },
-        ScanIndexForward: false // Sort by upload_date descending (newest first)
-      });
-      
-      const result = await docClient.send(queryCommand);
-      const videos = result.Items || [];
-
-      return createResponse(200, {
-        success: true,
-        count: videos.length,
-        videos: videos
-      });
-    }
-
-    // Method not allowed
-    return createResponse(405, {
-      error: `Method ${httpMethod} not allowed`
-    });
-
+    // Handle video requests (existing functionality)
+    return await handleVideoRequest(httpMethod, event, userId, userEmail)
   } catch (error) {
-    console.error("Error:", error);
-    
+    console.error('Error:', error)
+
     return createResponse(500, {
-      error: "Internal server error",
+      error: 'Internal server error',
       message: error.message,
-      ...(process.env.NODE_ENV === "development" && { stack: error.stack })
-    });
+      ...(process.env.NODE_ENV === 'development' && { stack: error.stack }),
+    })
   }
-}; 
+}
+
+// Handle audio-related requests
+async function handleAudioRequest(httpMethod, path, event, userId, userEmail) {
+  // Check authentication for all audio operations
+  if (!userId) {
+    return createResponse(401, {
+      error: 'Authentication required',
+    })
+  }
+
+  // Handle audio upload URL generation
+  if (path.includes('/audio/upload-url') && httpMethod === 'POST') {
+    return await handleAudioUploadUrl(event, userId, userEmail)
+  }
+
+  // Handle audio metadata operations
+  if (path === '/audio') {
+    if (httpMethod === 'POST') {
+      return await handleAudioMetadataCreate(event, userId, userEmail)
+    }
+
+    if (httpMethod === 'GET') {
+      return await handleAudioList(userId)
+    }
+  }
+
+  return createResponse(404, {
+    error: 'Audio endpoint not found',
+  })
+}
+
+// Generate presigned URL for audio upload
+async function handleAudioUploadUrl(event, userId, userEmail) {
+  try {
+    const body = JSON.parse(event.body || '{}')
+
+    // Validate required fields
+    if (!body.title || !body.filename) {
+      return createResponse(400, {
+        error: 'Missing required fields: title, filename',
+      })
+    }
+
+    // Generate unique audio ID
+    const audioId = `${userId}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+
+    // Create S3 key
+    const s3Key = `audio/${userId}/${audioId}/${body.filename}`
+
+    // Generate presigned URL for upload
+    const uploadCommand = new PutObjectCommand({
+      Bucket: audioBucket,
+      Key: s3Key,
+      ContentType: body.content_type || 'audio/mpeg',
+    })
+
+    const uploadUrl = await getSignedUrl(s3Client, uploadCommand, {
+      expiresIn: 3600, // 1 hour
+    })
+
+    // Prepare audio metadata
+    const audioMetadata = createAudioMetadata(audioId, userId, userEmail, {
+      title: body.title,
+      filename: body.filename,
+      file_size: body.file_size,
+      content_type: body.content_type,
+      duration: body.duration,
+    })
+
+    return createResponse(200, {
+      success: true,
+      upload_url: uploadUrl,
+      audio: audioMetadata,
+    })
+  } catch (error) {
+    console.error('Error generating audio upload URL:', error)
+    return createResponse(500, {
+      error: 'Failed to generate upload URL',
+      message: error.message,
+    })
+  }
+}
+
+// Save audio metadata after successful upload
+async function handleAudioMetadataCreate(event, userId, userEmail) {
+  try {
+    const body = JSON.parse(event.body || '{}')
+
+    // Validate required fields
+    if (!body.audio_id || !body.title || !body.filename || !body.bucket_location) {
+      return createResponse(400, {
+        error: 'Missing required fields: audio_id, title, filename, bucket_location',
+      })
+    }
+
+    // Create complete audio metadata
+    const audioMetadata = {
+      video_id: body.audio_id, // Reusing video_id field
+      user_id: userId,
+      user_email: userEmail,
+      title: body.title.trim(),
+      filename: body.filename,
+      bucket_location: body.bucket_location,
+      upload_date: new Date().toISOString(),
+      file_size: body.file_size || null,
+      content_type: body.content_type || null,
+      duration: body.duration || null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      media_type: 'audio',
+      transcription_status: 'pending',
+    }
+
+    // Save to DynamoDB
+    const putCommand = new PutCommand({
+      TableName: tableName,
+      Item: audioMetadata,
+    })
+
+    await docClient.send(putCommand)
+
+    return createResponse(201, {
+      success: true,
+      message: 'Audio metadata saved successfully',
+      audio: audioMetadata,
+    })
+  } catch (error) {
+    console.error('Error saving audio metadata:', error)
+    return createResponse(500, {
+      error: 'Failed to save audio metadata',
+      message: error.message,
+    })
+  }
+}
+
+// List user's audio files
+async function handleAudioList(userId) {
+  try {
+    // Query audio files by user_id and media_type
+    const queryCommand = new QueryCommand({
+      TableName: tableName,
+      IndexName: 'user_id-upload_date-index',
+      KeyConditionExpression: 'user_id = :userId',
+      FilterExpression: 'media_type = :mediaType',
+      ExpressionAttributeValues: {
+        ':userId': userId,
+        ':mediaType': 'audio',
+      },
+      ScanIndexForward: false, // Sort by upload_date descending (newest first)
+    })
+
+    const result = await docClient.send(queryCommand)
+    const audioFiles = result.Items || []
+
+    // Format response to match AudioService expectations
+    const formattedAudioFiles = audioFiles.map((item) => ({
+      audio_id: item.video_id, // Map back to audio_id
+      user_id: item.user_id,
+      user_email: item.user_email,
+      title: item.title,
+      filename: item.filename,
+      bucket_location: item.bucket_location,
+      upload_date: item.upload_date,
+      file_size: item.file_size,
+      content_type: item.content_type,
+      duration: item.duration,
+      created_at: item.created_at,
+      updated_at: item.updated_at,
+      transcription_status: item.transcription_status,
+      transcription_data: item.transcription_data,
+    }))
+
+    return createResponse(200, {
+      success: true,
+      count: formattedAudioFiles.length,
+      audio_files: formattedAudioFiles,
+    })
+  } catch (error) {
+    console.error('Error listing audio files:', error)
+    return createResponse(500, {
+      error: 'Failed to load audio files',
+      message: error.message,
+    })
+  }
+}
+
+// Handle video requests (existing functionality)
+async function handleVideoRequest(httpMethod, event, userId, userEmail) {
+  // Handle POST - Create video metadata
+  if (httpMethod === 'POST') {
+    // Check if user is authenticated
+    if (!userId) {
+      return createResponse(401, {
+        error: 'Authentication required',
+      })
+    }
+
+    const body = JSON.parse(event.body || '{}')
+
+    // Validate required fields (username no longer required - comes from JWT)
+    if (!body.title || !body.filename || !body.bucketLocation) {
+      return createResponse(400, {
+        error: 'Missing required fields: title, filename, bucketLocation',
+      })
+    }
+
+    // Check if this is an admin upload for another user
+    const targetUserId = body.adminUploadUserId || userId
+    const isAdminUpload = body.adminUploadUserId && body.adminUploadUserId !== userId
+
+    // If admin upload, verify user is admin
+    if (isAdminUpload) {
+      const userGroups = event.requestContext.authorizer.claims['cognito:groups'] || []
+      const isAdmin = userGroups.includes('admin')
+
+      if (!isAdmin) {
+        return createResponse(403, {
+          error: 'Admin privileges required to upload videos for other users',
+        })
+      }
+    }
+
+    // Generate unique video ID using target user ID
+    const videoId = `${targetUserId}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+
+    // Create metadata record
+    const videoMetadata = {
+      video_id: videoId,
+      user_id: targetUserId, // Use target user ID (could be different from authenticated user)
+      user_email: isAdminUpload ? `Admin upload by ${userEmail}` : userEmail, // Indicate admin upload
+      title: body.title.trim(),
+      filename: body.filename,
+      bucket_location: body.bucketLocation,
+      upload_date: new Date().toISOString(),
+      file_size: body.fileSize || null,
+      content_type: body.contentType || null,
+      duration: body.duration || null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      media_type: 'video', // Distinguish from audio entries
+    }
+
+    // Save to DynamoDB
+    const putCommand = new PutCommand({
+      TableName: tableName,
+      Item: videoMetadata,
+    })
+
+    await docClient.send(putCommand)
+
+    return createResponse(201, {
+      success: true,
+      videoId: videoId,
+      message: 'Video metadata saved successfully',
+      data: videoMetadata,
+    })
+  }
+
+  // Handle GET - List videos (for authenticated user only)
+  if (httpMethod === 'GET') {
+    // Check if user is authenticated
+    if (!userId) {
+      return createResponse(401, {
+        error: 'Authentication required',
+      })
+    }
+
+    // Query videos by user_id using GSI (filter out audio files)
+    const queryCommand = new QueryCommand({
+      TableName: tableName,
+      IndexName: 'user_id-upload_date-index',
+      KeyConditionExpression: 'user_id = :userId',
+      FilterExpression: 'attribute_not_exists(media_type) OR media_type = :mediaType',
+      ExpressionAttributeValues: {
+        ':userId': userId,
+        ':mediaType': 'video',
+      },
+      ScanIndexForward: false, // Sort by upload_date descending (newest first)
+    })
+
+    const result = await docClient.send(queryCommand)
+    const videos = result.Items || []
+
+    return createResponse(200, {
+      success: true,
+      count: videos.length,
+      videos: videos,
+    })
+  }
+
+  // Method not allowed
+  return createResponse(405, {
+    error: `Method ${httpMethod} not allowed`,
+  })
+}
