@@ -122,6 +122,65 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "video_bucket_encr
     }
   }
 }
+
+# S3 bucket for audio storage (AI Shorts)
+resource "aws_s3_bucket" "audio_bucket" {
+  bucket = var.audio_bucket_name != "" ? var.audio_bucket_name : "${var.bucket_name}-audio"
+
+  tags = {
+    Name        = "Audio Files Bucket (AI Shorts)"
+    Environment = var.environment
+    Project     = "easy-video-share"
+  }
+}
+
+# Configure bucket versioning for audio bucket
+resource "aws_s3_bucket_versioning" "audio_bucket_versioning" {
+  bucket = aws_s3_bucket.audio_bucket.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+# Configure bucket public access block for audio bucket
+resource "aws_s3_bucket_public_access_block" "audio_bucket_pab" {
+  bucket = aws_s3_bucket.audio_bucket.id
+
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+# Configure CORS for audio bucket (for browser uploads)
+resource "aws_s3_bucket_cors_configuration" "audio_bucket_cors" {
+  bucket = aws_s3_bucket.audio_bucket.id
+
+  cors_rule {
+    allowed_headers = ["*"]
+    allowed_methods = ["GET", "POST", "PUT", "DELETE", "HEAD"]
+    allowed_origins = ["*"]  # In production, specify your domain
+    expose_headers  = ["ETag"]
+    max_age_seconds = 3000
+  }
+}
+
+# Server-side encryption configuration for audio bucket
+resource "aws_s3_bucket_server_side_encryption_configuration" "audio_bucket_encryption" {
+  bucket = aws_s3_bucket.audio_bucket.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
+# Enable S3 Transfer Acceleration for audio bucket
+resource "aws_s3_bucket_accelerate_configuration" "audio_bucket_accelerate" {
+  bucket = aws_s3_bucket.audio_bucket.id
+  status = "Enabled"
+}
 /* 
 # Lifecycle configuration to manage storage costs
 resource "aws_s3_bucket_lifecycle_configuration" "video_bucket_lifecycle" {
@@ -174,6 +233,20 @@ resource "aws_iam_user_policy" "video_app_user_policy" {
         Resource = [
           aws_s3_bucket.video_bucket.arn,
           "${aws_s3_bucket.video_bucket.arn}/*"
+        ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:PutObject",
+          "s3:PutObjectAcl",
+          "s3:GetObject",
+          "s3:ListBucket",
+          "s3:DeleteObject"
+        ]
+        Resource = [
+          aws_s3_bucket.audio_bucket.arn,
+          "${aws_s3_bucket.audio_bucket.arn}/*"
         ]
       }
     ]
@@ -297,6 +370,19 @@ resource "aws_iam_role_policy" "lambda_policy" {
           "s3:DeleteObject"
         ]
         Resource = "${aws_s3_bucket.video_bucket.arn}/*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:PutObject",
+          "s3:GetObject",
+          "s3:ListBucket",
+          "s3:DeleteObject"
+        ]
+        Resource = [
+          aws_s3_bucket.audio_bucket.arn,
+          "${aws_s3_bucket.audio_bucket.arn}/*"
+        ]
       }
     ]
   })

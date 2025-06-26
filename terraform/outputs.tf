@@ -23,6 +23,22 @@ output "bucket_regional_domain_name" {
   value       = aws_s3_bucket.video_bucket.bucket_regional_domain_name
 }
 
+# Audio Bucket Outputs
+output "audio_bucket_name" {
+  description = "Name of the created S3 audio bucket"
+  value       = aws_s3_bucket.audio_bucket.bucket
+}
+
+output "audio_bucket_arn" {
+  description = "ARN of the created S3 audio bucket"
+  value       = aws_s3_bucket.audio_bucket.arn
+}
+
+output "audio_bucket_domain_name" {
+  description = "Domain name of the S3 audio bucket"
+  value       = aws_s3_bucket.audio_bucket.bucket_domain_name
+}
+
 output "app_user_access_key_id" {
   description = "Access key ID for the application user"
   value       = aws_iam_access_key.video_app_user_key.id

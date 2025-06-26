@@ -40,10 +40,10 @@ const routes: Array<RouteRecordRaw> = [
       {
         path: '/ai-video',
         name: 'ai-video',
-        component: () => import('@/components/ai-video/AIVideoGenerator.vue'),
+        component: () => import('@/views/AIVideo.vue'),
         meta: {
-          pageTitle: 'AI Video Generation',
-          breadcrumbs: ['Videos', 'AI Generation'],
+          pageTitle: 'AI Shorts Generator',
+          breadcrumbs: ['Videos', 'AI Shorts'],
         },
       },
       {

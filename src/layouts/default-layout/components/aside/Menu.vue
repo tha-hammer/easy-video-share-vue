@@ -51,6 +51,18 @@
         </router-link>
       </div>
 
+      <div class="menu-item">
+        <router-link to="/ai-video" class="menu-link" active-class="active">
+          <span class="menu-icon">
+            <KTIcon icon-name="abstract-26" icon-class="fs-2" />
+          </span>
+          <span class="menu-title">AI Shorts</span>
+          <span class="menu-badge">
+            <span class="badge badge-sm badge-circle badge-light-primary">AI</span>
+          </span>
+        </router-link>
+      </div>
+
       <!-- Admin Section (only show for admin users) -->
       <template v-if="isAdmin">
         <div class="menu-item">

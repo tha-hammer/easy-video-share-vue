@@ -54,4 +54,14 @@ variable "vertex_ai_location" {
   description = "Google Cloud location for Vertex AI"
   type        = string
   default     = "us-central1"
+}
+
+variable "audio_bucket_name" {
+  description = "Name of the S3 bucket for audio file storage (AI Shorts)"
+  type        = string
+  default     = ""
+  validation {
+    condition     = var.audio_bucket_name == "" || (length(var.audio_bucket_name) > 3 && length(var.audio_bucket_name) < 64)
+    error_message = "Audio bucket name must be between 3 and 63 characters or empty to auto-generate."
+  }
 } 

@@ -8,6 +8,9 @@ aws_region = "us-east-1"
 # Include your name/initials to make it unique
 bucket_name = "your-unique-bucket-name-here"
 
+# Audio S3 bucket name (optional - will auto-generate if not specified)
+# audio_bucket_name = "your-unique-audio-bucket-name-here"
+
 # Environment (dev, staging, prod)
 environment = "dev"
 

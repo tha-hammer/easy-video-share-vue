@@ -1,418 +1,630 @@
 <template>
   <div class="card">
-    <!-- Header -->
+    <!-- Header with Status -->
     <div class="card-header">
       <div class="card-title">
         <h3 class="fw-bolder">
           <i class="fas fa-magic text-primary me-2"></i>
-          AI Video Generation
+          AI Shorts Generator
         </h3>
-        <p class="text-muted mb-0">Transform your audio into engaging short-form videos</p>
+        <p class="text-muted mb-0">
+          Transform your audio into engaging short-form videos for Instagram Reels & YouTube Shorts
+        </p>
+      </div>
+      <div class="card-toolbar" v-if="currentStep > 1">
+        <div class="badge badge-lg" :class="getStatusBadgeClass()">
+          {{ getStatusText() }}
+        </div>
       </div>
     </div>
 
     <div class="card-body">
-      <!-- Progress Stepper -->
-      <div
-        class="stepper stepper-pills stepper-column d-flex flex-column flex-xl-row flex-row-fluid"
-        id="kt_create_account_stepper"
-      >
-        <!-- Nav -->
-        <div
-          class="d-flex justify-content-center justify-content-xl-start flex-row-auto w-100 w-xl-300px"
-        >
-          <div class="stepper-nav ps-lg-10">
-            <!-- Step 1: Select Audio -->
-            <div
-              class="stepper-item"
-              :class="{ current: currentStep === 1, completed: currentStep > 1 }"
-            >
-              <div class="stepper-wrapper">
-                <div class="stepper-icon">
-                  <i class="stepper-check fas fa-check"></i>
-                  <span class="stepper-number">1</span>
-                </div>
-                <div class="stepper-label">
-                  <h3 class="stepper-title">Select Audio</h3>
-                  <div class="stepper-desc">Choose your audio file</div>
-                </div>
-              </div>
-            </div>
+      <!-- Step 1: Audio Upload -->
+      <div v-if="currentStep === 1" class="upload-section">
+        <div class="text-center mb-10">
+          <h2 class="fw-bolder text-dark">Upload Audio for AI Shorts</h2>
+          <p class="text-muted fs-4">
+            Upload audio that will be transformed into a 30-60 second vertical video for social
+            media
+          </p>
+        </div>
 
-            <!-- Step 2: Configure -->
-            <div
-              class="stepper-item"
-              :class="{ current: currentStep === 2, completed: currentStep > 2 }"
-            >
-              <div class="stepper-wrapper">
-                <div class="stepper-icon">
-                  <i class="stepper-check fas fa-check"></i>
-                  <span class="stepper-number">2</span>
-                </div>
-                <div class="stepper-label">
-                  <h3 class="stepper-title">Configure</h3>
-                  <div class="stepper-desc">Set video parameters</div>
-                </div>
-              </div>
-            </div>
+        <!-- Audio Upload Area -->
+        <div class="row justify-content-center mb-10">
+          <div class="col-md-8 col-lg-6">
+            <div class="card border-dashed border-2 border-primary bg-light-primary">
+              <div class="card-body text-center py-10">
+                <div v-if="!audioUploading && !selectedAudio" class="upload-prompt">
+                  <div class="mb-6">
+                    <KTIcon icon-name="cloud-upload" icon-class="fs-5tx text-primary" />
+                  </div>
+                  <h4 class="fw-bold text-primary mb-4">Upload Audio File</h4>
+                  <p class="text-muted mb-6">
+                    Drag and drop your audio file here, or click to browse<br />
+                    <small
+                      >Supported formats: {{ supportedFormats.join(', ') }} • Max size: 100MB</small
+                    >
+                  </p>
 
-            <!-- Step 3: Processing -->
-            <div
-              class="stepper-item"
-              :class="{ current: currentStep === 3, completed: currentStep > 3 }"
-            >
-              <div class="stepper-wrapper">
-                <div class="stepper-icon">
-                  <i class="stepper-check fas fa-check"></i>
-                  <span class="stepper-number">3</span>
-                </div>
-                <div class="stepper-label">
-                  <h3 class="stepper-title">Processing</h3>
-                  <div class="stepper-desc">AI generation in progress</div>
-                </div>
-              </div>
-            </div>
+                  <!-- File Input -->
+                  <input
+                    ref="audioFileInput"
+                    type="file"
+                    accept="audio/*"
+                    class="d-none"
+                    @change="handleAudioFileSelect"
+                  />
 
-            <!-- Step 4: Complete -->
-            <div
-              class="stepper-item"
-              :class="{ current: currentStep === 4, completed: currentStep > 4 }"
-            >
-              <div class="stepper-wrapper">
-                <div class="stepper-icon">
-                  <i class="stepper-check fas fa-check"></i>
-                  <span class="stepper-number">4</span>
+                  <button class="btn btn-primary btn-lg" @click="triggerFileSelect">
+                    <KTIcon icon-name="folder-down" icon-class="fs-4 me-2" />
+                    Choose Audio File
+                  </button>
                 </div>
-                <div class="stepper-label">
-                  <h3 class="stepper-title">Complete</h3>
-                  <div class="stepper-desc">Your video is ready!</div>
+
+                <!-- Upload Progress -->
+                <div v-else-if="audioUploading" class="upload-progress">
+                  <div class="mb-6">
+                    <div
+                      class="spinner-border text-primary"
+                      role="status"
+                      style="width: 4rem; height: 4rem"
+                    >
+                      <span class="visually-hidden">Uploading...</span>
+                    </div>
+                  </div>
+                  <h5 class="fw-bold text-primary mb-2">Uploading Audio...</h5>
+                  <p class="text-muted mb-4">{{ currentUploadFile?.name }}</p>
+
+                  <div class="progress bg-white mb-4" style="height: 20px">
+                    <div
+                      class="progress-bar bg-primary progress-bar-striped progress-bar-animated"
+                      :style="{ width: `${uploadProgress}%` }"
+                    ></div>
+                  </div>
+
+                  <div class="d-flex justify-content-between text-muted fs-7">
+                    <span
+                      >{{ formatFileSize(uploadedBytes) }} / {{ formatFileSize(totalBytes) }}</span
+                    >
+                    <span>{{ uploadProgress }}%</span>
+                  </div>
+                </div>
+
+                <!-- Upload Success -->
+                <div v-else-if="selectedAudio" class="upload-success">
+                  <div class="mb-6">
+                    <KTIcon icon-name="check-circle" icon-class="fs-5tx text-success" />
+                  </div>
+                  <h5 class="fw-bold text-success mb-2">Audio Uploaded Successfully!</h5>
+                  <div class="card bg-white border-0 shadow-sm">
+                    <div class="card-body">
+                      <div class="d-flex align-items-center">
+                        <div class="symbol symbol-40px me-3">
+                          <div class="symbol-label bg-light-success">
+                            <i class="fas fa-music text-success"></i>
+                          </div>
+                        </div>
+                        <div class="flex-grow-1 text-start">
+                          <h6 class="fw-bold mb-1">{{ selectedAudio.title }}</h6>
+                          <div class="d-flex gap-4 text-muted fs-7">
+                            <span
+                              ><i class="fas fa-file me-1"></i>{{ selectedAudio.filename }}</span
+                            >
+                            <span
+                              ><i class="fas fa-hdd me-1"></i
+                              >{{ formatFileSize(selectedAudio.file_size || 0) }}</span
+                            >
+                            <span v-if="selectedAudio.duration"
+                              ><i class="fas fa-clock me-1"></i
+                              >{{ formatDuration(selectedAudio.duration) }}</span
+                            >
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="mt-6">
+                    <button class="btn btn-light-primary me-3" @click="resetUpload">
+                      <KTIcon icon-name="arrow-clockwise" icon-class="fs-4 me-2" />
+                      Upload Different File
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
         </div>
 
-        <!-- Content -->
-        <div class="flex-row-fluid py-lg-5 px-lg-15">
-          <!-- Step 1: Select Audio File -->
-          <div v-if="currentStep === 1" class="current">
-            <div class="w-100">
-              <div class="pb-10 pb-lg-15">
-                <h2 class="fw-bolder text-dark">Select Your Audio File</h2>
-                <div class="text-muted fw-bold fs-6">
-                  Choose an audio file to transform into a video. We support MP3, WAV, M4A, and MP4
-                  files.
-                </div>
-              </div>
+        <!-- Existing Audio Files -->
+        <div v-if="userAudioFiles.length > 0 && !audioUploading">
+          <div class="separator my-8"></div>
 
-              <!-- Audio File Selection -->
-              <div class="row g-6 g-xl-9" v-if="userVideos.length > 0">
-                <div class="col-md-6 col-lg-4" v-for="video in userVideos" :key="video.video_id">
-                  <div
-                    class="card cursor-pointer border-2 h-100"
-                    :class="{
-                      'border-primary bg-light-primary': selectedVideo?.video_id === video.video_id,
-                    }"
-                    @click="selectVideo(video)"
-                  >
-                    <div class="card-body d-flex flex-column">
-                      <div class="d-flex align-items-center mb-3">
-                        <i class="fas fa-music text-primary fs-3x me-3"></i>
-                        <div class="flex-grow-1">
-                          <h5 class="fw-bold mb-1">{{ video.title }}</h5>
-                          <p class="text-muted mb-0 fs-7">{{ video.filename }}</p>
-                        </div>
-                        <div
-                          v-if="selectedVideo?.video_id === video.video_id"
-                          class="badge badge-circle badge-primary"
-                        >
-                          <i class="fas fa-check"></i>
-                        </div>
-                      </div>
+          <div class="text-center mb-6">
+            <h5 class="fw-bold text-gray-800">Or choose from your existing audio files</h5>
+          </div>
 
-                      <div class="d-flex justify-content-between text-muted fs-7">
-                        <span>{{ formatDate(video.upload_date) }}</span>
-                        <span v-if="video.duration">{{ formatDuration(video.duration) }}</span>
+          <div class="row g-4">
+            <div class="col-md-6 col-lg-4" v-for="audio in userAudioFiles" :key="audio.audio_id">
+              <div
+                class="card cursor-pointer border-2 h-100 existing-audio-card"
+                :class="{
+                  'border-primary bg-light-primary': selectedAudio?.audio_id === audio.audio_id,
+                }"
+                @click="selectExistingAudio(audio)"
+              >
+                <div class="card-body">
+                  <div class="d-flex align-items-center mb-3">
+                    <div class="symbol symbol-40px me-3">
+                      <div class="symbol-label bg-light-info">
+                        <i class="fas fa-music text-info"></i>
                       </div>
                     </div>
+                    <div class="flex-grow-1">
+                      <h6 class="fw-bold mb-1">{{ audio.title }}</h6>
+                      <p class="text-muted mb-0 fs-7">{{ audio.filename }}</p>
+                    </div>
+                    <div v-if="selectedAudio?.audio_id === audio.audio_id" class="ms-2">
+                      <i class="fas fa-check-circle text-primary fs-3"></i>
+                    </div>
+                  </div>
+
+                  <div class="d-flex justify-content-between text-muted fs-7">
+                    <span>{{ formatDate(audio.upload_date) }}</span>
+                    <span v-if="audio.duration">{{ formatDuration(audio.duration) }}</span>
+                    <span>{{ formatFileSize(audio.file_size || 0) }}</span>
                   </div>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
 
-              <!-- No Videos Message -->
-              <div v-else class="text-center">
-                <i class="fas fa-music display-4 text-muted mb-4"></i>
-                <h4>No Audio Files Found</h4>
-                <p class="text-muted">
-                  Please upload some audio files first to get started with AI video generation.
-                </p>
-                <router-link to="/upload" class="btn btn-primary">
-                  <i class="fas fa-upload me-2"></i>Upload Audio Files
-                </router-link>
+        <!-- Continue Button -->
+        <div class="text-center mt-10" v-if="selectedAudio">
+          <button class="btn btn-lg btn-primary" @click="nextStep">
+            <KTIcon icon-name="arrow-right" icon-class="fs-4 me-2" />
+            Continue with Selected Audio
+          </button>
+        </div>
+      </div>
+
+      <!-- Step 2: AI Configuration -->
+      <div v-if="currentStep === 2" class="config-section">
+        <div class="text-center mb-10">
+          <h2 class="fw-bolder text-dark">Configure Your AI Video</h2>
+          <p class="text-muted fs-4">
+            Customize the style and parameters for your AI-generated short video
+          </p>
+        </div>
+
+        <!-- Selected Audio Info -->
+        <div v-if="selectedAudio" class="card bg-light-info border-info mb-8">
+          <div class="card-body">
+            <div class="d-flex align-items-center">
+              <div class="symbol symbol-50px me-4">
+                <div class="symbol-label bg-info">
+                  <i class="fas fa-music text-white"></i>
+                </div>
+              </div>
+              <div>
+                <h5 class="fw-bold text-info mb-1">Selected Audio</h5>
+                <p class="mb-0">{{ selectedAudio.title }}</p>
+                <small class="text-muted">{{ selectedAudio.filename }}</small>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Configuration Form -->
+        <div class="row">
+          <div class="col-md-8 mx-auto">
+            <div class="mb-8">
+              <label class="form-label fs-6 fw-bolder text-dark"
+                >Video Description & Creative Direction</label
+              >
+              <textarea
+                class="form-control form-control-lg form-control-solid"
+                rows="4"
+                v-model="aiConfig.prompt"
+                placeholder="Describe the type of video you want to create. Be specific about the style, mood, and visual elements you envision..."
+              ></textarea>
+              <div class="form-text">
+                Example: "Create a dynamic, cinematic video with urban backgrounds and modern
+                aesthetics. Focus on close-up shots with dramatic lighting."
+              </div>
+            </div>
+
+            <div class="row g-6">
+              <div class="col-md-6">
+                <label class="form-label fs-6 fw-bolder text-dark">Target Duration</label>
+                <select
+                  class="form-select form-select-lg form-select-solid"
+                  v-model="aiConfig.targetDuration"
+                >
+                  <option value="15">15 seconds - Quick & Punchy</option>
+                  <option value="30">30 seconds - Standard</option>
+                  <option value="45">45 seconds - Extended</option>
+                  <option value="60">60 seconds - Full Length</option>
+                </select>
+                <div class="form-text">Estimated processing time: {{ getEstimatedTime() }}</div>
               </div>
 
-              <!-- Continue Button -->
-              <div class="d-flex flex-stack pt-15" v-if="userVideos.length > 0">
-                <div></div>
-                <div>
-                  <button
-                    class="btn btn-lg btn-primary"
-                    :disabled="!selectedVideo"
-                    @click="nextStep"
-                  >
-                    Continue
-                    <i class="fas fa-arrow-right fs-4 ms-1"></i>
+              <div class="col-md-6">
+                <label class="form-label fs-6 fw-bolder text-dark">Visual Style</label>
+                <select
+                  class="form-select form-select-lg form-select-solid"
+                  v-model="aiConfig.style"
+                >
+                  <option value="realistic">Realistic - Photographic quality</option>
+                  <option value="cinematic">Cinematic - Movie-like scenes</option>
+                  <option value="animated">Animated - Stylized animation</option>
+                  <option value="artistic">Artistic - Creative & abstract</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Navigation -->
+            <div class="d-flex justify-content-between pt-15">
+              <button class="btn btn-lg btn-light-primary" @click="previousStep">
+                <KTIcon icon-name="arrow-left" icon-class="fs-4 me-2" />
+                Previous
+              </button>
+              <button
+                class="btn btn-lg btn-primary"
+                :disabled="!aiConfig.prompt.trim()"
+                @click="startAIGeneration"
+              >
+                <KTIcon icon-name="magic" icon-class="fs-4 me-2" />
+                Generate AI Video
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 3: Processing Animation with Real-time Updates -->
+      <div v-if="currentStep === 3" class="processing-section">
+        <div class="text-center mb-10">
+          <h2 class="fw-bolder text-dark">AI Processing Your Audio</h2>
+          <p class="text-muted fs-4">Creating your short-form video script and scene plan...</p>
+        </div>
+
+        <!-- Processing Animation -->
+        <div class="text-center mb-10">
+          <div class="processing-animation">
+            <div class="ai-brain-animation">
+              <div class="pulse-ring"></div>
+              <div class="pulse-ring delay-1"></div>
+              <div class="pulse-ring delay-2"></div>
+              <KTIcon icon-name="abstract-26" icon-class="fs-5tx text-primary" />
+            </div>
+          </div>
+        </div>
+
+        <!-- Progress Steps -->
+        <div class="row g-6 mb-10">
+          <div class="col-md-3" v-for="step in processingSteps" :key="step.step">
+            <div class="card h-100" :class="getStepCardClass(step)">
+              <div class="card-body text-center">
+                <div class="mb-4">
+                  <div class="symbol symbol-50px mx-auto">
+                    <div class="symbol-label" :class="getStepIconClass(step)">
+                      <i class="fas" :class="getStepIcon(step)"></i>
+                    </div>
+                  </div>
+                </div>
+                <h5 class="fw-bold">{{ getStepDisplayName(step.step) }}</h5>
+                <p class="text-muted fs-7 mb-0">{{ getStepDescription(step.step) }}</p>
+                <div class="mt-3">
+                  <span class="badge" :class="getStepStatusBadge(step)">
+                    {{ step.status }}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Overall Progress -->
+        <div class="card bg-light-primary border-primary">
+          <div class="card-body">
+            <div class="d-flex align-items-center justify-content-between mb-4">
+              <h5 class="fw-bold text-primary mb-0">Overall Progress</h5>
+              <span class="fw-bold text-primary">{{ processingProgress }}%</span>
+            </div>
+            <div class="progress bg-white" style="height: 20px">
+              <div
+                class="progress-bar bg-primary progress-bar-striped progress-bar-animated"
+                :style="{ width: `${processingProgress}%` }"
+              ></div>
+            </div>
+            <div class="mt-4 text-center">
+              <p class="fw-bold text-primary mb-1">{{ currentProcessingMessage }}</p>
+              <p class="text-muted fs-7 mb-0">Estimated time remaining: {{ getEstimatedTime() }}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 4: Scene Plan Display -->
+      <div v-if="currentStep === 4" class="scene-plan-section">
+        <div class="text-center mb-10">
+          <h2 class="fw-bolder text-dark">AI-Generated Scene Plan</h2>
+          <p class="text-muted fs-4">Review the intelligent scene breakdown for your short video</p>
+        </div>
+
+        <!-- Scene Plan Overview -->
+        <div v-if="scenePlan" class="card bg-light-info border-info mb-8">
+          <div class="card-body">
+            <div class="row align-items-center">
+              <div class="col-md-8">
+                <h4 class="fw-bold text-info mb-2">{{ scenePlan.overall_theme }}</h4>
+                <p class="text-muted mb-0">
+                  {{ scenePlan.scenes?.length || 0 }} scenes • {{ scenePlan.total_duration }}s
+                  duration
+                </p>
+              </div>
+              <div class="col-md-4 text-end">
+                <div class="badge badge-lg badge-light-info">
+                  <KTIcon icon-name="abstract-26" icon-class="fs-4 me-1" />
+                  AI Generated
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Scene Breakdown -->
+        <div v-if="scenePlan?.scenes" class="row g-6 mb-10">
+          <div class="col-md-6" v-for="scene in scenePlan.scenes" :key="scene.sequence">
+            <div class="card h-100 scene-card">
+              <div class="card-header">
+                <div class="card-title">
+                  <h5 class="fw-bold mb-0">
+                    Scene {{ scene.sequence }}
+                    <span class="badge badge-sm badge-light-primary ms-2">
+                      {{ scene.duration }}s
+                    </span>
+                  </h5>
+                </div>
+              </div>
+              <div class="card-body">
+                <div class="mb-4">
+                  <h6 class="fw-bold text-gray-800 mb-2">Audio Text:</h6>
+                  <p class="text-muted fs-7 fst-italic mb-0">"{{ scene.audio_text }}"</p>
+                </div>
+
+                <div class="mb-4">
+                  <h6 class="fw-bold text-gray-800 mb-2">Visual Description:</h6>
+                  <p class="text-gray-700 fs-7 mb-0">{{ scene.scene_description }}</p>
+                </div>
+
+                <div class="mb-4">
+                  <h6 class="fw-bold text-gray-800 mb-2">AI Prompt:</h6>
+                  <p class="text-muted fs-8 mb-0">{{ scene.vertex_ai_prompt }}</p>
+                </div>
+
+                <div class="d-flex justify-content-between align-items-center">
+                  <span class="badge badge-light-success">{{ scene.visual_style }}</span>
+                  <small class="text-muted">{{ scene.start_time }}s - {{ scene.end_time }}s</small>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="text-center">
+          <button class="btn btn-light-primary me-4" @click="regenerateScenePlan">
+            <KTIcon icon-name="arrow-clockwise" icon-class="fs-4 me-2" />
+            Regenerate Plan
+          </button>
+          <button class="btn btn-primary" @click="approveScenePlan">
+            <KTIcon icon-name="check" icon-class="fs-4 me-2" />
+            Approve & Generate Video
+          </button>
+        </div>
+      </div>
+
+      <!-- Step 5: Video Generation Grid -->
+      <div v-if="currentStep === 5" class="video-generation-section">
+        <div class="text-center mb-10">
+          <h2 class="fw-bolder text-dark">Generating Video Scenes</h2>
+          <p class="text-muted fs-4">AI is creating each scene based on your approved plan</p>
+        </div>
+
+        <!-- Scene Generation Grid -->
+        <div v-if="generatedScenes" class="row g-6 mb-10">
+          <div class="col-md-6 col-lg-4" v-for="scene in generatedScenes" :key="scene.task_id">
+            <div class="card h-100 scene-generation-card">
+              <div class="card-header">
+                <div class="card-title">
+                  <h6 class="fw-bold mb-0">Scene {{ scene.sequence }}</h6>
+                  <span class="badge badge-sm" :class="getSceneStatusBadge(scene)">
+                    {{ scene.status }}
+                  </span>
+                </div>
+              </div>
+              <div class="card-body">
+                <!-- Video Preview or Placeholder -->
+                <div class="scene-preview mb-4">
+                  <div v-if="scene.status === 'completed' && scene.video_url" class="video-preview">
+                    <video
+                      :src="scene.video_url"
+                      class="w-100 rounded"
+                      style="aspect-ratio: 9/16; max-height: 200px"
+                      controls
+                      muted
+                    ></video>
+                  </div>
+                  <div v-else-if="scene.status === 'processing'" class="text-center py-10">
+                    <div class="spinner-border text-primary" role="status">
+                      <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="text-muted mt-3 mb-0">Generating...</p>
+                  </div>
+                  <div v-else-if="scene.status === 'failed'" class="text-center py-10">
+                    <KTIcon icon-name="cross-circle" icon-class="fs-3x text-danger" />
+                    <p class="text-danger mt-3 mb-0">Generation Failed</p>
+                  </div>
+                  <div v-else class="text-center py-10">
+                    <KTIcon icon-name="time" icon-class="fs-3x text-muted" />
+                    <p class="text-muted mt-3 mb-0">Waiting...</p>
+                  </div>
+                </div>
+
+                <!-- Scene Details -->
+                <div class="scene-details">
+                  <p class="fw-bold text-gray-800 mb-1">
+                    {{ scene.scene_description || scene.prompt }}
+                  </p>
+                  <p class="text-muted fs-7 mb-2">Duration: {{ scene.duration || 'N/A' }}s</p>
+                  <p class="text-muted fs-8 mb-0">
+                    {{ scene.created_at ? formatDate(scene.created_at) : '' }}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Overall Generation Progress -->
+        <div class="card bg-light-primary border-primary">
+          <div class="card-body">
+            <div class="d-flex align-items-center justify-content-between mb-4">
+              <h5 class="fw-bold text-primary mb-0">Video Generation Progress</h5>
+              <span class="fw-bold text-primary">{{ getGenerationProgress() }}%</span>
+            </div>
+            <div class="progress bg-white" style="height: 15px">
+              <div
+                class="progress-bar bg-primary progress-bar-striped progress-bar-animated"
+                :style="{ width: `${getGenerationProgress()}%` }"
+              ></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 6: Final Video Display -->
+      <div v-if="currentStep === 6" class="final-video-section">
+        <div class="text-center mb-10">
+          <div class="mb-6">
+            <KTIcon icon-name="check-circle" icon-class="fs-5tx text-success" />
+          </div>
+          <h2 class="fw-bolder text-dark">Your AI Short is Ready!</h2>
+          <p class="text-muted fs-4">Perfect for Instagram Reels, YouTube Shorts, and TikTok</p>
+        </div>
+
+        <!-- Final Video Display -->
+        <div class="row justify-content-center">
+          <div class="col-md-6 col-lg-4">
+            <div class="card">
+              <div class="card-body text-center">
+                <div v-if="finalVideoUrl" class="final-video-preview mb-6">
+                  <video
+                    :src="finalVideoUrl"
+                    class="w-100 rounded shadow"
+                    style="aspect-ratio: 9/16; max-height: 500px"
+                    controls
+                    autoplay
+                    muted
+                    loop
+                  ></video>
+                </div>
+
+                <!-- Video Details -->
+                <div class="video-info mb-6">
+                  <h4 class="fw-bold text-gray-800 mb-2">{{ selectedAudio?.title }}</h4>
+                  <div class="d-flex justify-content-center gap-4 text-muted fs-7">
+                    <span><i class="fas fa-clock me-1"></i>{{ getFinalDuration() }}s</span>
+                    <span><i class="fas fa-mobile-alt me-1"></i>9:16 Vertical</span>
+                    <span><i class="fas fa-eye me-1"></i>Social Ready</span>
+                  </div>
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="d-flex flex-wrap justify-content-center gap-3">
+                  <button class="btn btn-primary" @click="downloadVideo">
+                    <KTIcon icon-name="cloud-download" icon-class="fs-4 me-2" />
+                    Download
+                  </button>
+                  <button class="btn btn-light-primary" @click="shareVideo">
+                    <KTIcon icon-name="share" icon-class="fs-4 me-2" />
+                    Share
+                  </button>
+                  <button class="btn btn-light-success" @click="createAnother">
+                    <KTIcon icon-name="plus" icon-class="fs-4 me-2" />
+                    Create Another
                   </button>
                 </div>
               </div>
             </div>
           </div>
+        </div>
 
-          <!-- Step 2: Configure AI Generation -->
-          <div v-if="currentStep === 2" class="current">
-            <div class="w-100">
-              <div class="pb-10 pb-lg-15">
-                <h2 class="fw-bolder text-dark">Configure Your AI Video</h2>
-                <div class="text-muted fw-bold fs-6">
-                  Describe what kind of video you want to create and set your preferences.
-                </div>
+        <!-- Processing Summary -->
+        <div v-if="generatedVideo?.ai_generation_data" class="row mt-10">
+          <div class="col-12">
+            <div class="card">
+              <div class="card-header">
+                <h5 class="card-title mb-0">Generation Summary</h5>
               </div>
-
-              <div class="mb-10">
-                <!-- Selected Audio Info -->
-                <div class="card bg-light-info border-info mb-8">
-                  <div class="card-body">
-                    <div class="d-flex align-items-center">
-                      <i class="fas fa-info-circle text-info fs-3x me-4"></i>
-                      <div>
-                        <h5 class="fw-bold text-info mb-1">Selected Audio</h5>
-                        <p class="mb-0">{{ selectedVideo?.title }}</p>
-                        <small class="text-muted">{{ selectedVideo?.filename }}</small>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <!-- Video Description/Prompt -->
-                <div class="mb-8">
-                  <label class="form-label fs-6 fw-bolder text-dark"
-                    >Video Description & Creative Direction</label
-                  >
-                  <textarea
-                    class="form-control form-control-lg form-control-solid"
-                    rows="4"
-                    v-model="aiConfig.prompt"
-                    placeholder="Describe the type of video you want to create. Be specific about the style, mood, and visual elements you envision..."
-                  ></textarea>
-                  <div class="form-text">
-                    Example: "Create a dynamic, cinematic video with urban backgrounds and modern
-                    aesthetics. Focus on close-up shots with dramatic lighting."
-                  </div>
-                </div>
-
-                <!-- Video Settings -->
+              <div class="card-body">
                 <div class="row g-6">
-                  <div class="col-md-6">
-                    <label class="form-label fs-6 fw-bolder text-dark">Target Duration</label>
-                    <select
-                      class="form-select form-select-lg form-select-solid"
-                      v-model="aiConfig.targetDuration"
-                    >
-                      <option value="15">15 seconds - Quick & Punchy</option>
-                      <option value="30">30 seconds - Standard</option>
-                      <option value="45">45 seconds - Extended</option>
-                      <option value="60">60 seconds - Full Length</option>
-                    </select>
-                    <div class="form-text">Estimated processing time: {{ getEstimatedTime() }}</div>
+                  <div class="col-md-3">
+                    <div class="d-flex align-items-center">
+                      <KTIcon icon-name="time" icon-class="fs-2 text-primary me-3" />
+                      <div>
+                        <p class="fw-bold mb-0">Processing Time</p>
+                        <p class="text-muted fs-7 mb-0">
+                          {{
+                            formatProcessingTime(generatedVideo.ai_generation_data.generation_time)
+                          }}
+                        </p>
+                      </div>
+                    </div>
                   </div>
-
-                  <div class="col-md-6">
-                    <label class="form-label fs-6 fw-bolder text-dark">Visual Style</label>
-                    <select
-                      class="form-select form-select-lg form-select-solid"
-                      v-model="aiConfig.style"
-                    >
-                      <option value="realistic">Realistic - Photographic quality</option>
-                      <option value="cinematic">Cinematic - Movie-like scenes</option>
-                      <option value="animated">Animated - Stylized animation</option>
-                      <option value="artistic">Artistic - Creative & abstract</option>
-                    </select>
+                  <div class="col-md-3">
+                    <div class="d-flex align-items-center">
+                      <KTIcon icon-name="abstract-26" icon-class="fs-2 text-info me-3" />
+                      <div>
+                        <p class="fw-bold mb-0">AI Scenes</p>
+                        <p class="text-muted fs-7 mb-0">
+                          {{ generatedVideo.ai_generation_data.vertex_ai_tasks?.length || 1 }}
+                          generated
+                        </p>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </div>
-
-              <!-- Navigation -->
-              <div class="d-flex flex-stack pt-15">
-                <div>
-                  <button class="btn btn-lg btn-light-primary" @click="previousStep">
-                    <i class="fas fa-arrow-left fs-4 me-1"></i>
-                    Previous
-                  </button>
-                </div>
-                <div>
-                  <button
-                    class="btn btn-lg btn-primary"
-                    :disabled="!aiConfig.prompt.trim()"
-                    @click="startAIGeneration"
-                  >
-                    Generate AI Video
-                    <i class="fas fa-magic fs-4 ms-1"></i>
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Step 3: Processing -->
-          <div v-if="currentStep === 3" class="current">
-            <div class="w-100">
-              <div class="pb-10 pb-lg-15">
-                <h2 class="fw-bolder text-dark">AI Video Generation in Progress</h2>
-                <div class="text-muted fw-bold fs-6">
-                  Please wait while we transform your audio into an amazing video.
-                </div>
-              </div>
-
-              <!-- Progress Bar -->
-              <div class="mb-8">
-                <div class="d-flex align-items-center justify-content-between mb-2">
-                  <span class="fw-bold fs-6">{{ currentProcessingMessage }}</span>
-                  <span class="fw-bold fs-6">{{ processingProgress }}%</span>
-                </div>
-                <div class="progress bg-light-primary" style="height: 15px">
-                  <div
-                    class="progress-bar bg-primary progress-bar-striped progress-bar-animated"
-                    :style="{ width: `${processingProgress}%` }"
-                  ></div>
-                </div>
-              </div>
-
-              <!-- Processing Steps -->
-              <div class="card">
-                <div class="card-body">
-                  <h5 class="card-title mb-6">Processing Steps</h5>
-                  <div class="row g-6">
-                    <div class="col-md-6 col-lg-3" v-for="step in processingSteps" :key="step.step">
-                      <div class="d-flex align-items-center">
-                        <div class="symbol symbol-45px me-4">
-                          <div
-                            class="symbol-label rounded-circle"
-                            :class="{
-                              'bg-success': step.status === 'completed',
-                              'bg-primary': step.status === 'processing',
-                              'bg-light-danger': step.status === 'failed',
-                              'bg-light': step.status === 'pending',
-                            }"
-                          >
-                            <i
-                              class="fas"
-                              :class="{
-                                'fa-check text-white': step.status === 'completed',
-                                'fa-spinner fa-spin text-white': step.status === 'processing',
-                                'fa-times text-danger': step.status === 'failed',
-                                'fa-clock text-muted': step.status === 'pending',
-                              }"
-                            ></i>
-                          </div>
-                        </div>
-                        <div>
-                          <div class="fw-bold">{{ getStepDisplayName(step.step) }}</div>
-                          <div class="text-muted text-capitalize">{{ step.status }}</div>
-                        </div>
+                  <div class="col-md-3">
+                    <div class="d-flex align-items-center">
+                      <KTIcon icon-name="subtitle" icon-class="fs-2 text-success me-3" />
+                      <div>
+                        <p class="fw-bold mb-0">Transcription</p>
+                        <p class="text-muted fs-7 mb-0">
+                          {{
+                            (
+                              generatedVideo.ai_generation_data.audio_transcription?.confidence *
+                              100
+                            )?.toFixed(1) || 'N/A'
+                          }}% accuracy
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="col-md-3">
+                    <div class="d-flex align-items-center">
+                      <KTIcon icon-name="check-circle" icon-class="fs-2 text-success me-3" />
+                      <div>
+                        <p class="fw-bold mb-0">Completed</p>
+                        <p class="text-muted fs-7 mb-0">
+                          {{ formatDate(generatedVideo.ai_generation_data.completed_at) }}
+                        </p>
                       </div>
                     </div>
                   </div>
                 </div>
-              </div>
-
-              <!-- Cancel Option -->
-              <div class="text-center pt-10">
-                <p class="text-muted">
-                  This process typically takes {{ getEstimatedTime() }}. You can safely close this
-                  page and check back later.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <!-- Step 4: Completed -->
-          <div v-if="currentStep === 4" class="current">
-            <div class="w-100 text-center">
-              <div class="pb-10 pb-lg-15">
-                <i class="fas fa-check-circle text-success" style="font-size: 5rem"></i>
-                <h2 class="fw-bolder text-dark mt-6">Your AI Video is Ready!</h2>
-                <div class="text-muted fw-bold fs-6">
-                  We've successfully transformed your audio into an engaging video.
-                </div>
-              </div>
-
-              <!-- Video Preview -->
-              <div v-if="generatedVideo?.ai_generation_data?.final_video_url" class="mb-10">
-                <div class="card bg-light-primary border-primary">
-                  <div class="card-body">
-                    <h5 class="card-title text-primary mb-4">Generated Video Preview</h5>
-                    <div class="d-flex justify-content-center">
-                      <video
-                        controls
-                        class="rounded"
-                        style="max-width: 400px; max-height: 600px"
-                        :src="generatedVideo.ai_generation_data.final_video_url"
-                      >
-                        Your browser does not support the video tag.
-                      </video>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Generation Details -->
-              <div v-if="generatedVideo?.ai_generation_data" class="card mb-8">
-                <div class="card-body">
-                  <h5 class="card-title mb-4">Generation Details</h5>
-                  <div class="row g-3 text-start">
-                    <div class="col-md-6">
-                      <strong>Processing Time:</strong>
-                      <span class="ms-2">{{
-                        formatProcessingTime(generatedVideo.ai_generation_data.generation_time)
-                      }}</span>
-                    </div>
-                    <div class="col-md-6">
-                      <strong>Video Theme:</strong>
-                      <span class="ms-2">{{
-                        generatedVideo.ai_generation_data.scene_beats?.overall_theme ||
-                        'AI Generated'
-                      }}</span>
-                    </div>
-                    <div class="col-md-6">
-                      <strong>Total Scenes:</strong>
-                      <span class="ms-2">{{
-                        generatedVideo.ai_generation_data.vertex_ai_tasks?.length || 1
-                      }}</span>
-                    </div>
-                    <div class="col-md-6">
-                      <strong>Completed:</strong>
-                      <span class="ms-2">{{
-                        formatDate(generatedVideo.ai_generation_data.completed_at)
-                      }}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Action Buttons -->
-              <div class="d-flex flex-center flex-wrap">
-                <button class="btn btn-lg btn-primary me-4" @click="downloadVideo">
-                  <i class="fas fa-download me-2"></i>
-                  Download Video
-                </button>
-                <button class="btn btn-lg btn-light-primary me-4" @click="shareVideo">
-                  <i class="fas fa-share me-2"></i>
-                  Share Video
-                </button>
-                <button class="btn btn-lg btn-light-success" @click="createAnother">
-                  <i class="fas fa-magic me-2"></i>
-                  Create Another
-                </button>
               </div>
             </div>
           </div>
@@ -424,34 +636,45 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { useVideosStore } from '@/stores/videos'
+import { useAudioStore } from '@/stores/audio'
+import AudioService from '@/core/services/AudioService'
 import AIVideoService from '@/core/services/AIVideoService'
 import type {
   AIVideoGenerationRequest,
   ProcessingStep,
   AIVideoStatus,
 } from '@/core/services/AIVideoService'
-import type { VideoMetadata } from '@/stores/videos'
+import type { AudioMetadata } from '@/core/services/AudioService'
 
-// Store
-const videosStore = useVideosStore()
+// Stores
+const audioStore = useAudioStore()
 
 // Component state
 const currentStep = ref(1)
-const selectedVideo = ref<VideoMetadata | null>(null)
+const selectedAudio = ref<AudioMetadata | null>(null)
+const audioUploading = ref(false)
+const currentUploadFile = ref<File | null>(null)
+const uploadProgress = ref(0)
+const uploadedBytes = ref(0)
+const totalBytes = ref(0)
+const audioFileInput = ref<HTMLInputElement | null>(null)
+
 const aiConfig = ref<AIVideoGenerationRequest>({
   videoId: '',
-  prompt: '',
+  prompt:
+    'Create an engaging vertical video optimized for social media with dynamic visuals and modern aesthetics',
   targetDuration: 30,
-  style: 'realistic',
+  style: 'cinematic',
 })
 
 const processingStatus = ref<AIVideoStatus | null>(null)
-const generatedVideo = ref<VideoMetadata | null>(null)
+const generatedVideo = ref<AudioMetadata | null>(null)
 const pollingInterval = ref<NodeJS.Timeout | null>(null)
 
 // Computed properties
-const userVideos = computed(() => videosStore.userVideos.filter((video) => !video.ai_project_type))
+const userAudioFiles = computed(() => audioStore.userAudioFiles)
+
+const supportedFormats = computed(() => AudioService.getSupportedFormats())
 
 const processingSteps = computed(
   () => processingStatus.value?.video.ai_generation_data?.processing_steps || [],
@@ -463,35 +686,108 @@ const currentProcessingMessage = computed(() =>
   AIVideoService.getProcessingMessage(processingSteps.value),
 )
 
-// Methods
-const selectVideo = (video: VideoMetadata) => {
-  selectedVideo.value = video
+const scenePlan = computed(
+  () => processingStatus.value?.video.ai_generation_data?.scene_beats || null,
+)
+
+const generatedScenes = computed(
+  () => processingStatus.value?.video.ai_generation_data?.vertex_ai_tasks || [],
+)
+
+const finalVideoUrl = computed(
+  () => generatedVideo.value?.ai_generation_data?.final_video_url || null,
+)
+
+// Audio upload methods
+const triggerFileSelect = () => {
+  audioFileInput.value?.click()
 }
 
+const handleAudioFileSelect = async (event: Event) => {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+
+  if (!file) return
+
+  if (!AudioService.isValidAudioFile(file)) {
+    alert('Invalid file type. Please select an audio file.')
+    return
+  }
+
+  try {
+    audioUploading.value = true
+    currentUploadFile.value = file
+    totalBytes.value = file.size
+    uploadedBytes.value = 0
+    uploadProgress.value = 0
+
+    // Generate title from filename (remove extension)
+    const title = file.name.replace(/\.[^/.]+$/, '')
+
+    const uploadedAudio = await audioStore.uploadAudio({
+      title,
+      file,
+      onProgress: (progress) => {
+        uploadProgress.value = progress
+        uploadedBytes.value = Math.round((file.size * progress) / 100)
+      },
+    })
+
+    selectedAudio.value = uploadedAudio
+  } catch (error) {
+    console.error('Upload error:', error)
+    alert('Failed to upload audio file. Please try again.')
+  } finally {
+    audioUploading.value = false
+    currentUploadFile.value = null
+
+    // Reset file input
+    if (input) {
+      input.value = ''
+    }
+  }
+}
+
+const selectExistingAudio = (audio: AudioMetadata) => {
+  selectedAudio.value = audio
+}
+
+const resetUpload = () => {
+  selectedAudio.value = null
+  uploadProgress.value = 0
+  uploadedBytes.value = 0
+  totalBytes.value = 0
+}
+
+// Navigation methods
 const nextStep = () => {
-  currentStep.value++
+  if (currentStep.value === 1 && selectedAudio.value) {
+    currentStep.value = 2
+  } else {
+    currentStep.value++
+  }
 }
 
 const previousStep = () => {
-  currentStep.value--
+  if (currentStep.value > 1) {
+    currentStep.value--
+  }
 }
 
 const startAIGeneration = async () => {
-  if (!selectedVideo.value) return
+  if (!selectedAudio.value) return
 
   try {
     currentStep.value = 3
 
     const request: AIVideoGenerationRequest = {
-      videoId: selectedVideo.value.video_id,
+      videoId: selectedAudio.value.audio_id,
       prompt: aiConfig.value.prompt,
       targetDuration: aiConfig.value.targetDuration,
       style: aiConfig.value.style,
     }
 
     await AIVideoService.generateAIVideo(request)
-
-    // Start polling for status
     startPolling()
   } catch (error) {
     console.error('Error starting AI generation:', error)
@@ -501,17 +797,34 @@ const startAIGeneration = async () => {
 }
 
 const startPolling = () => {
-  if (!selectedVideo.value) return
+  if (!selectedAudio.value) return
 
   pollingInterval.value = setInterval(async () => {
     try {
-      const status = await AIVideoService.getAIVideoStatus(selectedVideo.value!.video_id)
+      const status = await AIVideoService.getAIVideoStatus(selectedAudio.value!.audio_id)
       processingStatus.value = status
+
+      // Check for transcription and scene planning completion
+      const steps = status.video.ai_generation_data?.processing_steps || []
+      const transcriptionDone =
+        steps.find((s) => s.step === 'transcription')?.status === 'completed'
+      const scenePlanningDone =
+        steps.find((s) => s.step === 'scene_planning')?.status === 'completed'
+      const videoGenerationDone =
+        steps.find((s) => s.step === 'video_generation')?.status === 'completed'
+
+      if (transcriptionDone && scenePlanningDone && currentStep.value === 3) {
+        currentStep.value = 4 // Show scene plan
+      }
+
+      if (videoGenerationDone && currentStep.value < 5) {
+        currentStep.value = 5 // Show video generation grid
+      }
 
       if (status.video.ai_generation_status === 'completed') {
         stopPolling()
-        generatedVideo.value = status.video as VideoMetadata
-        currentStep.value = 4
+        generatedVideo.value = status.video
+        currentStep.value = 6
       } else if (status.video.ai_generation_status === 'failed') {
         stopPolling()
         alert('AI video generation failed. Please try again.')
@@ -520,7 +833,7 @@ const startPolling = () => {
     } catch (error) {
       console.error('Error polling status:', error)
     }
-  }, 3000) // Poll every 3 seconds
+  }, 3000)
 }
 
 const stopPolling = () => {
@@ -530,12 +843,111 @@ const stopPolling = () => {
   }
 }
 
+const approveScenePlan = () => {
+  currentStep.value = 5
+}
+
+const regenerateScenePlan = async () => {
+  // Implement regeneration logic
+  alert('Scene plan regeneration would be implemented here')
+}
+
+// Utility methods
+const getStatusBadgeClass = () => {
+  switch (currentStep.value) {
+    case 2:
+      return 'badge-light-info'
+    case 3:
+      return 'badge-light-warning'
+    case 4:
+      return 'badge-light-info'
+    case 5:
+      return 'badge-light-primary'
+    case 6:
+      return 'badge-light-success'
+    default:
+      return 'badge-light'
+  }
+}
+
+const getStatusText = () => {
+  switch (currentStep.value) {
+    case 2:
+      return 'Configuring'
+    case 3:
+      return 'Processing Audio'
+    case 4:
+      return 'Scene Plan Ready'
+    case 5:
+      return 'Generating Video'
+    case 6:
+      return 'Complete'
+    default:
+      return 'Ready'
+  }
+}
+
 const getStepDisplayName = (step: string): string => {
   return AIVideoService.getStepDisplayName(step)
 }
 
+const getStepDescription = (step: string): string => {
+  const descriptions = {
+    transcription: 'Converting audio to text with timestamps',
+    scene_planning: 'Creating intelligent scene breakdown',
+    video_generation: 'AI generating video scenes',
+    finalization: 'Compiling final video with audio',
+  }
+  return descriptions[step as keyof typeof descriptions] || ''
+}
+
+const getStepCardClass = (step: ProcessingStep) => {
+  if (step.status === 'completed') return 'border-success'
+  if (step.status === 'processing') return 'border-primary'
+  if (step.status === 'failed') return 'border-danger'
+  return 'border-light'
+}
+
+const getStepIconClass = (step: ProcessingStep) => {
+  if (step.status === 'completed') return 'bg-success'
+  if (step.status === 'processing') return 'bg-primary'
+  if (step.status === 'failed') return 'bg-danger'
+  return 'bg-light'
+}
+
+const getStepIcon = (step: ProcessingStep) => {
+  if (step.status === 'completed') return 'fa-check text-white'
+  if (step.status === 'processing') return 'fa-spinner fa-spin text-white'
+  if (step.status === 'failed') return 'fa-times text-white'
+  return 'fa-clock text-muted'
+}
+
+const getStepStatusBadge = (step: ProcessingStep) => {
+  if (step.status === 'completed') return 'badge-success'
+  if (step.status === 'processing') return 'badge-primary'
+  if (step.status === 'failed') return 'badge-danger'
+  return 'badge-light'
+}
+
+const getSceneStatusBadge = (scene: { status: string }) => {
+  if (scene.status === 'completed') return 'badge-success'
+  if (scene.status === 'processing') return 'badge-primary'
+  if (scene.status === 'failed') return 'badge-danger'
+  return 'badge-secondary'
+}
+
+const getGenerationProgress = () => {
+  if (!generatedScenes.value?.length) return 0
+  const completed = generatedScenes.value.filter((s) => s.status === 'completed').length
+  return Math.round((completed / generatedScenes.value.length) * 100)
+}
+
 const getEstimatedTime = (): string => {
   return AIVideoService.getEstimatedProcessingTime(aiConfig.value.targetDuration || 30)
+}
+
+const getFinalDuration = () => {
+  return scenePlan.value?.total_duration || aiConfig.value.targetDuration || 30
 }
 
 const formatDate = (dateString?: string): string => {
@@ -544,10 +956,11 @@ const formatDate = (dateString?: string): string => {
 }
 
 const formatDuration = (duration?: number): string => {
-  if (!duration) return 'N/A'
-  const minutes = Math.floor(duration / 60)
-  const seconds = Math.floor(duration % 60)
-  return `${minutes}:${seconds.toString().padStart(2, '0')}`
+  return AudioService.formatDuration(duration || 0)
+}
+
+const formatFileSize = (size: number): string => {
+  return AudioService.formatFileSize(size)
 }
 
 const formatProcessingTime = (timeMs?: number): string => {
@@ -559,32 +972,30 @@ const formatProcessingTime = (timeMs?: number): string => {
 }
 
 const downloadVideo = () => {
-  if (generatedVideo.value?.ai_generation_data?.final_video_url) {
-    // Create a temporary link to download the video
+  if (finalVideoUrl.value) {
     const link = document.createElement('a')
-    link.href = generatedVideo.value.ai_generation_data.final_video_url
-    link.download = `ai-video-${generatedVideo.value.video_id}.mp4`
+    link.href = finalVideoUrl.value
+    link.download = `ai-short-${selectedAudio.value?.audio_id}.mp4`
     link.click()
   }
 }
 
 const shareVideo = async () => {
-  if (!generatedVideo.value?.ai_generation_data?.final_video_url) return
+  if (!finalVideoUrl.value) return
 
   if (navigator.share) {
     try {
       await navigator.share({
-        title: 'Check out my AI-generated video!',
-        text: 'I created this amazing video using AI. Take a look!',
-        url: generatedVideo.value.ai_generation_data.final_video_url,
+        title: 'Check out my AI-generated short video!',
+        text: 'Created with AI - perfect for social media!',
+        url: finalVideoUrl.value,
       })
     } catch (error) {
       console.error('Error sharing:', error)
     }
   } else {
-    // Fallback: copy URL to clipboard
     try {
-      await navigator.clipboard.writeText(generatedVideo.value.ai_generation_data.final_video_url)
+      await navigator.clipboard.writeText(finalVideoUrl.value)
       alert('Video URL copied to clipboard!')
     } catch (error) {
       console.error('Error copying to clipboard:', error)
@@ -593,23 +1004,17 @@ const shareVideo = async () => {
 }
 
 const createAnother = () => {
-  // Reset the component state
   currentStep.value = 1
-  selectedVideo.value = null
-  aiConfig.value = {
-    videoId: '',
-    prompt: '',
-    targetDuration: 30,
-    style: 'realistic',
-  }
+  selectedAudio.value = null
   processingStatus.value = null
   generatedVideo.value = null
+  resetUpload()
   stopPolling()
 }
 
 // Lifecycle
 onMounted(async () => {
-  await videosStore.loadUserVideos()
+  await audioStore.loadUserAudioFiles()
 })
 
 onUnmounted(() => {
@@ -618,38 +1023,119 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.stepper-item.current .stepper-wrapper .stepper-icon {
-  background-color: var(--bs-primary);
-}
-
-.stepper-item.current .stepper-wrapper .stepper-icon .stepper-number {
-  color: white;
-}
-
-.stepper-item.completed .stepper-wrapper .stepper-icon {
-  background-color: var(--bs-success);
-}
-
-.stepper-item.completed .stepper-wrapper .stepper-icon .stepper-check {
-  color: white;
-  display: block;
-}
-
-.stepper-item.completed .stepper-wrapper .stepper-icon .stepper-number {
-  display: none;
-}
-
-.card.border-primary {
-  box-shadow: 0 0 20px rgba(var(--bs-primary-rgb), 0.2);
-}
-
-.cursor-pointer {
-  cursor: pointer;
+.audio-card,
+.existing-audio-card {
   transition: all 0.3s ease;
 }
 
-.cursor-pointer:hover {
+.audio-card:hover,
+.existing-audio-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+}
+
+.processing-animation {
+  position: relative;
+  display: inline-block;
+}
+
+.ai-brain-animation {
+  position: relative;
+  display: inline-block;
+}
+
+.pulse-ring {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 120px;
+  height: 120px;
+  border: 3px solid var(--bs-primary);
+  border-radius: 50%;
+  animation: pulse 2s infinite;
+  opacity: 0.6;
+}
+
+.pulse-ring.delay-1 {
+  animation-delay: 0.5s;
+  width: 140px;
+  height: 140px;
+  opacity: 0.4;
+}
+
+.pulse-ring.delay-2 {
+  animation-delay: 1s;
+  width: 160px;
+  height: 160px;
+  opacity: 0.2;
+}
+
+@keyframes pulse {
+  0% {
+    transform: translate(-50%, -50%) scale(0.8);
+    opacity: 0.8;
+  }
+  50% {
+    transform: translate(-50%, -50%) scale(1.1);
+    opacity: 0.4;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1.3);
+    opacity: 0;
+  }
+}
+
+.scene-card {
+  transition: all 0.3s ease;
+  border: 2px solid transparent;
+}
+
+.scene-card:hover {
+  border-color: var(--bs-primary);
   transform: translateY(-2px);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+}
+
+.scene-generation-card {
+  transition: all 0.3s ease;
+}
+
+.scene-generation-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+}
+
+.video-preview video {
+  border-radius: 8px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+}
+
+.final-video-preview video {
+  border-radius: 12px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.15);
+}
+
+.scene-preview {
+  background: #f8f9fa;
+  border-radius: 8px;
+  min-height: 200px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.separator {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, #e4e6ea, transparent);
+}
+
+.upload-prompt,
+.upload-progress,
+.upload-success {
+  transition: all 0.3s ease;
+}
+
+.border-dashed {
+  border-style: dashed !important;
 }
 </style>
