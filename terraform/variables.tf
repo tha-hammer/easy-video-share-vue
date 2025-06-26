@@ -27,4 +27,37 @@ variable "project_name" {
   description = "Name of the project"
   type        = string
   default     = "easy-video-share"
+}
+
+# New variables for AI video generation
+variable "kling_api_key" {
+  description = "Kling AI API key"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "openai_api_key" {
+  description = "OpenAI API key"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "create_vpc" {
+  description = "Whether to create a new VPC for ECS (set to false if using existing VPC)"
+  type        = bool
+  default     = true
+}
+
+variable "vpc_id" {
+  description = "Existing VPC ID (only used if create_vpc is false)"
+  type        = string
+  default     = ""
+}
+
+variable "enable_ai_video_pipeline" {
+  description = "Enable AI video generation pipeline infrastructure"
+  type        = bool
+  default     = true
 } 

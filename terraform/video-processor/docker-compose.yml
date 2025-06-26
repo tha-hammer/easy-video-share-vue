@@ -1,0 +1,97 @@
+services:
+  # LocalStack - Mock AWS services for local development
+  localstack:
+    image: localstack/localstack:3.0
+    container_name: localstack
+    ports:
+      - '4566:4566'
+      - '4510-4559:4510-4559'
+    environment:
+      - SERVICES=dynamodb,s3,events,secretsmanager
+      - DEBUG=1
+      - DATA_DIR=/var/lib/localstack/data
+      - DOCKER_HOST=unix:///var/run/docker.sock
+      - PERSISTENCE=1
+      - TMPDIR=/var/lib/localstack/tmp
+    volumes:
+      - 'localstack_data:/var/lib/localstack'
+      - '/var/run/docker.sock:/var/run/docker.sock'
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:4566/health']
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Video Processor Service
+  video-processor:
+    build: .
+    container_name: video-processor
+    ports:
+      - '8080:8080'
+    environment:
+      # Application settings
+      - ENVIRONMENT=dev
+      - PROJECT_NAME=easy-video-share
+      - LOG_LEVEL=DEBUG
+
+      # AWS Configuration for LocalStack
+      - AWS_REGION=us-east-1
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+
+      # DynamoDB Table Names
+      - AI_PROJECTS_TABLE=easy-video-share-ai-projects-dev
+      - VIDEO_ASSETS_TABLE=easy-video-share-video-assets-dev
+
+      # EventBridge Bus Name
+      - EVENT_BUS_NAME=easy-video-share-ai-video-bus-dev
+
+      # Secrets Manager Secret Name
+      - SECRETS_NAME=easy-video-share-ai-api-keys-dev
+
+      # API Keys (use your real keys here)
+      - FAL_API_KEY=${FAL_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+
+      # LocalStack endpoints
+      - LOCALSTACK_ENDPOINT=http://localstack:4566
+      - DYNAMODB_ENDPOINT=http://localstack:4566
+      - S3_ENDPOINT=http://localstack:4566
+      - EVENTS_ENDPOINT=http://localstack:4566
+      - SECRETS_ENDPOINT=http://localstack:4566
+
+      # Use LocalStack
+      - USE_LOCALSTACK=true
+    depends_on:
+      localstack:
+        condition: service_healthy
+    volumes:
+      - './logs:/app/logs'
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:8080/health']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # LocalStack initialization - creates tables and resources
+  localstack-init:
+    image: amazon/aws-cli:2.15.17
+    container_name: localstack-init
+    environment:
+      - AWS_REGION=us-east-1
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - AWS_ENDPOINT_URL=http://localstack:4566
+    depends_on:
+      localstack:
+        condition: service_healthy
+    volumes:
+      - './init-localstack.sh:/init-localstack.sh'
+    command: >
+      sh -c "
+        chmod +x /init-localstack.sh &&
+        /init-localstack.sh
+      "
+
+volumes:
+  localstack_data:
