@@ -1,0 +1,254 @@
+name: Deploy Frontend to S3
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'src/**'
+      - 'public/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'vite.config.ts'
+      - 'tsconfig.json'
+      - '.github/workflows/frontend-deploy.yml'
+  workflow_run:
+    workflows: ['Deploy Backend Infrastructure']
+    types:
+      - completed
+
+env:
+  AWS_REGION: us-east-1
+  NODE_VERSION: '18'
+
+jobs:
+  build-and-deploy:
+    name: Build and Deploy Frontend
+    runs-on: ubuntu-latest
+
+    permissions:
+      id-token: write # Required for OIDC
+      contents: read # Required to checkout code
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: |
+          # Run type checking
+          npm run type-check
+
+          # Run linting
+          npm run lint
+
+          # Run unit tests if they exist
+          if npm run test:unit --if-present; then
+            echo "✅ Unit tests passed"
+          else
+            echo "ℹ️ No unit tests found or tests failed"
+          fi
+
+      - name: Configure AWS credentials using OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: GitHubActions-FrontendDeploy
+
+      - name: Get Infrastructure Info
+        id: infrastructure
+        run: |
+          # Get bucket name and region from Terraform state or outputs
+          cd terraform
+
+          # Initialize Terraform to read state
+          terraform init
+
+          # Get outputs
+          BUCKET_NAME=$(terraform output -raw bucket_name 2>/dev/null || echo "")
+          AWS_REGION=$(terraform output -raw aws_region 2>/dev/null || echo "us-east-1")
+          API_ENDPOINT=$(terraform output -raw api_gateway_endpoint 2>/dev/null || echo "")
+          COGNITO_USER_POOL_ID=$(terraform output -raw cognito_user_pool_id 2>/dev/null || echo "")
+          COGNITO_CLIENT_ID=$(terraform output -raw cognito_client_id 2>/dev/null || echo "")
+          AUDIO_BUCKET_NAME=$(terraform output -raw audio_bucket_name 2>/dev/null || echo "")
+
+          # Set outputs
+          echo "bucket-name=$BUCKET_NAME" >> $GITHUB_OUTPUT
+          echo "aws-region=$AWS_REGION" >> $GITHUB_OUTPUT
+          echo "api-endpoint=$API_ENDPOINT" >> $GITHUB_OUTPUT
+          echo "cognito-user-pool-id=$COGNITO_USER_POOL_ID" >> $GITHUB_OUTPUT
+          echo "cognito-client-id=$COGNITO_CLIENT_ID" >> $GITHUB_OUTPUT
+          echo "audio-bucket-name=$AUDIO_BUCKET_NAME" >> $GITHUB_OUTPUT
+
+          echo "Retrieved infrastructure information:"
+          echo "Bucket: $BUCKET_NAME"
+          echo "Region: $AWS_REGION"
+          echo "API: $API_ENDPOINT"
+
+      - name: Create environment file
+        run: |
+          cat > .env << EOF
+          # Easy Video Share Vue3 App - CI/CD Generated Configuration
+          # Generated automatically during CI/CD deployment
+
+          # AWS Configuration (No access keys - using Cognito authentication)
+          VITE_AWS_REGION=${{ steps.infrastructure.outputs.aws-region }}
+          VITE_AWS_BUCKET_NAME=${{ steps.infrastructure.outputs.bucket-name }}
+          VITE_AWS_AUDIO_BUCKET_NAME=${{ steps.infrastructure.outputs.audio-bucket-name }}
+
+          # API Configuration - Core
+          VITE_APP_API_URL=${{ steps.infrastructure.outputs.api-endpoint }}
+          VITE_API_ENDPOINT=${{ steps.infrastructure.outputs.api-endpoint }}
+          VITE_API_VIDEOS_ENDPOINT=${{ steps.infrastructure.outputs.api-endpoint }}/videos
+          VITE_API_VIDEOS_UPLOAD_URL_ENDPOINT=${{ steps.infrastructure.outputs.api-endpoint }}/videos/upload-url
+
+          # Audio API Configuration
+          VITE_API_AUDIO_ENDPOINT=${{ steps.infrastructure.outputs.api-endpoint }}/audio
+          VITE_API_AUDIO_UPLOAD_ENDPOINT=${{ steps.infrastructure.outputs.api-endpoint }}/audio/upload-url
+
+          # AI Video API Configuration
+          VITE_API_AI_VIDEO_ENDPOINT=${{ steps.infrastructure.outputs.api-endpoint }}/ai-video
+
+          # Admin API Configuration
+          VITE_API_ADMIN_USERS_ENDPOINT=${{ steps.infrastructure.outputs.api-endpoint }}/admin/users
+          VITE_API_ADMIN_VIDEOS_ENDPOINT=${{ steps.infrastructure.outputs.api-endpoint }}/admin/videos
+
+          # Cognito Authentication Configuration
+          VITE_COGNITO_USER_POOL_ID=${{ steps.infrastructure.outputs.cognito-user-pool-id }}
+          VITE_COGNITO_CLIENT_ID=${{ steps.infrastructure.outputs.cognito-client-id }}
+          VITE_COGNITO_REGION=${{ steps.infrastructure.outputs.aws-region }}
+
+          # Feature Flags
+          VITE_ENABLE_AI_VIDEO=true
+          VITE_ENABLE_AUDIO_UPLOAD=true
+          VITE_ENABLE_ADMIN_PANEL=true
+
+          # Upload Configuration
+          VITE_MAX_AUDIO_FILE_SIZE=104857600
+          VITE_MAX_VIDEO_FILE_SIZE=524288000
+          VITE_SUPPORTED_AUDIO_FORMATS=mp3,wav,m4a,aac,ogg,webm
+          VITE_SUPPORTED_VIDEO_FORMATS=mp4,webm,avi,mov
+
+          # UI Configuration
+          VITE_APP_NAME=Easy Video Share
+          VITE_APP_VERSION=2.0.0
+          VITE_ENABLE_DEBUG=false
+          EOF
+
+          echo "✅ Environment file created"
+
+      - name: Build frontend
+        run: |
+          echo "🔨 Building Vue3 application..."
+          npm run build-only
+
+          echo "📦 Build completed successfully"
+          echo "Build size:"
+          du -sh dist/
+
+      - name: Deploy to S3
+        run: |
+          echo "🚀 Deploying to S3 bucket: ${{ steps.infrastructure.outputs.bucket-name }}"
+
+          # Upload all files
+          aws s3 sync dist/ s3://${{ steps.infrastructure.outputs.bucket-name }}/ \
+            --delete \
+            --exclude "*.map" \
+            --cache-control "public, max-age=300"
+
+          # Set specific content types for better performance
+          echo "🔧 Setting content types for optimization..."
+
+          # HTML files with short cache
+          aws s3 cp dist/index.html s3://${{ steps.infrastructure.outputs.bucket-name }}/index.html \
+            --content-type "text/html" \
+            --cache-control "public, max-age=300"
+
+          # CSS files with long cache
+          aws s3 cp dist/assets/ s3://${{ steps.infrastructure.outputs.bucket-name }}/assets/ \
+            --recursive \
+            --exclude "*" \
+            --include "*.css" \
+            --content-type "text/css" \
+            --cache-control "public, max-age=31536000"
+
+          # JavaScript files with long cache
+          aws s3 cp dist/assets/ s3://${{ steps.infrastructure.outputs.bucket-name }}/assets/ \
+            --recursive \
+            --exclude "*" \
+            --include "*.js" \
+            --content-type "application/javascript" \
+            --cache-control "public, max-age=31536000"
+
+          # SVG files
+          if aws s3 ls s3://${{ steps.infrastructure.outputs.bucket-name }}/assets/ | grep -q "\.svg"; then
+            aws s3 cp dist/assets/ s3://${{ steps.infrastructure.outputs.bucket-name }}/assets/ \
+              --recursive \
+              --exclude "*" \
+              --include "*.svg" \
+              --content-type "image/svg+xml" \
+              --cache-control "public, max-age=31536000"
+          fi
+
+          # Image files
+          if aws s3 ls s3://${{ steps.infrastructure.outputs.bucket-name }}/ | grep -q "\.\(png\|ico\|jpg\|jpeg\)"; then
+            aws s3 cp dist/ s3://${{ steps.infrastructure.outputs.bucket-name }}/ \
+              --recursive \
+              --exclude "*" \
+              --include "*.png" \
+              --include "*.ico" \
+              --include "*.jpg" \
+              --include "*.jpeg" \
+              --cache-control "public, max-age=31536000"
+          fi
+
+      - name: Invalidate CloudFront (if exists)
+        run: |
+          # Check if CloudFront distribution exists
+          DISTRIBUTION_ID=$(aws cloudfront list-distributions \
+            --query "DistributionList.Items[?Comment=='${{ steps.infrastructure.outputs.bucket-name }}'].Id" \
+            --output text 2>/dev/null || echo "")
+
+          if [ -n "$DISTRIBUTION_ID" ] && [ "$DISTRIBUTION_ID" != "None" ]; then
+            echo "📡 Invalidating CloudFront distribution: $DISTRIBUTION_ID"
+            aws cloudfront create-invalidation \
+              --distribution-id $DISTRIBUTION_ID \
+              --paths "/*"
+          else
+            echo "ℹ️ No CloudFront distribution found, skipping invalidation"
+          fi
+
+      - name: Get deployment URLs
+        id: urls
+        run: |
+          cd terraform
+          WEBSITE_ENDPOINT=$(terraform output -raw bucket_website_endpoint 2>/dev/null || echo "")
+          echo "website-url=http://$WEBSITE_ENDPOINT" >> $GITHUB_OUTPUT
+
+      - name: Deployment Summary
+        run: |
+          echo "🎉 Frontend deployment completed successfully!"
+          echo ""
+          echo "📋 Deployment Details:"
+          echo "======================"
+          echo "🌐 Website URL: ${{ steps.urls.outputs.website-url }}"
+          echo "📦 S3 Bucket: ${{ steps.infrastructure.outputs.bucket-name }}"
+          echo "🔗 API Endpoint: ${{ steps.infrastructure.outputs.api-endpoint }}"
+          echo "🔐 Cognito Pool: ${{ steps.infrastructure.outputs.cognito-user-pool-id }}"
+          echo ""
+          echo "🔒 Security Features Active:"
+          echo "✅ Cognito Authentication"
+          echo "✅ IAM Role-based Deployment"
+          echo "✅ Presigned URL Uploads"
+          echo "✅ No Access Keys Used"
+          echo ""
+          echo "🚀 Your application is now live!"

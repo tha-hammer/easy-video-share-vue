@@ -994,13 +994,15 @@ const handleAudioFileSelect = async (event: Event) => {
     const uploadedAudio = await audioStore.uploadAudio({
       title,
       file,
-      onProgress: (progress) => {
-        uploadProgress.value = progress
-        uploadedBytes.value = Math.round((file.size * progress) / 100)
-      },
     })
 
+    console.log('🎵 Setting selectedAudio to:', uploadedAudio)
     selectedAudio.value = uploadedAudio
+    console.log('🎵 selectedAudio.value is now:', selectedAudio.value)
+
+    // Set progress to 100% on completion
+    uploadProgress.value = 100
+    uploadedBytes.value = file.size
   } catch (error) {
     console.error('Upload error:', error)
     alert('Failed to upload audio file. Please try again.')
@@ -1016,7 +1018,9 @@ const handleAudioFileSelect = async (event: Event) => {
 }
 
 const selectExistingAudio = (audio: AudioMetadata) => {
+  console.log('🎵 Selecting existing audio:', audio)
   selectedAudio.value = audio
+  console.log('🎵 selectedAudio.value set to:', selectedAudio.value)
 }
 
 const resetUpload = () => {
@@ -1046,6 +1050,11 @@ const startAIGeneration = async () => {
     alert('Please select an audio file first')
     return
   }
+
+  // Debug: Log the selected audio object
+  console.log('🎵 Selected audio object:', selectedAudio.value)
+  console.log('🎵 Audio ID:', selectedAudio.value.audio_id)
+  console.log('🎵 Audio ID type:', typeof selectedAudio.value.audio_id)
 
   // Validate request
   const request: AIVideoGenerationRequest = {
@@ -1101,41 +1110,8 @@ const startPolling = (videoId: string) => {
     try {
       console.log('🔄 Polling status for video:', videoId)
 
-      // First, poll the transcription status for real progress updates
-      try {
-        const transcriptionPoll = await AIVideoService.pollTranscriptionStatus(videoId)
-        console.log('🔄 Transcription polling response:', transcriptionPoll)
-
-        // If transcription completed, get the full status
-        if (transcriptionPoll.job_status === 'COMPLETED') {
-          console.log('✅ Transcription completed, getting full status...')
-        }
-      } catch (pollError) {
-        console.log('🔄 Transcription polling failed (may not be ready yet):', pollError)
-
-        // Check if this is a 400 error indicating transcription failure
-        if (pollError instanceof Error && pollError.message.includes('400')) {
-          console.error('❌ Transcription job not found - possible Lambda failure during setup')
-
-          // Try to get the error details from the response
-          try {
-            const errorResponse = await AIVideoService.getAIVideoStatus(videoId)
-            if (errorResponse.video.ai_generation_status === 'failed') {
-              console.error('❌ AI generation failed, stopping polling')
-              stopPolling()
-              const errorMessage =
-                errorResponse.video.ai_generation_data?.error_message ||
-                'AI video generation failed during setup'
-              alert(`AI video generation failed: ${errorMessage}`)
-              currentStep.value = 2
-              return
-            }
-          } catch (statusError) {
-            console.error('❌ Failed to get status after transcription error:', statusError)
-          }
-        }
-        // Continue with regular status check
-      }
+      // NOTE: poll-transcription endpoint removed - EventBridge now handles real-time updates
+      // Just use the regular status endpoint, which reflects EventBridge updates
 
       // Get the full status
       const status = await AIVideoService.getAIVideoStatus(videoId)
@@ -1714,7 +1690,13 @@ const createAnother = () => {
 
 // Lifecycle
 onMounted(async () => {
-  await audioStore.loadUserAudioFiles()
+  console.log('🚀 AIVideoGenerator component mounted, loading audio files...')
+  try {
+    await audioStore.loadUserAudioFiles()
+    console.log('✅ Audio files loaded successfully')
+  } catch (error) {
+    console.error('❌ Failed to load audio files on mount:', error)
+  }
 })
 
 onUnmounted(() => {

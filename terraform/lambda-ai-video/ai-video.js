@@ -123,6 +123,9 @@ exports.handler = async (event) => {
   // Handle CORS preflight FIRST, before any other processing
   if (event.httpMethod === 'OPTIONS') {
     console.log('🔄 Handling OPTIONS preflight request')
+    console.log('🔄 OPTIONS request path:', event.path)
+    console.log('🔄 OPTIONS request resource:', event.resource)
+    console.log('🔄 OPTIONS request pathParameters:', JSON.stringify(event.pathParameters, null, 2))
     const response = createResponse(200, { message: 'CORS preflight' })
     console.log('📤 OPTIONS Response:', JSON.stringify(response, null, 2))
     return response
@@ -179,18 +182,9 @@ exports.handler = async (event) => {
       return response
     }
 
-    // Handle POST to /ai-video/{videoId}/poll-transcription (poll AWS job status)
-    if (
-      httpMethod === 'POST' &&
-      path.includes('ai-video') &&
-      videoId &&
-      path.includes('poll-transcription')
-    ) {
-      console.log('🔄 Handling transcription polling request for video:', videoId)
-      const response = await handlePollTranscription(event, userId, videoId)
-      console.log('📤 Polling Response:', JSON.stringify(response, null, 2))
-      return response
-    }
+    // REMOVED: POST to /ai-video/{videoId}/poll-transcription
+    // Polling has been replaced with EventBridge for real-time transcription updates
+    // The transcription status is now automatically updated via EventBridge events
 
     console.log('❌ No matching route found')
     const response = createResponse(405, {
@@ -834,63 +828,17 @@ async function handleGetAIVideoStatus(event, userId, videoId) {
 }
 
 // Handle polling AWS Transcribe job status
-async function handlePollTranscription(event, userId, videoId) {
-  if (!videoId) {
-    return createResponse(400, { error: 'Video ID is required' })
-  }
-
-  try {
-    // Get current video status
-    const getCommand = new GetCommand({
-      TableName: process.env.DYNAMODB_TABLE,
-      Key: { video_id: videoId },
-    })
-
-    const result = await docClient.send(getCommand)
-    if (!result.Item) {
-      return createResponse(404, { error: 'Video not found' })
-    }
-
-    // Verify user ownership
-    if (result.Item.user_id !== userId) {
-      return createResponse(403, { error: 'Access denied' })
-    }
-
-    // Get AWS job info
-    const awsJobInfo = result.Item.ai_generation_data?.aws_api_responses?.transcription_job
-    if (!awsJobInfo || !awsJobInfo.job_name) {
-      console.error('❌ No transcription job found for video:', videoId)
-      console.error(
-        '❌ AI generation data:',
-        JSON.stringify(result.Item.ai_generation_data, null, 2),
-      )
-
-      // Check if the overall status is failed
-      if (result.Item.ai_generation_status === 'failed') {
-        const errorMessage =
-          result.Item.ai_generation_data?.error_message || 'AI video generation failed during setup'
-        return createResponse(400, {
-          error: 'Transcription failed during setup',
-          details: errorMessage,
-          overall_status: 'failed',
-        })
-      }
-
-      return createResponse(400, {
-        error: 'No transcription job found - processing may not have started properly',
-        overall_status: result.Item.ai_generation_status || 'unknown',
-      })
-    }
-
-    console.log(`🔄 Polling AWS Transcribe job: ${awsJobInfo.job_name}`)
-  } catch (error) {
-    console.error('Error polling transcription:', error)
-    return createResponse(500, {
-      error: 'Failed to poll transcription status',
-      message: error.message,
-    })
-  }
-}
+/*
+ * REMOVED: handlePollTranscription function
+ *
+ * This function has been replaced by an EventBridge-driven architecture.
+ * When AWS Transcribe jobs complete or fail, they trigger EventBridge events
+ * which are processed by the transcription-processor Lambda function.
+ *
+ * This eliminates the need for manual polling and provides real-time updates.
+ * The transcription results are automatically updated in DynamoDB when
+ * the EventBridge event is received.
+ */
 
 // Helper function to get transcription results from completed job
 async function getTranscriptionResults(transcriptionJob) {

@@ -34,6 +34,13 @@ export const API_CONFIG = {
   videosUploadUrlEndpoint:
     import.meta.env.VITE_API_VIDEOS_UPLOAD_URL_ENDPOINT ||
     'https://ip60d4qmjf.execute-api.us-east-1.amazonaws.com/dev/videos/upload-url',
+  // Audio endpoints
+  audioEndpoint:
+    import.meta.env.VITE_API_AUDIO_ENDPOINT ||
+    'https://ip60d4qmjf.execute-api.us-east-1.amazonaws.com/dev/audio',
+  audioUploadUrlEndpoint:
+    import.meta.env.VITE_API_AUDIO_UPLOAD_ENDPOINT ||
+    'https://ip60d4qmjf.execute-api.us-east-1.amazonaws.com/dev/audio/upload-url',
   // Admin endpoints
   adminUsersEndpoint:
     import.meta.env.VITE_API_ADMIN_USERS_ENDPOINT ||

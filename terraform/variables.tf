@@ -29,6 +29,12 @@ variable "project_name" {
   default     = "easy-video-share"
 }
 
+variable "github_repository" {
+  description = "GitHub repository in the format 'username/repository-name' for OIDC trust policy"
+  type        = string
+  default     = "your-username/easy-video-share-vue"  # Replace with your actual repository
+}
+
 # Cognito Configuration
 variable "cognito_domain_prefix" {
   description = "Cognito domain prefix for hosted UI"
@@ -114,4 +120,4 @@ variable "aws_account_id" {
   description = "AWS Account ID for Workload Identity Federation"
   type        = string
   default     = "571960159088"
-} 
+}

@@ -256,53 +256,16 @@ class AIVideoService {
     }
   }
 
-  /**
-   * Poll AWS Transcribe job status for real-time progress updates
+  /*
+   * REMOVED: pollTranscriptionStatus method
+   *
+   * This method has been replaced by an EventBridge-driven architecture.
+   * AWS Transcribe job completion events are now automatically processed
+   * via EventBridge and update DynamoDB in real-time.
+   *
+   * Frontend should now rely on the regular getAIVideoStatus() method
+   * which will reflect the updated transcription status from EventBridge.
    */
-  public static async pollTranscriptionStatus(videoId: string): Promise<{
-    success: boolean
-    job_status: string
-    elapsed_seconds: number
-    poll_count: number
-    transcription_results?: any
-  }> {
-    try {
-      const headers = await this.getAuthHeaders()
-      const url = `${API_CONFIG.baseUrl}/ai-video/${videoId}/poll-transcription`
-
-      console.log('🔄 Making POST request to poll transcription:', url)
-      console.log('🔄 Request headers:', JSON.stringify(headers, null, 2))
-
-      const response = await fetch(url, {
-        method: 'POST',
-        headers,
-      })
-
-      console.log('🔄 Response status:', response.status, response.statusText)
-
-      if (!response.ok) {
-        const responseText = await response.text()
-        console.log('🔄 Error response body:', responseText)
-        throw new Error(
-          `Failed to poll transcription status: ${response.statusText} - ${responseText}`,
-        )
-      }
-
-      const data = await response.json()
-      console.log('🔄 Polling response data:', JSON.stringify(data, null, 2))
-
-      // Handle API Gateway Lambda proxy response format
-      if (data.body) {
-        const body = typeof data.body === 'string' ? JSON.parse(data.body) : data.body
-        return body
-      }
-
-      return data
-    } catch (error) {
-      console.error('❌ Error polling transcription status:', error)
-      throw error
-    }
-  }
 
   /**
    * Poll for AI video completion with automatic retries

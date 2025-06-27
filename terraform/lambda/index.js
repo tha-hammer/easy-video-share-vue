@@ -185,10 +185,22 @@ async function handleAudioUploadUrl(event, userId, userEmail) {
 // Save audio metadata after successful upload
 async function handleAudioMetadataCreate(event, userId, userEmail) {
   try {
+    console.log('🎵 handleAudioMetadataCreate called')
+    console.log('🎵 Event body:', event.body)
+    console.log('🎵 User ID:', userId)
+    console.log('🎵 User Email:', userEmail)
+
     const body = JSON.parse(event.body || '{}')
+    console.log('🎵 Parsed body:', JSON.stringify(body, null, 2))
 
     // Validate required fields
     if (!body.audio_id || !body.title || !body.filename || !body.bucket_location) {
+      console.error('❌ Missing required fields:', {
+        audio_id: !!body.audio_id,
+        title: !!body.title,
+        filename: !!body.filename,
+        bucket_location: !!body.bucket_location,
+      })
       return createResponse(400, {
         error: 'Missing required fields: audio_id, title, filename, bucket_location',
       })
@@ -212,13 +224,19 @@ async function handleAudioMetadataCreate(event, userId, userEmail) {
       transcription_status: 'pending',
     }
 
+    console.log('🎵 Audio metadata to save:', JSON.stringify(audioMetadata, null, 2))
+    console.log('🎵 Table name:', tableName)
+    console.log('🎵 DynamoDB region:', process.env.AWS_REGION)
+
     // Save to DynamoDB
     const putCommand = new PutCommand({
       TableName: tableName,
       Item: audioMetadata,
     })
 
-    await docClient.send(putCommand)
+    console.log('🎵 Attempting to save to DynamoDB...')
+    const result = await docClient.send(putCommand)
+    console.log('✅ DynamoDB save successful:', result)
 
     return createResponse(201, {
       success: true,
