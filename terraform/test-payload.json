@@ -1,0 +1,9 @@
+{
+  "httpMethod": "POST",
+  "path": "/ai-video",
+  "headers": {
+    "authorization": "Bearer test-token",
+    "content-type": "application/json"
+  },
+  "body": "{\"audioId\":\"test-audio-123\",\"prompt\":\"Create a dynamic video\"}"
+}

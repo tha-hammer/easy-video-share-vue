@@ -63,7 +63,7 @@ resource "aws_lambda_function" "ai_video_processor" {
 
   depends_on = [
     aws_iam_role_policy.lambda_policy,
-    aws_cloudwatch_log_group.ai_video_logs,
+    # aws_cloudwatch_log_group.ai_video_logs,  # Temporarily commented out
   ]
 
   # Ignore changes to source code hash during development
