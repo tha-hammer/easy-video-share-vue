@@ -204,17 +204,18 @@ resource "aws_s3_bucket_lifecycle_configuration" "video_bucket_lifecycle" {
   }
 } */
 
-# IAM user for application access
+# IAM user for application access (legacy - may be removed in future)
 resource "aws_iam_user" "video_app_user" {
   name = "${var.project_name}-app-user"
 
   tags = {
+    Name        = "Legacy App User (Consider Removing)"
     Environment = var.environment
     Project     = var.project_name
   }
 }
 
-# IAM policy for application user
+# IAM policy for application user (legacy - may be removed in future)
 resource "aws_iam_user_policy" "video_app_user_policy" {
   name = "${var.project_name}-app-policy"
   user = aws_iam_user.video_app_user.name
@@ -253,10 +254,10 @@ resource "aws_iam_user_policy" "video_app_user_policy" {
   })
 }
 
-# Access keys for the application user
-resource "aws_iam_access_key" "video_app_user_key" {
-  user = aws_iam_user.video_app_user.name
-}
+# REMOVED: Access keys for security (use IAM roles instead)
+# resource "aws_iam_access_key" "video_app_user_key" {
+#   user = aws_iam_user.video_app_user.name
+# }
 
 # DynamoDB table for video metadata
 resource "aws_dynamodb_table" "video_metadata" {
@@ -276,6 +277,11 @@ resource "aws_dynamodb_table" "video_metadata" {
 
   attribute {
     name = "upload_date"
+    type = "S"
+  }
+
+  attribute {
+    name = "ai_generation_status"
     type = "S"
   }
 

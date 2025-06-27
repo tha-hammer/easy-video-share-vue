@@ -20,7 +20,12 @@ const { S3Client, GetObjectCommand, PutObjectCommand } = require('@aws-sdk/clien
 
 // Initialize AWS clients
 const dynamoClient = new DynamoDBClient({ region: process.env.AWS_REGION })
-const docClient = DynamoDBDocumentClient.from(dynamoClient)
+const docClient = DynamoDBDocumentClient.from(dynamoClient, {
+  marshallOptions: {
+    removeUndefinedValues: true,
+    convertClassInstanceToMap: true,
+  },
+})
 const secretsClient = new SecretsManagerClient({ region: process.env.AWS_REGION })
 const transcribeClient = new TranscribeClient({ region: process.env.AWS_REGION })
 const s3Client = new S3Client({ region: process.env.AWS_REGION })
@@ -213,6 +218,7 @@ async function handleAIVideoGeneration(event, userId) {
 
   // Initialize AI generation data structure with mock processing steps
   const aiGenerationData = {
+    source_audio_id: body.audioId, // CRITICAL: Store reference to source audio
     processing_steps: [
       { step: 'transcription', status: 'pending', started_at: new Date().toISOString() },
       { step: 'scene_planning', status: 'pending' },
@@ -366,16 +372,18 @@ async function updateProcessingStep(videoId, stepName, status) {
 // Update AI generation status
 async function updateAIGenerationStatus(videoId, status, additionalData = {}) {
   try {
-    const updateExpression = 'SET ai_generation_status = :status, updated_at = :updated'
+    let updateExpression = 'SET ai_generation_status = :status, updated_at = :updated'
     const expressionAttributeValues = {
       ':status': status,
       ':updated': new Date().toISOString(),
     }
 
-    // Add additional data to update expression
+    // Add additional data to update expression (filter out undefined values)
     Object.entries(additionalData).forEach(([key, value]) => {
-      expressionAttributeValues[`:${key}`] = value
-      updateExpression += `, ai_generation_data.${key} = :${key}`
+      if (value !== undefined && value !== null) {
+        expressionAttributeValues[`:${key}`] = value
+        updateExpression += `, ai_generation_data.${key} = :${key}`
+      }
     })
 
     const updateCommand = new UpdateCommand({
