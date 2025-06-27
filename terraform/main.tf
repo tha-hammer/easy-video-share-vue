@@ -967,18 +967,7 @@ resource "aws_api_gateway_deployment" "video_api_deployment" {
     aws_api_gateway_integration_response.admin_users_options_integration_response,
     aws_api_gateway_integration_response.admin_videos_options_integration_response,
     aws_api_gateway_integration_response.admin_user_videos_options_integration_response,
-    # Add audio integrations
-    aws_api_gateway_integration.audio_post_integration,
-    aws_api_gateway_integration.audio_get_integration,
-    aws_api_gateway_integration.audio_options_integration,
-    aws_api_gateway_integration.audio_upload_url_post_integration,
-    aws_api_gateway_integration.audio_upload_url_options_integration,
-    # Add audio integration responses  
-    aws_api_gateway_integration_response.audio_post_integration_response,
-    aws_api_gateway_integration_response.audio_get_integration_response,
-    aws_api_gateway_integration_response.audio_options_integration_response,
-    aws_api_gateway_integration_response.audio_upload_url_post_integration_response,
-    aws_api_gateway_integration_response.audio_upload_url_options_integration_response,
+    # Note: Audio and AI video integrations are defined in ai-video-extensions.tf
   ]
 
   rest_api_id = aws_api_gateway_rest_api.video_api.id
@@ -1027,31 +1016,7 @@ resource "aws_api_gateway_deployment" "video_api_deployment" {
       aws_api_gateway_integration_response.admin_users_options_integration_response.id,
       aws_api_gateway_integration_response.admin_videos_options_integration_response.id,
       aws_api_gateway_integration_response.admin_user_videos_options_integration_response.id,
-      # Audio resources - complete list
-      aws_api_gateway_resource.audio_resource.id,
-      aws_api_gateway_resource.audio_upload_url_resource.id,
-      aws_api_gateway_method.audio_post.id,
-      aws_api_gateway_method.audio_get.id,
-      aws_api_gateway_method.audio_options.id,
-      aws_api_gateway_method.audio_upload_url_post.id,
-      aws_api_gateway_method.audio_upload_url_options.id,
-      aws_api_gateway_integration.audio_post_integration.id,
-      aws_api_gateway_integration.audio_get_integration.id,
-      aws_api_gateway_integration.audio_options_integration.id,
-      aws_api_gateway_integration.audio_upload_url_post_integration.id,
-      aws_api_gateway_integration.audio_upload_url_options_integration.id,
-      # Audio method responses
-      aws_api_gateway_method_response.audio_post_response.id,
-      aws_api_gateway_method_response.audio_get_response.id,
-      aws_api_gateway_method_response.audio_options_response.id,
-      aws_api_gateway_method_response.audio_upload_url_post_response.id,
-      aws_api_gateway_method_response.audio_upload_url_options_response.id,
-      # Audio integration responses
-      aws_api_gateway_integration_response.audio_post_integration_response.id,
-      aws_api_gateway_integration_response.audio_get_integration_response.id,
-      aws_api_gateway_integration_response.audio_options_integration_response.id,
-      aws_api_gateway_integration_response.audio_upload_url_post_integration_response.id,
-      aws_api_gateway_integration_response.audio_upload_url_options_integration_response.id,
+      # Note: Audio and AI video resources are handled in ai-video-extensions.tf
     ]))
   }
 
