@@ -50,21 +50,68 @@ if [ $? -ne 0 ]; then
 fi
 cd "$PROJECT_ROOT"
 
-# Step 4: Create Lambda layer ZIP using PowerShell
+# Step 4: Create Lambda layer ZIP using PowerShell with retry logic
 echo "🔧 Step 4: Creating Lambda layer ZIP..."
 if [ -f "$LAMBDA_LAYER_ZIP" ]; then
     rm "$LAMBDA_LAYER_ZIP"
 fi
 
+# Wait a moment for any file handles to be released
+sleep 2
+
 # Create the correct Lambda layer structure: nodejs/node_modules/
 # We need to zip the nodejs directory itself, not its contents
 cd "$LAMBDA_LAYER_DIR"
-powershell -Command "Compress-Archive -Path 'nodejs' -DestinationPath '../$LAMBDA_LAYER_ZIP' -Force"
-if [ $? -ne 0 ]; then
-    echo "❌ Failed to create Lambda layer ZIP"
-    cd "$PROJECT_ROOT"
-    exit 1
-fi
+
+# Retry logic for PowerShell compression with better error handling
+echo "   Creating ZIP archive..."
+MAX_RETRIES=3
+RETRY_COUNT=0
+
+while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+    echo "   Attempt $((RETRY_COUNT + 1)) of $MAX_RETRIES..."
+    
+    # More robust PowerShell command with better error handling
+    powershell -Command "
+        try {
+            \$source = 'nodejs'
+            \$destination = '../$LAMBDA_LAYER_ZIP'
+            
+            # Remove destination if it exists
+            if (Test-Path \$destination) {
+                Remove-Item \$destination -Force
+            }
+            
+            # Wait for file system to settle
+            Start-Sleep -Seconds 1
+            
+            # Create archive with compression
+            Compress-Archive -Path \$source -DestinationPath \$destination -CompressionLevel Optimal -Force
+            
+            Write-Host 'Archive created successfully'
+            exit 0
+        } catch {
+            Write-Host \"Error creating archive: \$(\$_.Exception.Message)\"
+            exit 1
+        }
+    "
+    
+    if [ $? -eq 0 ]; then
+        echo "   ✅ ZIP creation successful"
+        break
+    else
+        RETRY_COUNT=$((RETRY_COUNT + 1))
+        if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+            echo "   ⚠️ Retry $RETRY_COUNT failed, waiting 3 seconds before next attempt..."
+            sleep 3
+        else
+            echo "❌ Failed to create Lambda layer ZIP after $MAX_RETRIES attempts"
+            cd "$PROJECT_ROOT"
+            exit 1
+        fi
+    fi
+done
+
 cd "$PROJECT_ROOT"
 
 echo "✅ Lambda layer ZIP created: $LAMBDA_LAYER_ZIP"

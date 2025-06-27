@@ -940,6 +940,8 @@ resource "aws_lambda_permission" "admin_api_gateway_lambda" {
   source_arn    = "${aws_api_gateway_rest_api.video_api.execution_arn}/*/*"
 }
 
+# AI Video Infrastructure is defined in ai-video-extensions.tf
+
 # API Gateway deployment
 resource "aws_api_gateway_deployment" "video_api_deployment" {
   depends_on = [
@@ -1229,4 +1231,4 @@ resource "aws_api_gateway_method" "admin_user_videos_options" {
   resource_id   = aws_api_gateway_resource.admin_user_videos_sub_resource.id
   http_method   = "OPTIONS"
   authorization = "NONE"
-} 
+}
