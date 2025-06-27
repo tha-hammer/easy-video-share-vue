@@ -8,16 +8,19 @@ A secure video sharing application built with Vue 3, AWS Cognito authentication,
 - **IAM Role-based Backend** - Secure Lambda execution
 - **Presigned URL Uploads** - Direct-to-S3 without exposing keys
 - **No AWS Access Keys** - Modern authentication throughout
+- **CI/CD with OIDC** - GitHub Actions deployment without storing AWS keys
 
 ## 🚀 Quick Start
 
 ### Prerequisites
 
 - Node.js 18+ and npm
-- AWS CLI (for deployment)
+- AWS CLI (for manual deployment) or GitHub repository (for CI/CD)
 - Terraform (for infrastructure)
 
-### 1. Infrastructure Setup
+### Option A: Manual Deployment
+
+#### 1. Infrastructure Setup
 
 ```bash
 # Deploy AWS infrastructure
@@ -30,7 +33,7 @@ cd ../scripts
 ./setup-frontend.sh
 ```
 
-### 2. Frontend Development
+#### 2. Frontend Development
 
 ```bash
 # Install dependencies
@@ -40,7 +43,7 @@ npm install
 npm run dev
 ```
 
-### 3. Production Build
+#### 3. Production Build
 
 ```bash
 # Build for production (no deployment)
@@ -50,29 +53,40 @@ npm run build-only
 ./scripts/build-frontend.sh
 ```
 
-### 4. Deployment Options
+#### 4. Manual Deployment Options
 
-#### Option A: Terraform-Generated Script (Recommended)
+See the deployment options in the build script output or use the Terraform-generated deployment script.
+
+### Option B: CI/CD Deployment (Recommended)
+
+For automated deployment with GitHub Actions:
+
+#### 1. Setup CI/CD Pipeline
 
 ```bash
+# 1. Update terraform/terraform.tfvars with your GitHub repository
+echo 'github_repository = "your-username/easy-video-share-vue"' >> terraform/terraform.tfvars
+
+# 2. Deploy infrastructure with OIDC provider
 cd terraform
-terraform apply  # Creates deployment script
-powershell -ExecutionPolicy Bypass -File deploy-frontend-manual.ps1
+terraform apply
+
+# 3. Get the GitHub Actions role ARN
+terraform output github_actions_role_arn
+
+# 4. Add the role ARN as GitHub repository secret: AWS_ROLE_TO_ASSUME
 ```
 
-#### Option B: AWS CloudShell
+#### 2. Automated Deployment
 
-- Upload your `dist/` folder to AWS CloudShell
-- Run AWS CLI commands from there with built-in credentials
+```bash
+# Push changes to trigger deployment
+git add .
+git commit -m "Deploy via CI/CD"
+git push origin main
+```
 
-#### Option C: Manual Upload
-
-- Use AWS S3 Console to upload `dist/` files to your bucket
-
-#### Option D: CI/CD Pipeline
-
-- Set up GitHub Actions or similar with IAM role assumption
-- Configure automated deployment from git pushes
+**📖 Detailed CI/CD Setup**: See [CICD-SETUP.md](./CICD-SETUP.md) for complete instructions.
 
 ## 📁 Project Structure
 

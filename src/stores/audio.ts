@@ -1,7 +1,16 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import AudioService from '@/core/services/AudioService'
-import type { AudioMetadata, AudioUploadParams } from '@/core/services/AudioService'
+import type { AudioMetadata } from '@/core/services/AudioService'
+import { useAudioUpload } from '@/composables/useAudioUpload'
+
+// Audio upload parameters for store usage
+interface AudioUploadParams {
+  title: string
+  description?: string
+  file: File
+  onProgress?: (progress: number) => void
+}
 
 // Upload progress tracking for audio
 interface AudioUploadProgress {
@@ -23,11 +32,12 @@ export const useAudioStore = defineStore('audio', () => {
   const loadUserAudioFiles = async () => {
     try {
       loading.value = true
+      console.log('🔍 Loading user audio files from API...')
       const audioFiles = await AudioService.getUserAudioFiles()
       userAudioFiles.value = audioFiles
-      console.log('Loaded audio files from API:', audioFiles.length)
+      console.log('✅ Loaded audio files from API:', audioFiles.length, audioFiles)
     } catch (error) {
-      console.error('Failed to load user audio files:', error)
+      console.error('❌ Failed to load user audio files:', error)
       throw error
     } finally {
       loading.value = false
@@ -36,54 +46,20 @@ export const useAudioStore = defineStore('audio', () => {
 
   const uploadAudio = async (params: AudioUploadParams): Promise<AudioMetadata> => {
     try {
-      const audioId = `temp-${Date.now()}`
+      // Use the new audio upload composable
+      const { uploadAudio: uploadWithComposable } = useAudioUpload()
 
-      // Initialize upload progress
-      updateUploadProgress(audioId, {
-        audioId,
-        filename: params.file.name,
-        totalSize: params.file.size,
-        uploadedSize: 0,
-        percentage: 0,
-        status: 'uploading',
-      })
+      console.log('📤 Starting audio upload via composable...')
+      // Upload using the composable (which handles presigned URLs)
+      const result = await uploadWithComposable(params.file, params.title)
 
-      // Upload with progress tracking
-      const result = await AudioService.uploadAudio({
-        ...params,
-        onProgress: (percentage) => {
-          updateUploadProgress(audioId, {
-            audioId,
-            filename: params.file.name,
-            totalSize: params.file.size,
-            uploadedSize: Math.round((params.file.size * percentage) / 100),
-            percentage,
-            status: 'uploading',
-          })
-        },
-      })
-
-      // Mark as completed
-      updateUploadProgress(audioId, {
-        audioId,
-        filename: params.file.name,
-        totalSize: params.file.size,
-        uploadedSize: params.file.size,
-        percentage: 100,
-        status: 'completed',
-      })
-
+      console.log('✅ Audio upload completed, adding to store:', result)
       // Add to user audio files
-      addAudioFile(result.audio)
+      addAudioFile(result)
 
-      // Clean up progress after a delay
-      setTimeout(() => {
-        removeUploadProgress(audioId)
-      }, 3000)
-
-      return result.audio
+      return result
     } catch (error) {
-      console.error('Failed to upload audio:', error)
+      console.error('❌ Failed to upload audio:', error)
       throw error
     }
   }
@@ -173,4 +149,4 @@ export const useAudioStore = defineStore('audio', () => {
   }
 })
 
-export type { AudioMetadata, AudioUploadProgress }
+export type { AudioMetadata, AudioUploadProgress, AudioUploadParams }
