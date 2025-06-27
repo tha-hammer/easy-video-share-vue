@@ -285,123 +285,329 @@
         </div>
       </div>
 
-      <!-- Step 3: Processing Animation with Real-time Updates -->
+      <!-- Step 3: AI Processing Progress -->
       <div v-if="currentStep === 3" class="processing-section">
         <div class="text-center mb-10">
-          <h2 class="fw-bolder text-dark">AI Processing Your Audio</h2>
-          <p class="text-muted fs-4">Creating your short-form video script and scene plan...</p>
+          <h2 class="fw-bolder text-dark">AI Video Generation in Progress</h2>
+          <p class="text-muted fs-4">
+            Your audio is being transformed into a stunning AI-generated video
+          </p>
         </div>
 
-        <!-- Processing Animation -->
-        <div class="text-center mb-10">
-          <div class="processing-animation">
-            <div class="ai-brain-animation">
-              <div class="pulse-ring"></div>
-              <div class="pulse-ring delay-1"></div>
-              <div class="pulse-ring delay-2"></div>
-              <KTIcon icon-name="abstract-26" icon-class="fs-5tx text-primary" />
+        <!-- Processing Status -->
+        <div class="card bg-light-primary border-primary mb-8">
+          <div class="card-body">
+            <div class="d-flex align-items-center justify-content-between mb-4">
+              <h5 class="fw-bold text-primary mb-0">Overall Progress</h5>
+              <span class="fw-bold text-primary">{{ getOverallProgress() }}%</span>
+            </div>
+            <div class="progress bg-white" style="height: 15px">
+              <div
+                class="progress-bar bg-primary progress-bar-striped progress-bar-animated"
+                :style="{ width: `${getOverallProgress()}%` }"
+              ></div>
             </div>
           </div>
         </div>
 
-        <!-- Progress Steps -->
-        <div class="row g-6 mb-10">
-          <div class="col-md-3" v-for="step in processingSteps" :key="step.step">
-            <div class="card h-100" :class="getStepCardClass(step)">
+        <!-- Enhanced Processing Steps -->
+        <div v-if="processingStatus?.ai_generation_data?.processing_steps" class="row g-6 mb-8">
+          <div
+            class="col-md-6 col-lg-3"
+            v-for="step in processingStatus.ai_generation_data.processing_steps"
+            :key="step.step"
+          >
+            <div class="card h-100 processing-step-card">
               <div class="card-body text-center">
                 <div class="mb-4">
-                  <div class="symbol symbol-50px mx-auto">
-                    <div class="symbol-label" :class="getStepIconClass(step)">
-                      <i class="fas" :class="getStepIcon(step)"></i>
-                    </div>
+                  <div class="symbol symbol-60px mx-auto" :class="getStepIconClass(step)">
+                    <span class="symbol-label">
+                      <i :class="getStepIcon(step)" :style="{ fontSize: '1.5rem' }"></i>
+                    </span>
                   </div>
                 </div>
-                <h5 class="fw-bold">{{ getStepDisplayName(step.step) }}</h5>
-                <p class="text-muted fs-7 mb-0">{{ getStepDescription(step.step) }}</p>
-                <div class="mt-3">
+                <h6 class="fw-bold mb-2">{{ formatStepName(step.step) }}</h6>
+                <div class="mb-3">
                   <span class="badge" :class="getStepStatusBadge(step)">
                     {{ step.status }}
                   </span>
                 </div>
+                <p class="text-muted fs-7 mb-0">{{ getStepDescription(step.step) }}</p>
+
+                <!-- Enhanced Progress Details for Transcription -->
+                <div v-if="step.step === 'transcription' && step.progress_details" class="mt-3">
+                  <div class="border-top pt-3">
+                    <div class="d-flex justify-content-between text-muted fs-8 mb-1">
+                      <span>AWS Job:</span>
+                      <span>{{ step.progress_details.aws_job_name || 'N/A' }}</span>
+                    </div>
+                    <div class="d-flex justify-content-between text-muted fs-8 mb-1">
+                      <span>Status:</span>
+                      <span>{{ step.progress_details.aws_job_status || 'N/A' }}</span>
+                    </div>
+                    <div
+                      v-if="step.progress_details.poll_count"
+                      class="d-flex justify-content-between text-muted fs-8 mb-1"
+                    >
+                      <span>Poll Count:</span>
+                      <span>{{ step.progress_details.poll_count }}</span>
+                    </div>
+                    <div
+                      v-if="step.progress_details.elapsed_time_seconds"
+                      class="d-flex justify-content-between text-muted fs-8 mb-1"
+                    >
+                      <span>Elapsed:</span>
+                      <span>{{ step.progress_details.elapsed_time_seconds }}s</span>
+                    </div>
+                    <div
+                      v-if="step.progress_details.transcription_summary"
+                      class="mt-2 p-2 bg-light rounded"
+                    >
+                      <div class="d-flex justify-content-between text-muted fs-8 mb-1">
+                        <span>Text Length:</span>
+                        <span>{{
+                          step.progress_details.transcription_summary.full_text_length || 0
+                        }}</span>
+                      </div>
+                      <div class="d-flex justify-content-between text-muted fs-8 mb-1">
+                        <span>Segments:</span>
+                        <span>{{
+                          step.progress_details.transcription_summary.segments_count || 0
+                        }}</span>
+                      </div>
+                      <div class="d-flex justify-content-between text-muted fs-8 mb-1">
+                        <span>Confidence:</span>
+                        <span
+                          >{{
+                            Math.round(
+                              (step.progress_details.transcription_summary.confidence || 0) * 100,
+                            )
+                          }}%</span
+                        >
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
         </div>
 
-        <!-- Overall Progress -->
-        <div class="card bg-light-primary border-primary">
-          <div class="card-body">
-            <div class="d-flex align-items-center justify-content-between mb-4">
-              <h5 class="fw-bold text-primary mb-0">Overall Progress</h5>
-              <span class="fw-bold text-primary">{{ processingProgress }}%</span>
-            </div>
-            <div class="progress bg-white" style="height: 20px">
-              <div
-                class="progress-bar bg-primary progress-bar-striped progress-bar-animated"
-                :style="{ width: `${processingProgress}%` }"
-              ></div>
-            </div>
-            <div class="mt-4 text-center">
-              <p class="fw-bold text-primary mb-1">{{ currentProcessingMessage }}</p>
-              <p class="text-muted fs-7 mb-0">Estimated time remaining: {{ estimatedTime }}</p>
-            </div>
-          </div>
-        </div>
-
-        <!-- Debug Panel (Development Only) -->
-        <div v-if="isDevelopment" class="card bg-light-warning border-warning mt-6">
+        <!-- Enhanced AWS API Response Information -->
+        <div
+          v-if="processingStatus?.ai_generation_data?.aws_api_responses?.transcription_job"
+          class="card bg-light-info border-info mb-8"
+        >
           <div class="card-header">
-            <h6 class="card-title mb-0">Debug Information</h6>
+            <h6 class="card-title mb-0">
+              <i class="fas fa-cloud me-2"></i>
+              AWS Transcribe Job Details
+            </h6>
           </div>
           <div class="card-body">
-            <div class="row g-3">
+            <div class="row g-4">
               <div class="col-md-6">
-                <p class="mb-1"><strong>Current Step:</strong> {{ currentStep }}</p>
-                <p class="mb-1"><strong>Polling Active:</strong> {{ pollingActive }}</p>
-                <p class="mb-1"><strong>Fallback Progress:</strong> {{ fallbackProgress }}%</p>
-                <p class="mb-1">
-                  <strong>API Progress:</strong>
-                  {{ AIVideoService.calculateProgress(processingSteps) }}%
-                </p>
+                <div class="d-flex justify-content-between mb-2">
+                  <span class="fw-semibold">Job Name:</span>
+                  <span class="text-muted">{{
+                    processingStatus.ai_generation_data.aws_api_responses.transcription_job
+                      .job_name || 'N/A'
+                  }}</span>
+                </div>
+                <div class="d-flex justify-content-between mb-2">
+                  <span class="fw-semibold">Status:</span>
+                  <span
+                    class="badge"
+                    :class="
+                      getAWSStatusBadge(
+                        processingStatus.ai_generation_data.aws_api_responses.transcription_job
+                          .status,
+                      )
+                    "
+                  >
+                    {{
+                      processingStatus.ai_generation_data.aws_api_responses.transcription_job
+                        .status || 'N/A'
+                    }}
+                  </span>
+                </div>
+                <div class="d-flex justify-content-between mb-2">
+                  <span class="fw-semibold">Created:</span>
+                  <span class="text-muted">{{
+                    formatAWSDate(
+                      processingStatus.ai_generation_data.aws_api_responses.transcription_job
+                        .creation_time,
+                    )
+                  }}</span>
+                </div>
               </div>
               <div class="col-md-6">
-                <p class="mb-1">
-                  <strong>Processing Status:</strong>
-                  {{ processingStatus?.ai_generation_status || 'none' }}
-                </p>
-                <p class="mb-1"><strong>Processing Steps:</strong> {{ processingSteps.length }}</p>
-                <p class="mb-1">
-                  <strong>Last Successful Poll:</strong>
-                  {{
-                    lastSuccessfulPoll ? new Date(lastSuccessfulPoll).toLocaleTimeString() : 'never'
-                  }}
-                </p>
-                <p class="mb-1">
-                  <strong>Selected Audio:</strong> {{ selectedAudio?.audio_id || 'none' }}
+                <div class="d-flex justify-content-between mb-2">
+                  <span class="fw-semibold">Completed:</span>
+                  <span class="text-muted">{{
+                    formatAWSDate(
+                      processingStatus.ai_generation_data.aws_api_responses.transcription_job
+                        .completion_time,
+                    )
+                  }}</span>
+                </div>
+                <div class="d-flex justify-content-between mb-2">
+                  <span class="fw-semibold">Output Location:</span>
+                  <span class="text-muted fs-8">{{
+                    processingStatus.ai_generation_data.aws_api_responses.transcription_job
+                      .output_location || 'N/A'
+                  }}</span>
+                </div>
+                <div
+                  v-if="
+                    processingStatus.ai_generation_data.aws_api_responses.transcription_job
+                      .failure_reason
+                  "
+                  class="d-flex justify-content-between mb-2"
+                >
+                  <span class="fw-semibold text-danger">Failure Reason:</span>
+                  <span class="text-danger fs-8">{{
+                    processingStatus.ai_generation_data.aws_api_responses.transcription_job
+                      .failure_reason
+                  }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Transcription Results Preview -->
+        <div
+          v-if="processingStatus?.ai_generation_data?.audio_transcription"
+          class="card bg-light-success border-success mb-8"
+        >
+          <div class="card-header">
+            <h6 class="card-title mb-0">
+              <i class="fas fa-microphone me-2"></i>
+              Transcription Results
+            </h6>
+          </div>
+          <div class="card-body">
+            <div class="row g-4 mb-4">
+              <div class="col-md-3">
+                <div class="text-center">
+                  <div class="fw-bold text-success fs-3">
+                    {{ processingStatus.ai_generation_data.audio_transcription.full_text.length }}
+                  </div>
+                  <div class="text-muted fs-7">Characters</div>
+                </div>
+              </div>
+              <div class="col-md-3">
+                <div class="text-center">
+                  <div class="fw-bold text-success fs-3">
+                    {{ processingStatus.ai_generation_data.audio_transcription.segments.length }}
+                  </div>
+                  <div class="text-muted fs-7">Segments</div>
+                </div>
+              </div>
+              <div class="col-md-3">
+                <div class="text-center">
+                  <div class="fw-bold text-success fs-3">
+                    {{
+                      Math.round(
+                        processingStatus.ai_generation_data.audio_transcription.confidence * 100,
+                      )
+                    }}%
+                  </div>
+                  <div class="text-muted fs-7">Confidence</div>
+                </div>
+              </div>
+              <div class="col-md-3">
+                <div class="text-center">
+                  <div class="fw-bold text-success fs-3">
+                    {{ processingStatus.ai_generation_data.audio_transcription.language_code }}
+                  </div>
+                  <div class="text-muted fs-7">Language</div>
+                </div>
+              </div>
+            </div>
+            <div class="border-top pt-4">
+              <h6 class="fw-bold mb-3">Transcribed Text Preview:</h6>
+              <div class="bg-white p-3 rounded border">
+                <p class="text-muted mb-0 fst-italic">
+                  "{{
+                    processingStatus.ai_generation_data.audio_transcription.full_text.substring(
+                      0,
+                      200,
+                    )
+                  }}{{
+                    processingStatus.ai_generation_data.audio_transcription.full_text.length > 200
+                      ? '...'
+                      : ''
+                  }}"
                 </p>
               </div>
             </div>
-            <div class="mt-3">
-              <button
-                class="btn btn-sm btn-warning me-2"
-                @click="manualRefresh"
-                :disabled="!processingStatus?.video_id"
-              >
-                <KTIcon icon-name="arrow-clockwise" icon-class="fs-4 me-1" />
-                Manual Refresh
-              </button>
-              <button class="btn btn-sm btn-info" @click="stopPolling" :disabled="!pollingActive">
-                <KTIcon icon-name="stop" icon-class="fs-4 me-1" />
-                Stop Polling
-              </button>
-              <button class="btn btn-sm btn-danger ms-2" @click="resetComponent">
-                <KTIcon icon-name="cross" icon-class="fs-4 me-1" />
-                Reset Component
-              </button>
-              <button class="btn btn-sm btn-success ms-2" @click="testEndpoints">
-                <KTIcon icon-name="abstract-26" icon-class="fs-4 me-1" />
-                Test Endpoints
-              </button>
+          </div>
+        </div>
+
+        <!-- Processing Animation -->
+        <div class="text-center mb-8">
+          <div class="processing-animation mb-4">
+            <div class="ai-brain-animation">
+              <i class="fas fa-brain text-primary" style="font-size: 4rem"></i>
+              <div class="pulse-ring"></div>
+              <div class="pulse-ring delay-1"></div>
+              <div class="pulse-ring delay-2"></div>
+            </div>
+          </div>
+          <h5 class="fw-bold text-primary mb-2">{{ getCurrentStepMessage() }}</h5>
+          <p class="text-muted mb-0">Estimated time remaining: {{ getEstimatedTime() }}</p>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="text-center">
+          <button
+            class="btn btn-light-primary me-3"
+            @click="manualRefresh"
+            :disabled="!pollingActive"
+          >
+            <KTIcon icon-name="arrow-clockwise" icon-class="fs-4 me-2" />
+            Refresh Status
+          </button>
+          <button class="btn btn-danger" @click="stopPolling">
+            <KTIcon icon-name="cross" icon-class="fs-4 me-2" />
+            Cancel Generation
+          </button>
+        </div>
+
+        <!-- Debug Information (Development Only) -->
+        <div v-if="isDevelopment" class="mt-8">
+          <div class="card bg-light-warning border-warning">
+            <div class="card-header">
+              <h6 class="card-title mb-0">
+                <i class="fas fa-bug me-2"></i>
+                Debug Information
+              </h6>
+            </div>
+            <div class="card-body">
+              <div class="row g-4">
+                <div class="col-md-6">
+                  <h6 class="fw-bold mb-2">Processing Status:</h6>
+                  <pre class="bg-white p-2 rounded border fs-8">{{
+                    JSON.stringify(processingStatus?.ai_generation_status, null, 2)
+                  }}</pre>
+                </div>
+                <div class="col-md-6">
+                  <h6 class="fw-bold mb-2">Last Poll:</h6>
+                  <pre class="bg-white p-2 rounded border fs-8">{{
+                    lastSuccessfulPoll ? lastSuccessfulPoll.toISOString() : 'Never'
+                  }}</pre>
+                </div>
+                <div class="col-12">
+                  <h6 class="fw-bold mb-2">Full Status Data:</h6>
+                  <pre
+                    class="bg-white p-2 rounded border fs-8"
+                    style="max-height: 200px; overflow-y: auto"
+                    >{{ JSON.stringify(processingStatus, null, 2) }}</pre
+                  >
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -697,11 +903,11 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useAudioStore } from '@/stores/audio'
-import AudioService from '@/core/services/AudioService'
-import AIVideoService from '@/core/services/AIVideoService'
-import { API_CONFIG } from '@/core/config/config'
-import type { AIVideoGenerationRequest, VideoMetadata } from '@/core/services/AIVideoService'
-import type { AudioMetadata } from '@/core/services/AudioService'
+import AIVideoService, {
+  type AIVideoGenerationRequest,
+  type VideoMetadata,
+} from '@/core/services/AIVideoService'
+import AudioService, { type AudioMetadata } from '@/core/services/AudioService'
 import KTIcon from '@/core/helpers/kt-icon/KTIcon.vue'
 
 // Stores
@@ -710,6 +916,14 @@ const audioStore = useAudioStore()
 // Component state
 const currentStep = ref(1)
 const selectedAudio = ref<AudioMetadata | null>(null)
+const processingStatus = ref<VideoMetadata | null>(null)
+const generatedVideo = ref<VideoMetadata | null>(null)
+const fallbackProgress = ref(0)
+const lastSuccessfulPoll = ref<Date | null>(null)
+const pollingActive = ref(false)
+const pollingInterval = ref<NodeJS.Timeout | null>(null)
+
+// Upload state
 const audioUploading = ref(false)
 const currentUploadFile = ref<File | null>(null)
 const uploadProgress = ref(0)
@@ -717,6 +931,7 @@ const uploadedBytes = ref(0)
 const totalBytes = ref(0)
 const audioFileInput = ref<HTMLInputElement | null>(null)
 
+// AI Configuration
 const aiConfig = ref({
   prompt:
     'Create an engaging vertical video optimized for social media with dynamic visuals and modern aesthetics',
@@ -724,44 +939,15 @@ const aiConfig = ref({
   style: 'cinematic',
 })
 
-const processingStatus = ref<VideoMetadata | null>(null)
-const generatedVideo = ref<VideoMetadata | null>(null)
-const pollingInterval = ref<NodeJS.Timeout | null>(null)
-const pollingActive = ref(false)
-const fallbackProgress = ref(0)
-const lastSuccessfulPoll = ref<Date | null>(null)
-
 // Computed properties
 const userAudioFiles = computed(() => audioStore.userAudioFiles)
-
-const supportedFormats = computed(() => AudioService.getSupportedFormats())
+const supportedFormats = ['MP3', 'WAV', 'M4A', 'AAC', 'OGG', 'FLAC']
+const supportedDurations = AIVideoService.getSupportedDurations()
+const videoStyles = AIVideoService.getVideoStyles()
 
 const processingSteps = computed(
   () => processingStatus.value?.ai_generation_data?.processing_steps || [],
 )
-
-const processingProgress = computed(() => {
-  const apiProgress = AIVideoService.calculateProgress(processingSteps.value)
-  // Use fallback progress if API progress is 0 and we're actively polling
-  return pollingActive.value && apiProgress === 0 ? fallbackProgress.value : apiProgress
-})
-
-const currentProcessingMessage = computed(() => {
-  const apiMessage = AIVideoService.getCurrentStepMessage(processingSteps.value)
-  // Use fallback message if no API data and we're polling
-  if (pollingActive.value && (!processingSteps.value || processingSteps.value.length === 0)) {
-    const timeSinceLastPoll = lastSuccessfulPoll.value
-      ? Math.floor((Date.now() - lastSuccessfulPoll.value.getTime()) / 1000)
-      : 0
-
-    if (timeSinceLastPoll > 30) {
-      return 'Connecting to AI services...'
-    } else {
-      return 'Initializing AI processing...'
-    }
-  }
-  return apiMessage
-})
 
 const scenePlan = computed(() => processingStatus.value?.ai_generation_data?.scene_beats || null)
 
@@ -776,10 +962,6 @@ const finalVideoUrl = computed(
 const estimatedTime = computed(() =>
   AIVideoService.getEstimatedTime(processingSteps.value, aiConfig.value.targetDuration),
 )
-
-const videoStyles = computed(() => AIVideoService.getVideoStyles())
-
-const supportedDurations = computed(() => AIVideoService.getSupportedDurations())
 
 // Development mode check
 const isDevelopment = computed(() => import.meta.env.DEV)
@@ -1052,6 +1234,164 @@ const getStatusText = () => {
   }
 }
 
+const getOverallProgress = () => {
+  if (!processingStatus.value?.ai_generation_data?.processing_steps) {
+    return fallbackProgress.value
+  }
+
+  const steps = processingStatus.value.ai_generation_data.processing_steps
+  const completedSteps = steps.filter((step) => step.status === 'completed').length
+  const totalSteps = steps.length
+
+  if (totalSteps === 0) return fallbackProgress.value
+
+  const progress = Math.round((completedSteps / totalSteps) * 100)
+  return Math.max(progress, fallbackProgress.value)
+}
+
+const getCurrentStepMessage = () => {
+  if (!processingStatus.value?.ai_generation_data?.processing_steps) {
+    return 'Initializing...'
+  }
+
+  const currentStep = processingStatus.value.ai_generation_data.processing_steps.find(
+    (step) => step.status === 'processing',
+  )
+
+  if (currentStep) {
+    return `Currently ${formatStepName(currentStep.step).toLowerCase()}...`
+  }
+
+  const completedSteps = processingStatus.value.ai_generation_data.processing_steps.filter(
+    (step) => step.status === 'completed',
+  )
+
+  if (completedSteps.length === processingStatus.value.ai_generation_data.processing_steps.length) {
+    return 'Finalizing your video...'
+  }
+
+  return 'Processing...'
+}
+
+const getEstimatedTime = () => {
+  if (!processingStatus.value?.ai_generation_data?.processing_steps) {
+    return 'Unknown'
+  }
+
+  const steps = processingStatus.value.ai_generation_data.processing_steps
+  const completedSteps = steps.filter((step) => step.status === 'completed').length
+  const totalSteps = steps.length
+
+  if (totalSteps === 0) return 'Unknown'
+
+  const remainingSteps = totalSteps - completedSteps
+  const estimatedTimePerStep = 60 // seconds
+  const totalSeconds = remainingSteps * estimatedTimePerStep
+
+  if (totalSeconds < 60) {
+    return `${totalSeconds} seconds`
+  } else if (totalSeconds < 3600) {
+    return `${Math.round(totalSeconds / 60)} minutes`
+  } else {
+    return `${Math.round(totalSeconds / 3600)} hours`
+  }
+}
+
+const formatStepName = (step: string) => {
+  switch (step) {
+    case 'transcription':
+      return 'Audio Transcription'
+    case 'scene_planning':
+      return 'Scene Planning'
+    case 'video_generation':
+      return 'Video Generation'
+    case 'finalization':
+      return 'Finalization'
+    default:
+      return step.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase())
+  }
+}
+
+const getStepDescription = (step: string) => {
+  switch (step) {
+    case 'transcription':
+      return 'Converting audio to text with high accuracy'
+    case 'scene_planning':
+      return 'Creating intelligent scene breakdown'
+    case 'video_generation':
+      return 'Generating video scenes with AI'
+    case 'finalization':
+      return 'Assembling final video'
+    default:
+      return 'Processing step'
+  }
+}
+
+const getStepStatusBadge = (step: { status: string }) => {
+  switch (step.status) {
+    case 'completed':
+      return 'badge-light-success'
+    case 'processing':
+      return 'badge-light-warning'
+    case 'failed':
+      return 'badge-light-danger'
+    default:
+      return 'badge-light-secondary'
+  }
+}
+
+const getStepIcon = (step: { step: string; status: string }) => {
+  switch (step.step) {
+    case 'transcription':
+      return 'fas fa-microphone'
+    case 'scene_planning':
+      return 'fas fa-film'
+    case 'video_generation':
+      return 'fas fa-video'
+    case 'finalization':
+      return 'fas fa-check-circle'
+    default:
+      return 'fas fa-cog'
+  }
+}
+
+const getStepIconClass = (step: { step: string; status: string }) => {
+  switch (step.status) {
+    case 'completed':
+      return 'bg-light-success'
+    case 'processing':
+      return 'bg-light-warning'
+    case 'failed':
+      return 'bg-light-danger'
+    default:
+      return 'bg-light-secondary'
+  }
+}
+
+const getAWSStatusBadge = (status: string) => {
+  switch (status) {
+    case 'COMPLETED':
+      return 'badge-light-success'
+    case 'IN_PROGRESS':
+      return 'badge-light-warning'
+    case 'FAILED':
+      return 'badge-light-danger'
+    case 'QUEUED':
+      return 'badge-light-info'
+    default:
+      return 'badge-light-secondary'
+  }
+}
+
+const formatAWSDate = (dateString: string) => {
+  if (!dateString) return 'N/A'
+  try {
+    return new Date(dateString).toLocaleString()
+  } catch {
+    return dateString
+  }
+}
+
 const getSceneStatusBadge = (scene: { status: string }) => {
   switch (scene.status) {
     case 'completed':
@@ -1149,90 +1489,6 @@ const createAnother = () => {
   stopPolling()
 }
 
-// Missing methods that are called in the template
-const getStepCardClass = (step: { status: string }) => {
-  switch (step.status) {
-    case 'completed':
-      return 'border-success bg-light-success'
-    case 'processing':
-      return 'border-warning bg-light-warning'
-    case 'failed':
-      return 'border-danger bg-light-danger'
-    default:
-      return 'border-light bg-light'
-  }
-}
-
-const getStepIconClass = (step: { status: string }) => {
-  switch (step.status) {
-    case 'completed':
-      return 'bg-success'
-    case 'processing':
-      return 'bg-warning'
-    case 'failed':
-      return 'bg-danger'
-    default:
-      return 'bg-light'
-  }
-}
-
-const getStepIcon = (step: { step: string; status: string }) => {
-  if (step.status === 'failed') return 'fa-times'
-  if (step.status === 'completed') return 'fa-check'
-  if (step.status === 'processing') return 'fa-spinner fa-spin'
-
-  // Default icons based on step type
-  switch (step.step) {
-    case 'transcription':
-      return 'fa-microphone'
-    case 'scene_planning':
-      return 'fa-lightbulb'
-    case 'video_generation':
-      return 'fa-video'
-    default:
-      return 'fa-cog'
-  }
-}
-
-const getStepDisplayName = (step: string) => {
-  switch (step) {
-    case 'transcription':
-      return 'Audio Transcription'
-    case 'scene_planning':
-      return 'Scene Planning'
-    case 'video_generation':
-      return 'Video Generation'
-    default:
-      return step.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase())
-  }
-}
-
-const getStepDescription = (step: string) => {
-  switch (step) {
-    case 'transcription':
-      return 'Converting audio to text with high accuracy'
-    case 'scene_planning':
-      return 'Creating intelligent scene breakdown'
-    case 'video_generation':
-      return 'Generating video scenes with AI'
-    default:
-      return 'Processing step'
-  }
-}
-
-const getStepStatusBadge = (step: { status: string }) => {
-  switch (step.status) {
-    case 'completed':
-      return 'badge-light-success'
-    case 'processing':
-      return 'badge-light-warning'
-    case 'failed':
-      return 'badge-light-danger'
-    default:
-      return 'badge-light-secondary'
-  }
-}
-
 // Lifecycle
 onMounted(async () => {
   await audioStore.loadUserAudioFiles()
@@ -1263,102 +1519,6 @@ const manualRefresh = async () => {
   } catch (error) {
     console.error('❌ Manual refresh failed:', error)
     alert(`Manual refresh failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
-  }
-}
-
-const resetComponent = () => {
-  console.log('🔄 Resetting component state')
-
-  // Stop polling
-  stopPolling()
-
-  // Reset all state
-  currentStep.value = 1
-  selectedAudio.value = null
-  processingStatus.value = null
-  generatedVideo.value = null
-  fallbackProgress.value = 0
-  lastSuccessfulPoll.value = null
-  pollingActive.value = false
-
-  // Reset upload state
-  audioUploading.value = false
-  currentUploadFile.value = null
-  uploadProgress.value = 0
-  uploadedBytes.value = 0
-  totalBytes.value = 0
-
-  // Reset AI config
-  aiConfig.value = {
-    prompt:
-      'Create an engaging vertical video optimized for social media with dynamic visuals and modern aesthetics',
-    targetDuration: 30,
-    style: 'cinematic',
-  }
-
-  console.log('✅ Component reset complete')
-  alert('Component has been reset to initial state')
-}
-
-const testEndpoints = async () => {
-  console.log('🚀 Testing AI video API endpoints')
-
-  try {
-    // Test 1: Check if we can get auth headers
-    console.log('🔑 Testing authentication...')
-    const headers = await AIVideoService['getAuthHeaders']()
-    console.log('✅ Auth headers obtained:', !!headers.Authorization)
-
-    // Test 2: Test the base URL
-    const baseUrl = `${API_CONFIG.baseUrl}/ai-video`
-    console.log('🌐 Testing base URL:', baseUrl)
-
-    // Test 3: Make a simple OPTIONS request to check CORS
-    console.log('🔄 Testing CORS with OPTIONS request...')
-    const optionsResponse = await fetch(baseUrl, {
-      method: 'OPTIONS',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    })
-    console.log('✅ OPTIONS response status:', optionsResponse.status)
-
-    // Test 4: Try to make a POST request with minimal data
-    console.log('📤 Testing POST endpoint...')
-    const testRequest = {
-      audioId: 'test-audio-id',
-      prompt: 'Test prompt',
-      targetDuration: 30,
-      style: 'cinematic',
-    }
-
-    const postResponse = await fetch(baseUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: headers.Authorization,
-      },
-      body: JSON.stringify(testRequest),
-    })
-
-    console.log('✅ POST response status:', postResponse.status)
-
-    if (postResponse.ok) {
-      const postData = await postResponse.json()
-      console.log('✅ POST response data:', postData)
-      alert(
-        `✅ Endpoints are working!\n\nPOST Status: ${postResponse.status}\nResponse: ${JSON.stringify(postData, null, 2)}`,
-      )
-    } else {
-      const errorText = await postResponse.text()
-      console.log('❌ POST error response:', errorText)
-      alert(`❌ POST endpoint failed!\n\nStatus: ${postResponse.status}\nError: ${errorText}`)
-    }
-  } catch (error) {
-    console.error('❌ Endpoint test failed:', error)
-    alert(
-      `❌ Endpoint test failed!\n\nError: ${error instanceof Error ? error.message : 'Unknown error'}`,
-    )
   }
 }
 </script>

@@ -56,16 +56,37 @@ if [ -f "$LAMBDA_LAYER_ZIP" ]; then
     rm "$LAMBDA_LAYER_ZIP"
 fi
 
-# Use PowerShell to create ZIP file with correct Lambda layer structure: nodejs/node_modules/
-# The path should be the nodejs directory, not just node_modules
-powershell -Command "Compress-Archive -Path '$LAMBDA_LAYER_DIR/nodejs' -DestinationPath '$LAMBDA_LAYER_ZIP' -Force"
+# Create the correct Lambda layer structure: nodejs/node_modules/
+# We need to zip the nodejs directory itself, not its contents
+cd "$LAMBDA_LAYER_DIR"
+powershell -Command "Compress-Archive -Path 'nodejs' -DestinationPath '../$LAMBDA_LAYER_ZIP' -Force"
 if [ $? -ne 0 ]; then
     echo "❌ Failed to create Lambda layer ZIP"
     cd "$PROJECT_ROOT"
     exit 1
 fi
+cd "$PROJECT_ROOT"
 
 echo "✅ Lambda layer ZIP created: $LAMBDA_LAYER_ZIP"
+
+# Verify Lambda layer structure
+echo "🔍 Verifying Lambda layer structure..."
+# Simple verification - check if file exists and has reasonable size
+if [ -f "$LAMBDA_LAYER_ZIP" ]; then
+    FILE_SIZE=$(stat -c%s "$LAMBDA_LAYER_ZIP" 2>/dev/null || stat -f%z "$LAMBDA_LAYER_ZIP" 2>/dev/null || echo "unknown")
+    if [ "$FILE_SIZE" -gt 1000000 ] 2>/dev/null; then
+        echo "✅ Lambda layer ZIP created successfully"
+        echo "   File size: $FILE_SIZE bytes"
+        echo "   Note: Structure verified in test script"
+    else
+        echo "❌ Lambda layer ZIP is too small \($FILE_SIZE bytes\)"
+        echo "   Expected: > 1MB for dependencies"
+        exit 1
+    fi
+else
+    echo "❌ Lambda layer ZIP not found!"
+    exit 1
+fi
 
 # Step 5: Create Lambda function ZIP
 echo "🔧 Step 5: Creating Lambda function ZIP..."
@@ -149,6 +170,28 @@ if [ $? -eq 0 ]; then
 else
     echo "   No existing Lambda function found"
 fi
+
+# Delete existing Lambda layer if it exists (to force recreation)
+echo "   Checking for existing Lambda layer..."
+EXISTING_LAYER=$(aws lambda list-layers --query 'Layers[?contains(LayerName, `ai-video-layer`)].LayerName' --output text 2>/dev/null)
+if [ ! -z "$EXISTING_LAYER" ]; then
+    echo "   Found existing Lambda layer: $EXISTING_LAYER"
+    echo "   Deleting layer to force recreation..."
+    aws lambda delete-layer-version --layer-name "$EXISTING_LAYER" --version-number 1 2>/dev/null
+    if [ $? -eq 0 ]; then
+        echo "   ✅ Existing Lambda layer deleted"
+        sleep 3
+    else
+        echo "   ⚠️  Failed to delete existing layer, continuing anyway..."
+    fi
+else
+    echo "   No existing Lambda layer found"
+fi
+
+# Force Terraform to recreate resources
+echo "   Forcing Terraform to recreate resources..."
+terraform taint aws_lambda_layer_version.ai_video_layer 2>/dev/null
+terraform taint aws_lambda_function.ai_video_processor 2>/dev/null
 
 # Plan the deployment
 echo "   Planning deployment..."

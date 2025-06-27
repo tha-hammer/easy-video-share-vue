@@ -16,6 +16,18 @@ export interface ProcessingStep {
   started_at?: string
   completed_at?: string
   error_message?: string
+  progress_details?: {
+    aws_job_name?: string
+    aws_job_status?: string
+    poll_count?: number
+    elapsed_time_seconds?: number
+    transcription_summary?: {
+      full_text_length?: number
+      segments_count?: number
+      confidence?: number
+      language_code?: string
+    }
+  }
 }
 
 export interface TranscriptSegment {
@@ -42,6 +54,17 @@ export interface AIGenerationData {
     segments: TranscriptSegment[]
     confidence: number
     language_code: string
+    speaker_labels?: Array<{
+      speaker_label: string
+      start_time: number
+      end_time: number
+      items: Array<{
+        start_time: number
+        end_time: number
+        speaker_label: string
+      }>
+    }>
+    created_at: string
   }
   scene_beats?: {
     overall_theme: string
@@ -70,6 +93,17 @@ export interface AIGenerationData {
   target_duration?: number
   style?: string
   error_message?: string
+  correlation_id?: string
+  aws_api_responses?: {
+    transcription_job?: {
+      job_name?: string
+      status?: string
+      creation_time?: string
+      completion_time?: string
+      failure_reason?: string
+      output_location?: string
+    }
+  }
 }
 
 export interface VideoMetadata {
