@@ -226,8 +226,6 @@ class AIVideoService {
 
       console.log('🌐 Making GET request to:', url)
       console.log('🌐 Request headers:', JSON.stringify(headers, null, 2))
-      console.log('🌐 Video ID:', videoId)
-      console.log('🌐 API_CONFIG.baseUrl:', API_CONFIG.baseUrl)
 
       const response = await fetch(url, {
         method: 'GET',
@@ -235,7 +233,6 @@ class AIVideoService {
       })
 
       console.log('🌐 Response status:', response.status, response.statusText)
-      console.log('🌐 Response headers:', Object.fromEntries(response.headers.entries()))
 
       if (!response.ok) {
         const responseText = await response.text()
@@ -249,21 +246,61 @@ class AIVideoService {
       // Handle API Gateway Lambda proxy response format
       if (data.body) {
         const body = typeof data.body === 'string' ? JSON.parse(data.body) : data.body
-        console.log('🌐 Parsed body from API Gateway:', JSON.stringify(body, null, 2))
         return body
       }
 
       return data
-    } catch (error: unknown) {
-      console.error('AI video status error:', error)
+    } catch (error) {
+      console.error('❌ Error getting AI video status:', error)
+      throw error
+    }
+  }
 
-      if (error && typeof error === 'object' && 'response' in error) {
-        const apiError = error as { response?: { data?: { error?: string } } }
-        const errorMessage = apiError.response?.data?.error || 'Failed to get AI video status'
-        throw new Error(errorMessage)
+  /**
+   * Poll AWS Transcribe job status for real-time progress updates
+   */
+  public static async pollTranscriptionStatus(videoId: string): Promise<{
+    success: boolean
+    job_status: string
+    elapsed_seconds: number
+    poll_count: number
+    transcription_results?: any
+  }> {
+    try {
+      const headers = await this.getAuthHeaders()
+      const url = `${API_CONFIG.baseUrl}/ai-video/${videoId}/poll-transcription`
+
+      console.log('🔄 Making POST request to poll transcription:', url)
+      console.log('🔄 Request headers:', JSON.stringify(headers, null, 2))
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers,
+      })
+
+      console.log('🔄 Response status:', response.status, response.statusText)
+
+      if (!response.ok) {
+        const responseText = await response.text()
+        console.log('🔄 Error response body:', responseText)
+        throw new Error(
+          `Failed to poll transcription status: ${response.statusText} - ${responseText}`,
+        )
       }
 
-      throw new Error('Failed to get AI video status')
+      const data = await response.json()
+      console.log('🔄 Polling response data:', JSON.stringify(data, null, 2))
+
+      // Handle API Gateway Lambda proxy response format
+      if (data.body) {
+        const body = typeof data.body === 'string' ? JSON.parse(data.body) : data.body
+        return body
+      }
+
+      return data
+    } catch (error) {
+      console.error('❌ Error polling transcription status:', error)
+      throw error
     }
   }
 

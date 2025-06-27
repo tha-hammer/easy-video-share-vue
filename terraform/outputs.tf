@@ -111,4 +111,16 @@ output "api_audio_endpoint" {
 output "api_audio_upload_endpoint" {
   description = "Full API endpoint for audio upload URL generation"
   value       = "https://${aws_api_gateway_rest_api.video_api.id}.execute-api.${var.aws_region}.amazonaws.com/${var.environment}/audio/upload-url"
+}
+
+# AI Video Lambda Function
+output "ai_video_lambda_function_name" {
+  description = "Name of the AI video processing Lambda function"
+  value       = aws_lambda_function.ai_video_processor.function_name
+}
+
+# AI Video API Endpoints
+output "api_ai_video_endpoint" {
+  description = "Full API endpoint for AI video operations"
+  value       = "https://${aws_api_gateway_rest_api.video_api.id}.execute-api.${var.aws_region}.amazonaws.com/${var.environment}/ai-video"
 } 

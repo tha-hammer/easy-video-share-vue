@@ -161,8 +161,6 @@ exports.handler = async (event) => {
     // Handle POST to /ai-video (start generation)
     if (httpMethod === 'POST' && path.includes('ai-video') && !videoId) {
       console.log('🎬 Handling AI video generation request')
-      console.log('🔧 Initializing Google Cloud for AI processing...')
-      await initializeGoogleCloud()
       const response = await handleAIVideoGeneration(event, userId)
       console.log('📤 Generation Response:', JSON.stringify(response, null, 2))
       return response
@@ -173,6 +171,19 @@ exports.handler = async (event) => {
       console.log('📊 Handling AI video status request for video:', videoId)
       const response = await handleGetAIVideoStatus(event, userId, videoId)
       console.log('📤 Status Response:', JSON.stringify(response, null, 2))
+      return response
+    }
+
+    // Handle POST to /ai-video/{videoId}/poll-transcription (poll AWS job status)
+    if (
+      httpMethod === 'POST' &&
+      path.includes('ai-video') &&
+      videoId &&
+      path.includes('poll-transcription')
+    ) {
+      console.log('🔄 Handling transcription polling request for video:', videoId)
+      const response = await handlePollTranscription(event, userId, videoId)
+      console.log('📤 Polling Response:', JSON.stringify(response, null, 2))
       return response
     }
 
@@ -279,11 +290,33 @@ async function handleAIVideoGeneration(event, userId) {
   // Start asynchronous processing (non-blocking)
   console.log(`🚀 About to start async processing for video: ${videoId}`)
   processAIVideoAsync(videoId, userId, body).catch((error) => {
-    console.error('Async processing error:', error)
+    console.error('❌ Async processing error:', error)
+    console.error('❌ Error stack:', error.stack)
+
+    // Update the status to failed immediately
     updateAIGenerationStatus(videoId, 'failed', {
       error_message: error.message,
       failed_at: new Date().toISOString(),
+      error_stack: error.stack,
+    }).catch((updateError) => {
+      console.error('❌ Failed to update status to failed:', updateError)
     })
+
+    // Also update the current processing step to failed
+    getCurrentProcessingStep(videoId)
+      .then((currentStep) => {
+        if (currentStep) {
+          updateProcessingStep(videoId, currentStep, 'failed', {
+            error_message: error.message,
+            failed_at: new Date().toISOString(),
+          }).catch((stepError) => {
+            console.error('❌ Failed to update step status to failed:', stepError)
+          })
+        }
+      })
+      .catch((stepError) => {
+        console.error('❌ Failed to get current processing step:', stepError)
+      })
   })
   console.log(`✅ Async processing started for video: ${videoId}`)
 
@@ -352,6 +385,10 @@ async function processAIVideoAsync(videoId, userId, request) {
     console.log(`🎬 Step 3: Starting video generation`)
     await updateProcessingStep(videoId, 'video_generation', 'processing')
 
+    // Initialize Google Cloud only when we need it for video generation
+    console.log(`🔧 Initializing Google Cloud for video generation...`)
+    await initializeGoogleCloud()
+
     // Simulate video generation
     await new Promise((resolve) => setTimeout(resolve, 2000)) // 2 second delay
 
@@ -395,7 +432,7 @@ async function processAIVideoAsync(videoId, userId, request) {
   }
 }
 
-// REAL AWS Transcribe function - SIMPLIFIED AND RELIABLE
+// REAL AWS Transcribe function - NON-BLOCKING WITH REAL PROGRESS TRACKING
 async function performRealTranscription(audioId, userId) {
   const correlationId = `transcription-${audioId}-${Date.now()}`
   console.log(`🎤 STARTING REAL TRANSCRIPTION FOR AUDIO: ${audioId}`)
@@ -411,11 +448,15 @@ async function performRealTranscription(audioId, userId) {
     const jobName = `transcription-${audioId}-${Date.now()}`
 
     const audioBucket = process.env.AUDIO_BUCKET || process.env.S3_BUCKET
-    const fileUri = `https://${audioBucket}.s3.amazonaws.com/${audioMetadata.bucket_location}`
+
+    // Use the bucket_location directly from the database (now correctly formatted)
+    const fileUri = `s3://${audioBucket}/${audioMetadata.bucket_location}`
     const extension = getMediaFormatFromContentType(audioMetadata.content_type)
 
     console.log(`📁 File URI: ${fileUri}`)
     console.log(`📄 Media Format: ${extension}`)
+    console.log(`📦 Audio Bucket: ${audioBucket}`)
+    console.log(`🔑 Bucket Location: ${audioMetadata.bucket_location}`)
 
     const params = {
       LanguageCode: 'en-US',
@@ -438,82 +479,116 @@ async function performRealTranscription(audioId, userId) {
     const result = await transcribeClient.send(new StartTranscriptionJobCommand(params))
     console.log(`✅ AWS Transcribe job started successfully:`, JSON.stringify(result, null, 2))
 
-    // Step 3: Wait for completion (simplified approach)
-    console.log(`⏳ Waiting for transcription to complete...`)
-    let jobStatus = 'IN_PROGRESS'
-    let attempts = 0
-    const maxAttempts = 30 // 5 minutes max wait
-
-    while (jobStatus === 'IN_PROGRESS' && attempts < maxAttempts) {
-      await new Promise((resolve) => setTimeout(resolve, 10000)) // Wait 10 seconds
-      attempts++
-
-      const statusResult = await transcribeClient.send(
-        new GetTranscriptionJobCommand({ TranscriptionJobName: jobName }),
-      )
-      jobStatus = statusResult.TranscriptionJob.TranscriptionJobStatus
-
-      console.log(`📊 Attempt ${attempts}: Job status = ${jobStatus}`)
-
-      if (jobStatus === 'FAILED') {
-        throw new Error(`Transcription failed: ${statusResult.TranscriptionJob.FailureReason}`)
-      }
-    }
-
-    if (jobStatus !== 'COMPLETED') {
-      throw new Error(`Transcription timed out after ${maxAttempts} attempts`)
-    }
-
-    // Step 4: Get the transcription results
-    console.log(`📥 Getting transcription results...`)
-    const transcriptUri = result.TranscriptionJob.Transcript.TranscriptFileUri
-    console.log(`📁 Transcript URI: ${transcriptUri}`)
-
-    // Extract S3 key from URI
-    const s3Key = transcriptUri.replace(
-      `https://${audioBucket}.s3.${process.env.AWS_REGION}.amazonaws.com/`,
-      '',
-    )
-    console.log(`🔑 S3 Key: ${s3Key}`)
-
-    // Download the transcript file
-    const getObjectCommand = new GetObjectCommand({
-      Bucket: audioBucket,
-      Key: s3Key,
-    })
-
-    const transcriptResponse = await s3Client.send(getObjectCommand)
-    const transcriptText = await transcriptResponse.Body.transformToString()
-    const transcriptData = JSON.parse(transcriptText)
-
-    console.log(`📄 RAW TRANSCRIPT DATA:`, JSON.stringify(transcriptData, null, 2))
-
-    // Process the transcript data
-    const processedTranscription = {
-      full_text: transcriptData.results.transcripts[0].transcript,
-      confidence: transcriptData.results.transcripts[0].confidence || 0.95,
-      language_code: transcriptData.results.language_code || 'en-US',
-      segments: transcriptData.results.items.map((item) => ({
-        start_time: parseFloat(item.start_time),
-        end_time: parseFloat(item.end_time),
-        text: item.alternatives[0].content,
-        confidence: parseFloat(item.alternatives[0].confidence),
-      })),
-      speaker_labels: transcriptData.results.speaker_labels?.segments || [],
-      created_at: new Date().toISOString(),
+    // Step 3: Store initial job status and return immediately (NON-BLOCKING)
+    const jobStartTime = new Date()
+    const initialJobStatus = {
       job_name: jobName,
+      status: result.TranscriptionJob.TranscriptionJobStatus,
+      creation_time: result.TranscriptionJob.CreationTime,
+      completion_time: null,
+      output_location: result.TranscriptionJob.OutputLocation,
+      failure_reason: null,
+      progress_details: {
+        started_at: jobStartTime.toISOString(),
+        elapsed_time_seconds: 0,
+        poll_count: 0,
+        last_poll_time: jobStartTime.toISOString(),
+      },
     }
 
-    console.log(`✅ PROCESSED TRANSCRIPTION:`, JSON.stringify(processedTranscription, null, 2))
+    console.log(`📊 Storing initial job status:`, JSON.stringify(initialJobStatus, null, 2))
 
-    // Store transcription results in DynamoDB
-    await storeTranscriptionResults(audioId, processedTranscription, correlationId)
+    // Store the job status in the video's AI generation data
+    // This will be updated by the polling mechanism
+    const videoId = await getVideoIdFromAudioId(audioId, userId)
+    if (videoId) {
+      await updateAIGenerationStatus(videoId, 'processing', {
+        aws_api_responses: {
+          transcription_job: initialJobStatus,
+        },
+      })
 
-    return processedTranscription
+      // Update the transcription step with progress details
+      await updateProcessingStep(videoId, 'transcription', 'processing', {
+        progress_details: initialJobStatus.progress_details,
+      })
+    }
+
+    // Return immediately with job info - don't wait for completion
+    return {
+      job_name: jobName,
+      status: result.TranscriptionJob.TranscriptionJobStatus,
+      started_at: jobStartTime.toISOString(),
+      message: 'Transcription job started successfully - will be monitored asynchronously',
+    }
   } catch (error) {
     console.error(`❌ TRANSCRIPTION FAILED:`, error)
     console.error(`❌ ERROR STACK:`, error.stack)
     throw error
+  }
+}
+
+// Helper function to get video ID from audio ID
+async function getVideoIdFromAudioId(audioId, userId) {
+  try {
+    console.log(`🔍 Looking for video with audio ID: ${audioId} for user: ${userId}`)
+
+    // Try to use the GSI first (if it exists)
+    try {
+      const queryCommand = new QueryCommand({
+        TableName: process.env.DYNAMODB_TABLE,
+        IndexName: 'user_id-ai_generation_status-index',
+        KeyConditionExpression: 'user_id = :userId',
+        FilterExpression: 'ai_generation_data.audio_id = :audioId',
+        ExpressionAttributeValues: {
+          ':userId': { S: userId },
+          ':audioId': { S: audioId },
+        },
+      })
+
+      const result = await dynamoClient.send(queryCommand)
+      console.log(`📋 GSI query result:`, {
+        itemsFound: result.Items?.length || 0,
+        scannedCount: result.ScannedCount,
+      })
+
+      if (result.Items && result.Items.length > 0) {
+        const videoId = result.Items[0].video_id.S
+        console.log(`✅ Found video ID via GSI: ${videoId} for audio: ${audioId}`)
+        return videoId
+      }
+    } catch (gsiError) {
+      console.log(`⚠️ GSI query failed, falling back to direct query:`, gsiError.message)
+    }
+
+    // Fallback: Use direct query on the audio ID (since audio_id is the video_id)
+    const scanCommand = new QueryCommand({
+      TableName: process.env.DYNAMODB_TABLE,
+      KeyConditionExpression: 'video_id = :audioId',
+      FilterExpression: 'user_id = :userId',
+      ExpressionAttributeValues: {
+        ':audioId': { S: audioId },
+        ':userId': { S: userId },
+      },
+    })
+
+    const result = await dynamoClient.send(scanCommand)
+    console.log(`📋 Fallback query result:`, {
+      itemsFound: result.Items?.length || 0,
+      scannedCount: result.ScannedCount,
+    })
+
+    if (result.Items && result.Items.length > 0) {
+      const videoId = result.Items[0].video_id.S
+      console.log(`✅ Found video ID via fallback: ${videoId} for audio: ${audioId}`)
+      return videoId
+    }
+
+    console.log(`❌ No video found for audio ID: ${audioId}`)
+    return null
+  } catch (error) {
+    console.error('Error getting video ID from audio ID:', error)
+    return null
   }
 }
 
@@ -525,13 +600,14 @@ async function getAudioMetadata(audioId, userId) {
   )
 
   try {
+    // Use the regular DynamoDB client for this query, not the Document Client
     const queryCommand = new QueryCommand({
       TableName: process.env.DYNAMODB_TABLE,
       KeyConditionExpression: 'video_id = :audioId',
       FilterExpression: 'user_id = :userId',
       ExpressionAttributeValues: {
-        ':audioId': audioId,
-        ':userId': userId,
+        ':audioId': { S: audioId },
+        ':userId': { S: userId },
       },
     })
 
@@ -541,7 +617,7 @@ async function getAudioMetadata(audioId, userId) {
       userId,
     })
 
-    const result = await docClient.send(queryCommand)
+    const result = await dynamoClient.send(queryCommand)
     logWithTimestamp('DEBUG', `📋 DynamoDB query result`, {
       itemsFound: result.Items?.length || 0,
       scannedCount: result.ScannedCount,
@@ -561,22 +637,22 @@ async function getAudioMetadata(audioId, userId) {
     const audioItem = result.Items[0]
     logWithTimestamp('INFO', `✅ Audio metadata found in database`, {
       audioId,
-      title: audioItem.title,
-      filename: audioItem.filename,
-      fileSize: audioItem.file_size,
-      contentType: audioItem.content_type,
-      duration: audioItem.duration,
+      title: audioItem.title?.S,
+      filename: audioItem.filename?.S,
+      fileSize: audioItem.file_size?.N,
+      contentType: audioItem.content_type?.S,
+      duration: audioItem.duration?.N,
     })
 
     return {
-      audio_id: audioItem.video_id,
-      user_id: audioItem.user_id,
-      title: audioItem.title,
-      filename: audioItem.filename,
-      bucket_location: audioItem.bucket_location,
-      file_size: audioItem.file_size,
-      content_type: audioItem.content_type,
-      duration: audioItem.duration,
+      audio_id: audioItem.video_id.S,
+      user_id: audioItem.user_id.S,
+      title: audioItem.title.S,
+      filename: audioItem.filename.S,
+      bucket_location: audioItem.bucket_location.S,
+      file_size: parseInt(audioItem.file_size.N) || 0,
+      content_type: audioItem.content_type.S,
+      duration: parseFloat(audioItem.duration.N) || 0,
     }
   } catch (error) {
     logWithTimestamp('ERROR', `❌ Error retrieving audio metadata`, {
@@ -619,7 +695,7 @@ function getMediaFormatFromContentType(contentType) {
 }
 
 // Update processing step status
-async function updateProcessingStep(videoId, stepName, status) {
+async function updateProcessingStep(videoId, stepName, status, additionalData = {}) {
   try {
     // First, get the current video record to see existing steps
     const getCommand = new GetCommand({
@@ -639,28 +715,48 @@ async function updateProcessingStep(videoId, stepName, status) {
     // Find the step to update
     let stepIndex = processingSteps.findIndex((step) => step.step === stepName)
 
+    // Clean additionalData to remove undefined values
+    const cleanAdditionalData = {}
+    Object.entries(additionalData).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) {
+        cleanAdditionalData[key] = value
+      }
+    })
+
     if (stepIndex === -1) {
       // Step doesn't exist, add it
-      processingSteps.push({
+      const newStep = {
         step: stepName,
         status: status,
-        started_at: status === 'processing' ? new Date().toISOString() : undefined,
-        completed_at: status === 'completed' ? new Date().toISOString() : undefined,
-      })
+        ...cleanAdditionalData, // Include any additional data (cleaned)
+      }
+
+      // Only add timestamps if they have values
+      if (status === 'processing') {
+        newStep.started_at = new Date().toISOString()
+      }
+      if (status === 'completed') {
+        newStep.completed_at = new Date().toISOString()
+      }
+
+      processingSteps.push(newStep)
     } else {
       // Update existing step
-      processingSteps[stepIndex] = {
+      const updatedStep = {
         ...processingSteps[stepIndex],
         status: status,
-        started_at:
-          status === 'processing'
-            ? new Date().toISOString()
-            : processingSteps[stepIndex].started_at,
-        completed_at:
-          status === 'completed'
-            ? new Date().toISOString()
-            : processingSteps[stepIndex].completed_at,
+        ...cleanAdditionalData, // Merge additional data (cleaned)
       }
+
+      // Update timestamps appropriately
+      if (status === 'processing' && !updatedStep.started_at) {
+        updatedStep.started_at = new Date().toISOString()
+      }
+      if (status === 'completed') {
+        updatedStep.completed_at = new Date().toISOString()
+      }
+
+      processingSteps[stepIndex] = updatedStep
     }
 
     // Update the entire processing_steps array
@@ -685,7 +781,7 @@ async function updateProcessingStep(videoId, stepName, status) {
 // Update AI generation status
 async function updateAIGenerationStatus(videoId, status, additionalData = {}) {
   try {
-    const updateExpression = 'SET ai_generation_status = :status, updated_at = :updated'
+    let updateExpression = 'SET ai_generation_status = :status, updated_at = :updated'
     const expressionAttributeValues = {
       ':status': status,
       ':updated': new Date().toISOString(),
@@ -693,8 +789,10 @@ async function updateAIGenerationStatus(videoId, status, additionalData = {}) {
 
     // Add additional data to update expression
     Object.entries(additionalData).forEach(([key, value]) => {
-      expressionAttributeValues[`:${key}`] = value
-      updateExpression += `, ai_generation_data.${key} = :${key}`
+      if (value !== undefined && value !== null) {
+        expressionAttributeValues[`:${key}`] = value
+        updateExpression += `, ai_generation_data.${key} = :${key}`
+      }
     })
 
     const updateCommand = new UpdateCommand({
@@ -743,6 +841,115 @@ async function handleGetAIVideoStatus(event, userId, videoId) {
       error: 'Failed to get AI video status',
       message: error.message,
     })
+  }
+}
+
+// Handle polling AWS Transcribe job status
+async function handlePollTranscription(event, userId, videoId) {
+  if (!videoId) {
+    return createResponse(400, { error: 'Video ID is required' })
+  }
+
+  try {
+    // Get current video status
+    const getCommand = new GetCommand({
+      TableName: process.env.DYNAMODB_TABLE,
+      Key: { video_id: videoId },
+    })
+
+    const result = await docClient.send(getCommand)
+    if (!result.Item) {
+      return createResponse(404, { error: 'Video not found' })
+    }
+
+    // Verify user ownership
+    if (result.Item.user_id !== userId) {
+      return createResponse(403, { error: 'Access denied' })
+    }
+
+    // Get AWS job info
+    const awsJobInfo = result.Item.ai_generation_data?.aws_api_responses?.transcription_job
+    if (!awsJobInfo || !awsJobInfo.job_name) {
+      console.error('❌ No transcription job found for video:', videoId)
+      console.error(
+        '❌ AI generation data:',
+        JSON.stringify(result.Item.ai_generation_data, null, 2),
+      )
+
+      // Check if the overall status is failed
+      if (result.Item.ai_generation_status === 'failed') {
+        const errorMessage =
+          result.Item.ai_generation_data?.error_message || 'AI video generation failed during setup'
+        return createResponse(400, {
+          error: 'Transcription failed during setup',
+          details: errorMessage,
+          overall_status: 'failed',
+        })
+      }
+
+      return createResponse(400, {
+        error: 'No transcription job found - processing may not have started properly',
+        overall_status: result.Item.ai_generation_status || 'unknown',
+      })
+    }
+
+    console.log(`🔄 Polling AWS Transcribe job: ${awsJobInfo.job_name}`)
+  } catch (error) {
+    console.error('Error polling transcription:', error)
+    return createResponse(500, {
+      error: 'Failed to poll transcription status',
+      message: error.message,
+    })
+  }
+}
+
+// Helper function to get transcription results from completed job
+async function getTranscriptionResults(transcriptionJob) {
+  try {
+    const transcriptUri = transcriptionJob.Transcript.TranscriptFileUri
+    console.log(`📁 Getting transcript from: ${transcriptUri}`)
+
+    // Extract S3 key from URI
+    const audioBucket = process.env.AUDIO_BUCKET || process.env.S3_BUCKET
+    const s3Key = transcriptUri.replace(
+      `https://${audioBucket}.s3.${process.env.AWS_REGION}.amazonaws.com/`,
+      '',
+    )
+    console.log(`🔑 S3 Key: ${s3Key}`)
+
+    // Download the transcript file
+    const getObjectCommand = new GetObjectCommand({
+      Bucket: audioBucket,
+      Key: s3Key,
+    })
+
+    const transcriptResponse = await s3Client.send(getObjectCommand)
+    const transcriptText = await transcriptResponse.Body.transformToString()
+    const transcriptData = JSON.parse(transcriptText)
+
+    console.log(`📄 Processing transcript data...`)
+
+    // Process the transcript data
+    const processedTranscription = {
+      full_text: transcriptData.results.transcripts[0].transcript,
+      confidence: transcriptData.results.transcripts[0].confidence || 0.95,
+      language_code: transcriptData.results.language_code || 'en-US',
+      segments: transcriptData.results.items.map((item) => ({
+        start_time: parseFloat(item.start_time),
+        end_time: parseFloat(item.end_time),
+        text: item.alternatives[0].content,
+        confidence: parseFloat(item.alternatives[0].confidence),
+      })),
+      speaker_labels: transcriptData.results.speaker_labels?.segments || [],
+      created_at: new Date().toISOString(),
+      job_name: transcriptionJob.TranscriptionJobName,
+    }
+
+    console.log(`✅ Transcription results processed successfully`)
+    return processedTranscription
+  } catch (error) {
+    console.error('Error getting transcription results:', error)
+    throw error
   }
 }
 

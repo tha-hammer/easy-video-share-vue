@@ -918,7 +918,6 @@ const currentStep = ref(1)
 const selectedAudio = ref<AudioMetadata | null>(null)
 const processingStatus = ref<VideoMetadata | null>(null)
 const generatedVideo = ref<VideoMetadata | null>(null)
-const fallbackProgress = ref(0)
 const lastSuccessfulPoll = ref<Date | null>(null)
 const pollingActive = ref(false)
 const pollingInterval = ref<NodeJS.Timeout | null>(null)
@@ -1093,23 +1092,58 @@ const startPolling = (videoId: string) => {
   if (!pollingActive.value) return
 
   console.log('🔄 Starting polling for video ID:', videoId)
-  console.log('🔄 Polling interval: 3000ms')
+  console.log('🔄 Polling interval: 2000ms')
   console.log('🔄 Max wait time: 15 minutes')
 
-  // Initialize fallback progress
-  fallbackProgress.value = 5
   lastSuccessfulPoll.value = new Date()
 
   pollingInterval.value = setInterval(async () => {
     try {
       console.log('🔄 Polling status for video:', videoId)
-      const status = await AIVideoService.getAIVideoStatus(videoId)
-      console.log('✅ Polling response received:', status)
 
-      // Update processing status and reset fallback
+      // First, poll the transcription status for real progress updates
+      try {
+        const transcriptionPoll = await AIVideoService.pollTranscriptionStatus(videoId)
+        console.log('🔄 Transcription polling response:', transcriptionPoll)
+
+        // If transcription completed, get the full status
+        if (transcriptionPoll.job_status === 'COMPLETED') {
+          console.log('✅ Transcription completed, getting full status...')
+        }
+      } catch (pollError) {
+        console.log('🔄 Transcription polling failed (may not be ready yet):', pollError)
+
+        // Check if this is a 400 error indicating transcription failure
+        if (pollError instanceof Error && pollError.message.includes('400')) {
+          console.error('❌ Transcription job not found - possible Lambda failure during setup')
+
+          // Try to get the error details from the response
+          try {
+            const errorResponse = await AIVideoService.getAIVideoStatus(videoId)
+            if (errorResponse.video.ai_generation_status === 'failed') {
+              console.error('❌ AI generation failed, stopping polling')
+              stopPolling()
+              const errorMessage =
+                errorResponse.video.ai_generation_data?.error_message ||
+                'AI video generation failed during setup'
+              alert(`AI video generation failed: ${errorMessage}`)
+              currentStep.value = 2
+              return
+            }
+          } catch (statusError) {
+            console.error('❌ Failed to get status after transcription error:', statusError)
+          }
+        }
+        // Continue with regular status check
+      }
+
+      // Get the full status
+      const status = await AIVideoService.getAIVideoStatus(videoId)
+      console.log('✅ Status response received:', status)
+
+      // Update processing status
       processingStatus.value = status.video
       lastSuccessfulPoll.value = new Date()
-      fallbackProgress.value = Math.min(fallbackProgress.value + 10, 90) // Increment fallback progress
 
       console.log('📊 Updated processing status:', {
         ai_generation_status: status.video.ai_generation_status,
@@ -1117,24 +1151,49 @@ const startPolling = (videoId: string) => {
         current_step:
           status.video.ai_generation_data?.processing_steps?.find((s) => s.status === 'processing')
             ?.step || 'none',
-        fallback_progress: fallbackProgress.value,
+        overall_progress: getOverallProgress(),
       })
 
       // Check for transcription and scene planning completion
       const steps = status.video.ai_generation_data?.processing_steps || []
       const transcriptionDone =
         steps.find((s) => s.step === 'transcription')?.status === 'completed'
+      const transcriptionFailed = steps.find((s) => s.step === 'transcription')?.status === 'failed'
       const scenePlanningDone =
         steps.find((s) => s.step === 'scene_planning')?.status === 'completed'
+      const scenePlanningFailed =
+        steps.find((s) => s.step === 'scene_planning')?.status === 'failed'
       const videoGenerationDone =
         steps.find((s) => s.step === 'video_generation')?.status === 'completed'
+      const videoGenerationFailed =
+        steps.find((s) => s.step === 'video_generation')?.status === 'failed'
 
       console.log('📋 Step completion status:', {
         transcriptionDone,
+        transcriptionFailed,
         scenePlanningDone,
+        scenePlanningFailed,
         videoGenerationDone,
+        videoGenerationFailed,
         currentStep: currentStep.value,
       })
+
+      // Check for any failed steps
+      if (transcriptionFailed || scenePlanningFailed || videoGenerationFailed) {
+        console.error('❌ Processing step failed, stopping polling')
+        stopPolling()
+        const failedStep = transcriptionFailed
+          ? 'transcription'
+          : scenePlanningFailed
+            ? 'scene planning'
+            : videoGenerationFailed
+              ? 'video generation'
+              : 'unknown'
+        const errorMessage = `AI video generation failed during ${failedStep} step. Please try again.`
+        alert(errorMessage)
+        currentStep.value = 2
+        return
+      }
 
       if (transcriptionDone && scenePlanningDone && currentStep.value === 3) {
         console.log('🎬 Moving to scene plan step (step 4)')
@@ -1148,7 +1207,6 @@ const startPolling = (videoId: string) => {
 
       if (status.video.ai_generation_status === 'completed') {
         console.log('✅ AI generation completed successfully')
-        fallbackProgress.value = 100
         stopPolling()
         generatedVideo.value = status.video
         currentStep.value = 6
@@ -1169,10 +1227,6 @@ const startPolling = (videoId: string) => {
         stack: error instanceof Error ? error.stack : undefined,
       })
 
-      // Increment fallback progress even on errors to show activity
-      fallbackProgress.value = Math.min(fallbackProgress.value + 5, 95)
-      console.log('📊 Fallback progress updated to:', fallbackProgress.value)
-
       // Don't stop polling on network errors, but log them
       // Only stop if it's a persistent authentication error
       if (error instanceof Error && error.message.includes('authentication')) {
@@ -1182,7 +1236,7 @@ const startPolling = (videoId: string) => {
         currentStep.value = 2
       }
     }
-  }, 3000)
+  }, 2000) // Reduced from 3000ms to 2000ms for faster error detection
 
   // Stop polling after 15 minutes
   setTimeout(() => {
@@ -1193,6 +1247,28 @@ const startPolling = (videoId: string) => {
       currentStep.value = 2
     }
   }, 900000)
+
+  // Add a shorter timeout for initial processing (30 seconds)
+  setTimeout(() => {
+    if (pollingActive.value && currentStep.value === 3) {
+      // Check if we're still on step 3 after 30 seconds - might indicate a problem
+      console.log('⚠️ Initial processing timeout check (30 seconds)')
+
+      // If no transcription step has started or failed, there might be an issue
+      const transcriptionStep = processingStatus.value?.ai_generation_data?.processing_steps?.find(
+        (s) => s.step === 'transcription',
+      )
+
+      if (!transcriptionStep || transcriptionStep.status === 'pending') {
+        console.log(
+          '⚠️ Transcription step still pending after 30 seconds - possible Lambda failure',
+        )
+        stopPolling()
+        alert('AI video generation appears to have failed to start. Please try again.')
+        currentStep.value = 2
+      }
+    }
+  }, 30000) // 30 seconds instead of 2 minutes
 }
 
 const stopPolling = () => {
@@ -1236,22 +1312,113 @@ const getStatusText = () => {
 
 const getOverallProgress = () => {
   if (!processingStatus.value?.ai_generation_data?.processing_steps) {
-    return fallbackProgress.value
+    return 0
   }
 
   const steps = processingStatus.value.ai_generation_data.processing_steps
-  const completedSteps = steps.filter((step) => step.status === 'completed').length
-  const totalSteps = steps.length
+  let totalProgress = 0
+  let stepCount = 0
 
-  if (totalSteps === 0) return fallbackProgress.value
+  steps.forEach((step) => {
+    stepCount++
+    switch (step.step) {
+      case 'transcription':
+        totalProgress += getTranscriptionProgress(step)
+        break
+      case 'scene_planning':
+        totalProgress += getScenePlanningProgress(step)
+        break
+      case 'video_generation':
+        totalProgress += getVideoGenerationProgress(step)
+        break
+      case 'finalization':
+        totalProgress += getFinalizationProgress(step)
+        break
+      default:
+        totalProgress += step.status === 'completed' ? 100 : step.status === 'processing' ? 50 : 0
+    }
+  })
 
-  const progress = Math.round((completedSteps / totalSteps) * 100)
-  return Math.max(progress, fallbackProgress.value)
+  return stepCount > 0 ? Math.round(totalProgress / stepCount) : 0
+}
+
+// Add proper interfaces for step types
+interface ProcessingStep {
+  step: string
+  status: 'pending' | 'processing' | 'completed' | 'failed'
+  started_at?: string
+  completed_at?: string
+  progress_details?: {
+    started_at?: string
+    elapsed_time_seconds?: number
+    poll_count?: number
+    last_poll_time?: string
+    aws_job_name?: string
+    aws_job_status?: string
+    transcription_summary?: {
+      full_text_length?: number
+      segments_count?: number
+      confidence?: number
+    }
+  }
+}
+
+const getTranscriptionProgress = (step: ProcessingStep) => {
+  if (step.status === 'completed') return 100
+  if (step.status === 'failed') return 0
+
+  // Get AWS job status from the processing data
+  const awsJobStatus =
+    processingStatus.value?.ai_generation_data?.aws_api_responses?.transcription_job?.status
+  const progressDetails = step.progress_details
+
+  if (!awsJobStatus) return 10 // Just started
+
+  switch (awsJobStatus) {
+    case 'QUEUED':
+      return 15
+    case 'IN_PROGRESS':
+      // Calculate progress based on elapsed time and typical duration
+      if (progressDetails?.elapsed_time_seconds) {
+        const elapsed = progressDetails.elapsed_time_seconds
+        const typicalDuration = 120 // 2 minutes typical for short audio
+        const progress = Math.min(Math.round((elapsed / typicalDuration) * 60) + 20, 80)
+        return progress
+      }
+      return 50 // Default for IN_PROGRESS
+    case 'COMPLETED':
+      return 100
+    case 'FAILED':
+      return 0
+    default:
+      return 25
+  }
+}
+
+const getScenePlanningProgress = (step: ProcessingStep) => {
+  if (step.status === 'completed') return 100
+  if (step.status === 'failed') return 0
+  if (step.status === 'processing') return 50
+  return 0
+}
+
+const getVideoGenerationProgress = (step: ProcessingStep) => {
+  if (step.status === 'completed') return 100
+  if (step.status === 'failed') return 0
+  if (step.status === 'processing') return 50
+  return 0
+}
+
+const getFinalizationProgress = (step: ProcessingStep) => {
+  if (step.status === 'completed') return 100
+  if (step.status === 'failed') return 0
+  if (step.status === 'processing') return 50
+  return 0
 }
 
 const getCurrentStepMessage = () => {
   if (!processingStatus.value?.ai_generation_data?.processing_steps) {
-    return 'Initializing...'
+    return 'Initializing AI video generation...'
   }
 
   const currentStep = processingStatus.value.ai_generation_data.processing_steps.find(
@@ -1259,7 +1426,18 @@ const getCurrentStepMessage = () => {
   )
 
   if (currentStep) {
-    return `Currently ${formatStepName(currentStep.step).toLowerCase()}...`
+    switch (currentStep.step) {
+      case 'transcription':
+        return getTranscriptionStatusMessage(currentStep)
+      case 'scene_planning':
+        return 'Creating intelligent scene breakdown from your audio...'
+      case 'video_generation':
+        return 'Generating stunning video scenes with AI...'
+      case 'finalization':
+        return 'Assembling your final video...'
+      default:
+        return `Currently ${formatStepName(currentStep.step).toLowerCase()}...`
+    }
   }
 
   const completedSteps = processingStatus.value.ai_generation_data.processing_steps.filter(
@@ -1270,7 +1448,34 @@ const getCurrentStepMessage = () => {
     return 'Finalizing your video...'
   }
 
-  return 'Processing...'
+  return 'Preparing AI processing pipeline...'
+}
+
+const getTranscriptionStatusMessage = (step: ProcessingStep) => {
+  const awsJobStatus =
+    processingStatus.value?.ai_generation_data?.aws_api_responses?.transcription_job?.status
+  const progressDetails = step.progress_details
+
+  if (!awsJobStatus) return 'Starting audio transcription...'
+
+  switch (awsJobStatus) {
+    case 'QUEUED':
+      return 'Audio transcription queued - waiting to start...'
+    case 'IN_PROGRESS':
+      if (progressDetails?.elapsed_time_seconds) {
+        const elapsed = progressDetails.elapsed_time_seconds
+        const minutes = Math.floor(elapsed / 60)
+        const seconds = elapsed % 60
+        return `Transcribing audio... (${minutes}m ${seconds}s elapsed)`
+      }
+      return 'Transcribing audio with AWS...'
+    case 'COMPLETED':
+      return 'Audio transcription completed successfully!'
+    case 'FAILED':
+      return 'Audio transcription failed - please try again'
+    default:
+      return 'Processing audio transcription...'
+  }
 }
 
 const getEstimatedTime = () => {
@@ -1279,22 +1484,40 @@ const getEstimatedTime = () => {
   }
 
   const steps = processingStatus.value.ai_generation_data.processing_steps
-  const completedSteps = steps.filter((step) => step.status === 'completed').length
-  const totalSteps = steps.length
+  const currentStep = steps.find((step) => step.status === 'processing')
 
-  if (totalSteps === 0) return 'Unknown'
+  if (!currentStep) return 'Unknown'
 
-  const remainingSteps = totalSteps - completedSteps
-  const estimatedTimePerStep = 60 // seconds
-  const totalSeconds = remainingSteps * estimatedTimePerStep
-
-  if (totalSeconds < 60) {
-    return `${totalSeconds} seconds`
-  } else if (totalSeconds < 3600) {
-    return `${Math.round(totalSeconds / 60)} minutes`
-  } else {
-    return `${Math.round(totalSeconds / 3600)} hours`
+  switch (currentStep.step) {
+    case 'transcription':
+      return getTranscriptionEstimatedTime(currentStep)
+    case 'scene_planning':
+      return '1-2 minutes'
+    case 'video_generation':
+      return '3-5 minutes'
+    case 'finalization':
+      return '30-60 seconds'
+    default:
+      return 'Unknown'
   }
+}
+
+const getTranscriptionEstimatedTime = (step: ProcessingStep) => {
+  const awsJobStatus =
+    processingStatus.value?.ai_generation_data?.aws_api_responses?.transcription_job?.status
+  const progressDetails = step.progress_details
+
+  if (awsJobStatus === 'COMPLETED') return 'Completed'
+  if (awsJobStatus === 'FAILED') return 'Failed'
+
+  if (awsJobStatus === 'IN_PROGRESS' && progressDetails?.elapsed_time_seconds) {
+    const elapsed = progressDetails.elapsed_time_seconds
+    const typicalDuration = 120 // 2 minutes typical
+    const remaining = Math.max(typicalDuration - elapsed, 30)
+    return `${Math.ceil(remaining / 60)} minute${Math.ceil(remaining / 60) > 1 ? 's' : ''} remaining`
+  }
+
+  return '1-2 minutes'
 }
 
 const formatStepName = (step: string) => {

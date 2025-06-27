@@ -101,7 +101,7 @@ class AudioService {
         user_email: user.email,
         title,
         filename: file.name,
-        bucket_location: `audio/${audioId}/${file.name}`,
+        bucket_location: `audio/${user.userId}/${audioId}/${file.name}`,
         upload_date: new Date().toISOString(),
         file_size: file.size,
         content_type: file.type,
@@ -140,7 +140,7 @@ class AudioService {
     onProgress?: (progress: number) => void,
   ): Promise<void> {
     const s3Client = this.getS3Client()
-    const bucketName = config.aws.bucketName // Use the same bucket as videos
+    const bucketName = config.aws.audioBucketName // Use the audio bucket for audio files
     const chunkSize = 8 * 1024 * 1024 // 8MB chunks for audio files
     const totalChunks = Math.ceil(file.size / chunkSize)
 

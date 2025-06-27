@@ -98,6 +98,13 @@ resource "aws_api_gateway_resource" "ai_video_id_resource" {
   path_part   = "{videoId}"
 }
 
+# API Gateway resource for poll-transcription endpoint
+resource "aws_api_gateway_resource" "ai_video_poll_transcription_resource" {
+  rest_api_id = aws_api_gateway_rest_api.video_api.id
+  parent_id   = aws_api_gateway_resource.ai_video_id_resource.id
+  path_part   = "poll-transcription"
+}
+
 # POST method for starting AI video generation
 resource "aws_api_gateway_method" "ai_video_post" {
   rest_api_id   = aws_api_gateway_rest_api.video_api.id
@@ -107,7 +114,7 @@ resource "aws_api_gateway_method" "ai_video_post" {
   authorizer_id = aws_api_gateway_authorizer.cognito_authorizer.id
 }
 
-# GET method for checking AI video status
+# GET method for listing AI videos
 resource "aws_api_gateway_method" "ai_video_get" {
   rest_api_id   = aws_api_gateway_rest_api.video_api.id
   resource_id   = aws_api_gateway_resource.ai_video_resource.id
@@ -116,7 +123,7 @@ resource "aws_api_gateway_method" "ai_video_get" {
   authorizer_id = aws_api_gateway_authorizer.cognito_authorizer.id
 }
 
-# GET method for checking individual AI video status
+# GET method for individual AI video status
 resource "aws_api_gateway_method" "ai_video_id_get" {
   rest_api_id   = aws_api_gateway_rest_api.video_api.id
   resource_id   = aws_api_gateway_resource.ai_video_id_resource.id
@@ -125,7 +132,16 @@ resource "aws_api_gateway_method" "ai_video_id_get" {
   authorizer_id = aws_api_gateway_authorizer.cognito_authorizer.id
 }
 
-# OPTIONS method for CORS
+# POST method for poll-transcription endpoint
+resource "aws_api_gateway_method" "ai_video_poll_transcription_post" {
+  rest_api_id   = aws_api_gateway_rest_api.video_api.id
+  resource_id   = aws_api_gateway_resource.ai_video_poll_transcription_resource.id
+  http_method   = "POST"
+  authorization = "COGNITO_USER_POOLS"
+  authorizer_id = aws_api_gateway_authorizer.cognito_authorizer.id
+}
+
+# OPTIONS method for CORS (ai-video)
 resource "aws_api_gateway_method" "ai_video_options" {
   rest_api_id   = aws_api_gateway_rest_api.video_api.id
   resource_id   = aws_api_gateway_resource.ai_video_resource.id
@@ -133,10 +149,18 @@ resource "aws_api_gateway_method" "ai_video_options" {
   authorization = "NONE"
 }
 
-# OPTIONS method for CORS (individual AI video)
+# OPTIONS method for CORS (ai-video/{videoId})
 resource "aws_api_gateway_method" "ai_video_id_options" {
   rest_api_id   = aws_api_gateway_rest_api.video_api.id
   resource_id   = aws_api_gateway_resource.ai_video_id_resource.id
+  http_method   = "OPTIONS"
+  authorization = "NONE"
+}
+
+# OPTIONS method for CORS (ai-video/{videoId}/poll-transcription)
+resource "aws_api_gateway_method" "ai_video_poll_transcription_options" {
+  rest_api_id   = aws_api_gateway_rest_api.video_api.id
+  resource_id   = aws_api_gateway_resource.ai_video_poll_transcription_resource.id
   http_method   = "OPTIONS"
   authorization = "NONE"
 }
@@ -252,6 +276,31 @@ resource "aws_api_gateway_method_response" "ai_video_id_options_response" {
   }
 }
 
+# Method responses for poll-transcription endpoint
+resource "aws_api_gateway_method_response" "ai_video_poll_transcription_post_response" {
+  rest_api_id = aws_api_gateway_rest_api.video_api.id
+  resource_id = aws_api_gateway_resource.ai_video_poll_transcription_resource.id
+  http_method = aws_api_gateway_method.ai_video_poll_transcription_post.http_method
+  status_code = "200"
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Origin" = true
+  }
+}
+
+resource "aws_api_gateway_method_response" "ai_video_poll_transcription_options_response" {
+  rest_api_id = aws_api_gateway_rest_api.video_api.id
+  resource_id = aws_api_gateway_resource.ai_video_poll_transcription_resource.id
+  http_method = aws_api_gateway_method.ai_video_poll_transcription_options.http_method
+  status_code = "200"
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Origin"  = true
+    "method.response.header.Access-Control-Allow-Methods" = true
+    "method.response.header.Access-Control-Allow-Headers" = true
+  }
+}
+
 # Integration responses for AI video endpoints
 resource "aws_api_gateway_integration_response" "ai_video_post_integration_response" {
   rest_api_id = aws_api_gateway_rest_api.video_api.id
@@ -321,6 +370,35 @@ resource "aws_api_gateway_integration_response" "ai_video_id_options_integration
   }
 
   depends_on = [aws_api_gateway_integration.ai_video_id_options_integration]
+}
+
+# Integration responses for poll-transcription endpoint
+resource "aws_api_gateway_integration_response" "ai_video_poll_transcription_post_integration_response" {
+  rest_api_id = aws_api_gateway_rest_api.video_api.id
+  resource_id = aws_api_gateway_resource.ai_video_poll_transcription_resource.id
+  http_method = aws_api_gateway_method.ai_video_poll_transcription_post.http_method
+  status_code = aws_api_gateway_method_response.ai_video_poll_transcription_post_response.status_code
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Origin" = "'*'"
+  }
+
+  depends_on = [aws_api_gateway_integration.ai_video_poll_transcription_post_integration]
+}
+
+resource "aws_api_gateway_integration_response" "ai_video_poll_transcription_options_integration_response" {
+  rest_api_id = aws_api_gateway_rest_api.video_api.id
+  resource_id = aws_api_gateway_resource.ai_video_poll_transcription_resource.id
+  http_method = aws_api_gateway_method.ai_video_poll_transcription_options.http_method
+  status_code = aws_api_gateway_method_response.ai_video_poll_transcription_options_response.status_code
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Origin"  = "'*'"
+    "method.response.header.Access-Control-Allow-Methods" = "'GET,POST,PUT,DELETE,OPTIONS'"
+    "method.response.header.Access-Control-Allow-Headers" = "'Content-Type,Authorization,X-Amz-Date,X-Amz-Security-Token'"
+  }
+
+  depends_on = [aws_api_gateway_integration.ai_video_poll_transcription_options_integration]
 }
 
 # Lambda permissions for API Gateway
@@ -625,11 +703,15 @@ resource "aws_api_gateway_deployment" "ai_video_deployment" {
     aws_api_gateway_integration.ai_video_options_integration,
     aws_api_gateway_integration.ai_video_id_get_integration,
     aws_api_gateway_integration.ai_video_id_options_integration,
+    aws_api_gateway_integration.ai_video_poll_transcription_post_integration,
+    aws_api_gateway_integration.ai_video_poll_transcription_options_integration,
     aws_api_gateway_integration_response.ai_video_post_integration_response,
     aws_api_gateway_integration_response.ai_video_get_integration_response,
     aws_api_gateway_integration_response.ai_video_options_integration_response,
     aws_api_gateway_integration_response.ai_video_id_get_integration_response,
     aws_api_gateway_integration_response.ai_video_id_options_integration_response,
+    aws_api_gateway_integration_response.ai_video_poll_transcription_post_integration_response,
+    aws_api_gateway_integration_response.ai_video_poll_transcription_options_integration_response,
   ]
 
   rest_api_id = aws_api_gateway_rest_api.video_api.id
@@ -661,4 +743,24 @@ resource "aws_api_gateway_stage" "video_api_stage" {
     Environment = var.environment
     Project     = var.project_name
   }
+}
+
+# Integration for POST method (poll-transcription)
+resource "aws_api_gateway_integration" "ai_video_poll_transcription_post_integration" {
+  rest_api_id             = aws_api_gateway_rest_api.video_api.id
+  resource_id             = aws_api_gateway_resource.ai_video_poll_transcription_resource.id
+  http_method             = aws_api_gateway_method.ai_video_poll_transcription_post.http_method
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = aws_lambda_function.ai_video_processor.invoke_arn
+}
+
+# Integration for OPTIONS method (poll-transcription)
+resource "aws_api_gateway_integration" "ai_video_poll_transcription_options_integration" {
+  rest_api_id             = aws_api_gateway_rest_api.video_api.id
+  resource_id             = aws_api_gateway_resource.ai_video_poll_transcription_resource.id
+  http_method             = aws_api_gateway_method.ai_video_poll_transcription_options.http_method
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = aws_lambda_function.ai_video_processor.invoke_arn
 } 
