@@ -214,7 +214,7 @@ export default defineComponent({
     const statusType = ref<'success' | 'error' | 'info'>('info')
 
     // Resend cooldown timer
-    let resendTimer: number | null = null
+    let resendTimer: ReturnType<typeof setInterval> | null = null
 
     // Clear errors when inputs change
     const clearErrors = () => {
@@ -255,18 +255,20 @@ export default defineComponent({
       try {
         isLoading.value = true
 
-        // TODO: Integrate with actual auth manager
-        // await authManager.signUp(email.value, password.value, fullName.value)
+        // Use real auth manager for registration
+        const result = await authStore.register(email.value, password.value, fullName.value)
 
-        // For now, simulate the registration flow
-        await new Promise((resolve) => setTimeout(resolve, 1500))
-
-        currentStep.value = 'verify'
-        statusMessage.value = `Verification code sent to ${email.value}`
-        statusType.value = 'success'
+        if (result.success) {
+          currentStep.value = 'verify'
+          statusMessage.value = result.message || `Verification code sent to ${email.value}`
+          statusType.value = 'success'
+        } else {
+          statusMessage.value = result.error || 'Registration failed. Please try again.'
+          statusType.value = 'error'
+        }
       } catch (error) {
         console.error('Registration failed:', error)
-        statusMessage.value = 'Registration failed. This email may already be in use.'
+        statusMessage.value = 'Registration failed. Please try again.'
         statusType.value = 'error'
       } finally {
         isLoading.value = false
@@ -285,19 +287,23 @@ export default defineComponent({
       try {
         isLoading.value = true
 
-        // TODO: Integrate with actual auth manager
-        // await authManager.confirmSignUp(email.value, verificationCode.value)
+        // Use real auth manager for verification
+        const result = await authStore.confirmRegistration(email.value, verificationCode.value)
 
-        // For now, simulate successful verification
-        await new Promise((resolve) => setTimeout(resolve, 1000))
+        if (result.success) {
+          statusMessage.value =
+            result.message || 'Account verified successfully! Redirecting to login...'
+          statusType.value = 'success'
 
-        statusMessage.value = 'Account verified successfully! Redirecting to login...'
-        statusType.value = 'success'
-
-        // Redirect to login after a short delay
-        setTimeout(() => {
-          router.push('/auth/login')
-        }, 2000)
+          // Redirect to login after a short delay
+          setTimeout(() => {
+            router.push('/auth/login')
+          }, 2000)
+        } else {
+          codeError.value = result.error || 'Invalid verification code. Please try again.'
+          statusMessage.value = result.error || 'Verification failed. Please check your code.'
+          statusType.value = 'error'
+        }
       } catch (error) {
         console.error('Verification failed:', error)
         codeError.value = 'Invalid verification code. Please try again.'
@@ -315,24 +321,26 @@ export default defineComponent({
       try {
         isLoading.value = true
 
-        // TODO: Integrate with actual auth manager
-        // await authManager.resendSignUp(email.value)
+        // Use real auth manager for resend
+        const result = await authStore.resendConfirmationCode(email.value)
 
-        // For now, simulate resend
-        await new Promise((resolve) => setTimeout(resolve, 1000))
+        if (result.success) {
+          statusMessage.value = result.message || 'Verification code resent successfully'
+          statusType.value = 'success'
 
-        statusMessage.value = 'Verification code resent successfully'
-        statusType.value = 'success'
-
-        // Start cooldown timer
-        resendCooldown.value = 60
-        resendTimer = setInterval(() => {
-          resendCooldown.value--
-          if (resendCooldown.value <= 0 && resendTimer) {
-            clearInterval(resendTimer)
-            resendTimer = null
-          }
-        }, 1000)
+          // Start cooldown timer
+          resendCooldown.value = 60
+          resendTimer = setInterval(() => {
+            resendCooldown.value--
+            if (resendCooldown.value <= 0 && resendTimer) {
+              clearInterval(resendTimer)
+              resendTimer = null
+            }
+          }, 1000)
+        } else {
+          statusMessage.value = result.error || 'Failed to resend code. Please try again.'
+          statusType.value = 'error'
+        }
       } catch (error) {
         console.error('Resend failed:', error)
         statusMessage.value = 'Failed to resend code. Please try again.'

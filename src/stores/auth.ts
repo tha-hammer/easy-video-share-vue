@@ -130,6 +130,62 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  const register = async (email: string, password: string, fullName?: string) => {
+    try {
+      isLoading.value = true
+      console.log('Attempting registration for:', email)
+
+      const result = await authManager.register(email, password, fullName)
+      return result
+    } catch (error) {
+      console.error('Registration failed:', error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Registration failed',
+      }
+    } finally {
+      isLoading.value = false
+    }
+  }
+
+  const confirmRegistration = async (email: string, confirmationCode: string) => {
+    try {
+      isLoading.value = true
+
+      const result = await authManager.confirmRegistration(email, confirmationCode)
+
+      if (result.success) {
+        // Registration is complete, but user still needs to login
+        // No need to update auth state yet
+      }
+
+      return result
+    } catch (error) {
+      console.error('Registration confirmation failed:', error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Verification failed',
+      }
+    } finally {
+      isLoading.value = false
+    }
+  }
+
+  const resendConfirmationCode = async (email: string) => {
+    try {
+      isLoading.value = true
+      return await authManager.resendConfirmationCode(email)
+    } catch (error) {
+      console.error('Resend failed:', error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to resend code',
+      }
+    } finally {
+      isLoading.value = false
+    }
+  }
+
   return {
     user,
     isAuthenticated,
@@ -139,5 +195,8 @@ export const useAuthStore = defineStore('auth', () => {
     logout,
     startPasswordlessLogin,
     confirmPasswordlessLogin,
+    register,
+    confirmRegistration,
+    resendConfirmationCode,
   }
 })

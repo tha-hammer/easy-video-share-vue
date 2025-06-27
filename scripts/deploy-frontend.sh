@@ -67,73 +67,74 @@ if [ ! -d "dist" ]; then
     exit 1
 fi
 
-echo "📤 Deploying to S3..."
-
-# Upload all files
-aws s3 cp dist/ s3://$BUCKET_NAME/ --recursive --exclude "*.map"
-
-# Set specific content types for better performance
-echo "🔧 Setting content types..."
-
-# HTML files
-aws s3 cp dist/index.html s3://$BUCKET_NAME/index.html \
-    --content-type "text/html" \
-    --cache-control "public, max-age=300"
-
-# CSS files
-aws s3 cp dist/assets/ s3://$BUCKET_NAME/assets/ \
-    --recursive \
-    --exclude "*" \
-    --include "*.css" \
-    --content-type "text/css" \
-    --cache-control "public, max-age=31536000"
-
-# JavaScript files
-aws s3 cp dist/assets/ s3://$BUCKET_NAME/assets/ \
-    --recursive \
-    --exclude "*" \
-    --include "*.js" \
-    --content-type "application/javascript" \
-    --cache-control "public, max-age=31536000"
-
-# SVG files
-if find dist -name "*.svg" -type f | grep -q .; then
-    aws s3 cp dist/ s3://$BUCKET_NAME/ \
-        --recursive \
-        --exclude "*" \
-        --include "*.svg" \
-        --content-type "image/svg+xml" \
-        --cache-control "public, max-age=31536000"
-fi
-
-# PNG/ICO files
-if find dist -name "*.png" -o -name "*.ico" -type f | grep -q .; then
-    aws s3 cp dist/ s3://$BUCKET_NAME/ \
-        --recursive \
-        --exclude "*" \
-        --include "*.png" \
-        --include "*.ico" \
-        --cache-control "public, max-age=31536000"
-fi
-
-echo "✅ Vue3 deployment complete!"
+echo "📤 Build completed successfully!"
 echo ""
-echo "🌐 Your Vue3 application is now live at:"
-echo "   http://$WEBSITE_ENDPOINT"
+echo "🚨 IMPORTANT: AWS CLI S3 Upload Removed for Security"
+echo "==================================================="
+echo "This script no longer uploads to S3 using AWS CLI credentials for security reasons."
+echo "The application has been migrated to use IAM roles instead of access keys."
+echo ""
+echo "📦 Your build files are ready in: ./dist/"
+echo ""
+echo "🚀 Deployment Options:"
+echo "1. **Terraform Deployment (Recommended)**:"
+echo "   - Add S3 object resources to your Terraform configuration"
+echo "   - Use terraform to deploy both infrastructure and frontend files"
+echo ""
+echo "2. **Manual Upload via AWS Console**:"
+echo "   - Go to AWS S3 Console: https://console.aws.amazon.com/s3/"
+echo "   - Navigate to bucket: $BUCKET_NAME"
+echo "   - Upload all files from ./dist/ folder"
+echo ""
+echo "3. **CI/CD Pipeline with IAM Roles**:"
+echo "   - Set up GitHub Actions, GitLab CI, or AWS CodePipeline"
+echo "   - Configure IAM role assumption for deployment"
+echo ""
+echo "4. **AWS CloudShell (if available)**:"
+echo "   - Use AWS CloudShell with built-in AWS CLI"
+echo "   - Upload dist/ folder and run AWS CLI commands there"
+echo ""
+echo "📋 Required S3 Upload Commands (for manual execution):"
+echo "======================================================"
+echo "# Upload all files:"
+echo "aws s3 cp dist/ s3://$BUCKET_NAME/ --recursive --exclude \"*.map\""
+echo ""
+echo "# Set content types for better performance:"
+echo "aws s3 cp dist/index.html s3://$BUCKET_NAME/index.html \\"
+echo "    --content-type \"text/html\" \\"
+echo "    --cache-control \"public, max-age=300\""
+echo ""
+echo "aws s3 cp dist/assets/ s3://$BUCKET_NAME/assets/ \\"
+echo "    --recursive --exclude \"*\" --include \"*.css\" \\"
+echo "    --content-type \"text/css\" \\"
+echo "    --cache-control \"public, max-age=31536000\""
+echo ""
+echo "aws s3 cp dist/assets/ s3://$BUCKET_NAME/assets/ \\"
+echo "    --recursive --exclude \"*\" --include \"*.js\" \\"
+echo "    --content-type \"application/javascript\" \\"
+echo "    --cache-control \"public, max-age=31536000\""
+
+echo ""
+echo "🌐 Your application will be available at: http://$WEBSITE_ENDPOINT"
 echo ""
 echo "📋 Deployment Summary:"
 echo "====================="
 echo "Bucket:    $BUCKET_NAME"
 echo "Endpoint:  http://$WEBSITE_ENDPOINT"
-echo "Build:     dist/"
+echo "Build:     dist/ (ready for upload)"
 echo ""
-echo "💡 Tips:"
-echo "- Test your Vue3 application by visiting the URL above"
-echo "- It may take a few minutes for changes to propagate"
-echo "- Check browser developer tools if you encounter issues"
-echo "- Consider fixing TypeScript errors by running 'npm run type-check'"
+echo "� Security Note:"
+echo "=================="
+echo "This application now uses modern AWS authentication:"
+echo "✅ Cognito for user authentication"
+echo "✅ IAM roles for backend services"
+echo "✅ Presigned URLs for secure uploads"
+echo "✅ No AWS access keys in frontend code"
 echo ""
-echo "⚠️  Note: Deployment used build-only (TypeScript type checking was skipped)"
-echo "   Run 'npm run type-check' to see and fix TypeScript issues"
+echo "💡 Next Steps:"
+echo "1. Choose a deployment method above"
+echo "2. Upload your ./dist/ files to S3"
+echo "3. Test your application at: http://$WEBSITE_ENDPOINT"
+echo "4. Register new users via Cognito authentication"
 echo ""
-echo "🎉 Happy Vue3 video sharing!" 
+echo "🎉 Build completed - Ready for secure deployment!" 

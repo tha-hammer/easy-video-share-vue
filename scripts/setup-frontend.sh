@@ -30,8 +30,6 @@ cd terraform
 # Core AWS Infrastructure
 BUCKET_NAME=$(terraform output -raw bucket_name 2>/dev/null)
 AUDIO_BUCKET_NAME=$(terraform output -raw audio_bucket_name 2>/dev/null)
-ACCESS_KEY_ID=$(terraform output -raw app_user_access_key_id 2>/dev/null)
-SECRET_ACCESS_KEY=$(terraform output -raw app_user_secret_access_key 2>/dev/null)
 AWS_REGION=$(terraform output -raw aws_region 2>/dev/null)
 
 # API Gateway Endpoints
@@ -48,7 +46,7 @@ API_AUDIO_UPLOAD_ENDPOINT=$(terraform output -raw api_audio_upload_endpoint 2>/d
 
 # Cognito Configuration
 COGNITO_USER_POOL_ID=$(terraform output -raw cognito_user_pool_id 2>/dev/null)
-COGNITO_CLIENT_ID=$(terraform output -raw cognito_user_pool_client_id 2>/dev/null)
+COGNITO_CLIENT_ID=$(terraform output -raw cognito_client_id 2>/dev/null)
 
 # AI Video Configuration (Modern Authentication)
 API_AI_VIDEO_ENDPOINT="${API_ENDPOINT}/ai-video"
@@ -64,11 +62,11 @@ OPENAI_API_KEY=${OPENAI_API_KEY:-"sk-your-openai-api-key"}
 
 cd ..
 
-# Validate required outputs
-if [ -z "$BUCKET_NAME" ] || [ -z "$AUDIO_BUCKET_NAME" ] || [ -z "$ACCESS_KEY_ID" ] || [ -z "$SECRET_ACCESS_KEY" ] || [ -z "$API_ENDPOINT" ] || [ -z "$COGNITO_USER_POOL_ID" ]; then
+# Validate required outputs (removed AWS access keys - using Cognito authentication)
+if [ -z "$BUCKET_NAME" ] || [ -z "$AUDIO_BUCKET_NAME" ] || [ -z "$API_ENDPOINT" ] || [ -z "$COGNITO_USER_POOL_ID" ] || [ -z "$COGNITO_CLIENT_ID" ]; then
     echo "❌ Error: Could not retrieve all required values from Terraform"
     echo "Make sure your infrastructure is deployed and terraform outputs are available"
-    echo "Required outputs: bucket_name, audio_bucket_name, app_user_access_key_id, app_user_secret_access_key, api_gateway_endpoint, cognito_user_pool_id"
+    echo "Required outputs: bucket_name, audio_bucket_name, api_gateway_endpoint, cognito_user_pool_id, cognito_client_id"
     exit 1
 fi
 
@@ -80,17 +78,16 @@ cat > .env << EOF
 # Generated automatically from Terraform outputs
 # DO NOT commit this file to git
 
-# AWS Configuration
+# AWS Configuration (No access keys - using Cognito authentication)
 VITE_AWS_REGION=${AWS_REGION}
 VITE_AWS_BUCKET_NAME=${BUCKET_NAME}
 VITE_AWS_AUDIO_BUCKET_NAME=${AUDIO_BUCKET_NAME}
-VITE_AWS_ACCESS_KEY_ID=${ACCESS_KEY_ID}
-VITE_AWS_SECRET_ACCESS_KEY=${SECRET_ACCESS_KEY}
 
 # API Configuration - Core
 VITE_APP_API_URL=${API_ENDPOINT}
 VITE_API_ENDPOINT=${API_ENDPOINT}
 VITE_API_VIDEOS_ENDPOINT=${API_VIDEOS_ENDPOINT}
+VITE_API_VIDEOS_UPLOAD_URL_ENDPOINT=${API_ENDPOINT}/videos/upload-url
 
 # Audio API Configuration
 VITE_API_AUDIO_ENDPOINT=${API_AUDIO_ENDPOINT}
@@ -140,18 +137,19 @@ echo "========================"
 echo "Region:           ${AWS_REGION}"
 echo "Video Bucket:     ${BUCKET_NAME}"
 echo "Audio Bucket:     ${AUDIO_BUCKET_NAME}"
-echo "Access Key:       ${ACCESS_KEY_ID}"
 echo "API Endpoint:     ${API_ENDPOINT}"
 echo "Audio API:        ${API_AUDIO_ENDPOINT}"
 echo "AI Video API:     ${API_AI_VIDEO_ENDPOINT}"
 echo "Cognito Pool:     ${COGNITO_USER_POOL_ID}"
+echo "Cognito Client:   ${COGNITO_CLIENT_ID}"
 echo ""
-echo "🎯 AI Video Features Configured:"
-echo "================================"
+echo "🎯 Modern Authentication & Features Configured:"
+echo "==============================================="
+echo "✅ Cognito User Pool Authentication"
+echo "✅ Presigned URL Video Uploads (No AWS Keys in Frontend)"
 echo "✅ Audio Upload Infrastructure"
 echo "✅ AI Video Generation API Endpoints"
 echo "✅ Audio Processing Pipeline"
-echo "✅ Enhanced Authentication"
 echo "✅ Admin Panel Integration"
 echo ""
 echo "🚀 Next steps:"

@@ -87,7 +87,7 @@ class AuthManager {
 
       // Decode JWT token to check groups
       const tokenPayload = this.parseJwt(this.idToken)
-      const groups = tokenPayload['cognito:groups'] || []
+      const groups = (tokenPayload['cognito:groups'] as string[]) || []
 
       this.isAdmin = groups.includes('admin')
       console.log('Admin status:', this.isAdmin, 'Groups:', groups)
@@ -101,7 +101,7 @@ class AuthManager {
   }
 
   // Helper function to decode JWT token
-  private parseJwt(token: string): Record<string, any> {
+  private parseJwt(token: string): Record<string, unknown> {
     try {
       const base64Url = token.split('.')[1]
       const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/')
@@ -188,11 +188,11 @@ class AuthManager {
           error: 'Login incomplete. Please check your credentials.',
         }
       }
-    } catch (error: any) {
+    } catch (error) {
       console.error('Login error:', error)
       return {
         success: false,
-        error: error.message,
+        error: error instanceof Error ? error.message : 'Login failed',
       }
     }
   }
@@ -212,11 +212,11 @@ class AuthManager {
         success: true,
         message: 'Logged out successfully',
       }
-    } catch (error: any) {
+    } catch (error) {
       console.error('Logout error:', error)
       return {
         success: false,
-        error: error.message,
+        error: error instanceof Error ? error.message : 'Logout failed',
       }
     }
   }
@@ -309,17 +309,158 @@ class AuthManager {
         success: false,
         error: 'Unexpected response from authentication service',
       }
-    } catch (error: any) {
+    } catch (error) {
       console.error('Passwordless login error:', error)
 
       // Provide user-friendly error messages
-      let errorMessage = error.message
-      if (error.message.includes('UserNotFoundException')) {
+      let errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      if (errorMessage.includes('UserNotFoundException')) {
         errorMessage =
           'No account found with this email. Please register first or use password login.'
-      } else if (error.message.includes('NotAuthorizedException')) {
+      } else if (errorMessage.includes('NotAuthorizedException')) {
         errorMessage = 'Account not verified. Please check your email for verification code first.'
-      } else if (error.message.includes('LimitExceededException')) {
+      } else if (errorMessage.includes('LimitExceededException')) {
+        errorMessage = 'Too many requests. Please wait a moment before trying again.'
+      }
+
+      return {
+        success: false,
+        error: errorMessage,
+      }
+    }
+  }
+
+  // User Registration (Sign Up)
+  async register(email: string, password: string, fullName?: string) {
+    try {
+      // Generate the same username from email (consistent with login)
+      const username = email.replace(/[@.]/g, '_').toLowerCase()
+
+      console.log('Registering user:', username, 'with email:', email)
+
+      const result = await signUp({
+        username: username,
+        password: password,
+        options: {
+          userAttributes: {
+            email: email,
+            ...(fullName && { name: fullName }),
+          },
+        },
+      })
+
+      console.log('Registration result:', result)
+
+      if (result.isSignUpComplete) {
+        return {
+          success: true,
+          message: 'Registration successful! Please check your email for verification.',
+          needsVerification: false,
+        }
+      } else if (result.nextStep?.signUpStep === 'CONFIRM_SIGN_UP') {
+        return {
+          success: true,
+          message: 'Registration successful! Please check your email for verification code.',
+          needsVerification: true,
+        }
+      }
+
+      return {
+        success: false,
+        error: 'Unexpected response from registration service',
+      }
+    } catch (error) {
+      console.error('Registration error:', error)
+
+      // Provide user-friendly error messages
+      let errorMessage = error instanceof Error ? error.message : 'Registration failed'
+      if (errorMessage.includes('UsernameExistsException')) {
+        errorMessage = 'An account with this email already exists. Please try logging in instead.'
+      } else if (errorMessage.includes('InvalidPasswordException')) {
+        errorMessage =
+          'Password does not meet requirements. Please use at least 8 characters with uppercase, lowercase, number, and symbol.'
+      } else if (errorMessage.includes('InvalidParameterException')) {
+        errorMessage = 'Invalid email address. Please check and try again.'
+      }
+
+      return {
+        success: false,
+        error: errorMessage,
+      }
+    }
+  }
+
+  // Confirm user registration with verification code
+  async confirmRegistration(email: string, confirmationCode: string) {
+    try {
+      // Generate the same username from email
+      const username = email.replace(/[@.]/g, '_').toLowerCase()
+
+      console.log('Confirming registration for:', username)
+
+      const result = await confirmSignUp({
+        username: username,
+        confirmationCode: confirmationCode,
+      })
+
+      console.log('Confirmation result:', result)
+
+      if (result.isSignUpComplete) {
+        return {
+          success: true,
+          message: 'Email verified successfully! You can now sign in.',
+        }
+      }
+
+      return {
+        success: false,
+        error: 'Verification incomplete. Please try again.',
+      }
+    } catch (error) {
+      console.error('Confirmation error:', error)
+
+      // Provide user-friendly error messages
+      let errorMessage = error instanceof Error ? error.message : 'Verification failed'
+      if (errorMessage.includes('CodeMismatchException')) {
+        errorMessage = 'Invalid verification code. Please check your email and try again.'
+      } else if (errorMessage.includes('ExpiredCodeException')) {
+        errorMessage = 'Verification code has expired. Please request a new code.'
+      } else if (errorMessage.includes('UserNotFoundException')) {
+        errorMessage = 'User not found. Please try registering again.'
+      }
+
+      return {
+        success: false,
+        error: errorMessage,
+      }
+    }
+  }
+
+  // Resend verification code
+  async resendConfirmationCode(email: string) {
+    try {
+      // Generate the same username from email
+      const username = email.replace(/[@.]/g, '_').toLowerCase()
+
+      console.log('Resending confirmation code for:', username)
+
+      const result = await resendSignUpCode({
+        username: username,
+      })
+
+      console.log('Resend result:', result)
+
+      return {
+        success: true,
+        message: 'Verification code sent to your email.',
+      }
+    } catch (error) {
+      console.error('Resend confirmation error:', error)
+
+      let errorMessage = error instanceof Error ? error.message : 'Failed to resend code'
+      if (errorMessage.includes('UserNotFoundException')) {
+        errorMessage = 'User not found. Please try registering again.'
+      } else if (errorMessage.includes('LimitExceededException')) {
         errorMessage = 'Too many requests. Please wait a moment before trying again.'
       }
 
@@ -379,16 +520,16 @@ class AuthManager {
         success: false,
         error: 'Failed to complete passwordless login',
       }
-    } catch (error: any) {
+    } catch (error) {
       console.error('Passwordless confirmation error:', error)
 
       // Provide user-friendly error messages
-      let errorMessage = error.message
-      if (error.message.includes('CodeMismatchException')) {
+      let errorMessage = error instanceof Error ? error.message : 'Verification failed'
+      if (errorMessage.includes('CodeMismatchException')) {
         errorMessage = 'Invalid verification code. Please try again.'
-      } else if (error.message.includes('ExpiredCodeException')) {
+      } else if (errorMessage.includes('ExpiredCodeException')) {
         errorMessage = 'Verification code has expired. Please request a new code.'
-      } else if (error.message.includes('InvalidPasswordException')) {
+      } else if (errorMessage.includes('InvalidPasswordException')) {
         errorMessage = 'There was an issue with the password reset. Please try again.'
       }
 

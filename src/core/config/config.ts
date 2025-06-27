@@ -7,10 +7,7 @@ export const AWS_CONFIG = {
   bucketName: import.meta.env.VITE_AWS_BUCKET_NAME || 'easy-video-share-silmari-dev',
   audioBucketName:
     import.meta.env.VITE_AWS_AUDIO_BUCKET_NAME || 'easy-video-share-silmari-dev-audio',
-  credentials: {
-    accessKeyId: import.meta.env.VITE_AWS_ACCESS_KEY_ID || 'YOUR_ACCESS_KEY_ID',
-    secretAccessKey: import.meta.env.VITE_AWS_SECRET_ACCESS_KEY || 'YOUR_SECRET_ACCESS_KEY',
-  },
+  // Note: AWS credentials are no longer used - uploads use presigned URLs from backend
 }
 
 // Cognito Configuration
@@ -34,6 +31,9 @@ export const API_CONFIG = {
   videosEndpoint:
     import.meta.env.VITE_API_VIDEOS_ENDPOINT ||
     'https://ip60d4qmjf.execute-api.us-east-1.amazonaws.com/dev/videos',
+  videosUploadUrlEndpoint:
+    import.meta.env.VITE_API_VIDEOS_UPLOAD_URL_ENDPOINT ||
+    'https://ip60d4qmjf.execute-api.us-east-1.amazonaws.com/dev/videos/upload-url',
   // Admin endpoints
   adminUsersEndpoint:
     import.meta.env.VITE_API_ADMIN_USERS_ENDPOINT ||

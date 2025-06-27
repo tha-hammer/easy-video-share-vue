@@ -181,7 +181,7 @@ resource "aws_s3_bucket_accelerate_configuration" "audio_bucket_accelerate" {
   bucket = aws_s3_bucket.audio_bucket.id
   status = "Enabled"
 }
-/* 
+/*
 # Lifecycle configuration to manage storage costs
 resource "aws_s3_bucket_lifecycle_configuration" "video_bucket_lifecycle" {
   bucket = aws_s3_bucket.video_bucket.id
@@ -204,60 +204,10 @@ resource "aws_s3_bucket_lifecycle_configuration" "video_bucket_lifecycle" {
   }
 } */
 
-# IAM user for application access (legacy - may be removed in future)
-resource "aws_iam_user" "video_app_user" {
-  name = "${var.project_name}-app-user"
-
-  tags = {
-    Name        = "Legacy App User (Consider Removing)"
-    Environment = var.environment
-    Project     = var.project_name
-  }
-}
-
-# IAM policy for application user (legacy - may be removed in future)
-resource "aws_iam_user_policy" "video_app_user_policy" {
-  name = "${var.project_name}-app-policy"
-  user = aws_iam_user.video_app_user.name
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "s3:PutObject",
-          "s3:PutObjectAcl",
-          "s3:GetObject",
-          "s3:ListBucket"
-        ]
-        Resource = [
-          aws_s3_bucket.video_bucket.arn,
-          "${aws_s3_bucket.video_bucket.arn}/*"
-        ]
-      },
-      {
-        Effect = "Allow"
-        Action = [
-          "s3:PutObject",
-          "s3:PutObjectAcl",
-          "s3:GetObject",
-          "s3:ListBucket",
-          "s3:DeleteObject"
-        ]
-        Resource = [
-          aws_s3_bucket.audio_bucket.arn,
-          "${aws_s3_bucket.audio_bucket.arn}/*"
-        ]
-      }
-    ]
-  })
-}
-
-# REMOVED: Access keys for security (use IAM roles instead)
-# resource "aws_iam_access_key" "video_app_user_key" {
-#   user = aws_iam_user.video_app_user.name
-# }
+# Note: User authentication is handled entirely by Cognito User Pools
+# No IAM users are needed for app users - they register and login via Cognito
+# S3 uploads use presigned URLs or direct browser uploads with CORS
+# Lambda functions use IAM roles for AWS service access
 
 # DynamoDB table for video metadata
 resource "aws_dynamodb_table" "video_metadata" {
@@ -390,6 +340,18 @@ resource "aws_iam_role_policy" "lambda_policy" {
         Action = [
           "s3:PutObject",
           "s3:GetObject",
+          "s3:ListBucket"
+        ]
+        Resource = [
+          aws_s3_bucket.video_bucket.arn,
+          "${aws_s3_bucket.video_bucket.arn}/*"
+        ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:PutObject",
+          "s3:GetObject",
           "s3:ListBucket",
           "s3:DeleteObject"
         ]
@@ -433,6 +395,7 @@ resource "aws_lambda_function" "video_metadata_api" {
     variables = {
       DYNAMODB_TABLE = aws_dynamodb_table.video_metadata.name
       AUDIO_BUCKET   = aws_s3_bucket.audio_bucket.bucket
+      S3_BUCKET_NAME = aws_s3_bucket.video_bucket.bucket
       CORS_ORIGIN    = "*"
     }
   }
@@ -504,6 +467,13 @@ resource "aws_api_gateway_resource" "videos_resource" {
   path_part   = "videos"
 }
 
+# API Gateway resource for videos/upload-url
+resource "aws_api_gateway_resource" "videos_upload_url_resource" {
+  rest_api_id = aws_api_gateway_rest_api.video_api.id
+  parent_id   = aws_api_gateway_resource.videos_resource.id
+  path_part   = "upload-url"
+}
+
 # API Gateway resource for admin
 resource "aws_api_gateway_resource" "admin_resource" {
   rest_api_id = aws_api_gateway_rest_api.video_api.id
@@ -564,6 +534,23 @@ resource "aws_api_gateway_method" "videos_options" {
   authorization = "NONE"
 }
 
+# API Gateway method for POST /videos/upload-url (generate presigned URL)
+resource "aws_api_gateway_method" "videos_upload_url_post" {
+  rest_api_id   = aws_api_gateway_rest_api.video_api.id
+  resource_id   = aws_api_gateway_resource.videos_upload_url_resource.id
+  http_method   = "POST"
+  authorization = "COGNITO_USER_POOLS"
+  authorizer_id = aws_api_gateway_authorizer.cognito_authorizer.id
+}
+
+# API Gateway method for OPTIONS (CORS) for upload-url
+resource "aws_api_gateway_method" "videos_upload_url_options" {
+  rest_api_id   = aws_api_gateway_rest_api.video_api.id
+  resource_id   = aws_api_gateway_resource.videos_upload_url_resource.id
+  http_method   = "OPTIONS"
+  authorization = "NONE"
+}
+
 # API Gateway integration for POST
 resource "aws_api_gateway_integration" "videos_post_integration" {
   rest_api_id = aws_api_gateway_rest_api.video_api.id
@@ -591,6 +578,28 @@ resource "aws_api_gateway_integration" "videos_options_integration" {
   rest_api_id = aws_api_gateway_rest_api.video_api.id
   resource_id = aws_api_gateway_resource.videos_resource.id
   http_method = aws_api_gateway_method.videos_options.http_method
+
+  integration_http_method = "POST"
+  type                   = "AWS_PROXY"
+  uri                    = aws_lambda_function.video_metadata_api.invoke_arn
+}
+
+# API Gateway integration for POST /videos/upload-url
+resource "aws_api_gateway_integration" "videos_upload_url_post_integration" {
+  rest_api_id = aws_api_gateway_rest_api.video_api.id
+  resource_id = aws_api_gateway_resource.videos_upload_url_resource.id
+  http_method = aws_api_gateway_method.videos_upload_url_post.http_method
+
+  integration_http_method = "POST"
+  type                   = "AWS_PROXY"
+  uri                    = aws_lambda_function.video_metadata_api.invoke_arn
+}
+
+# API Gateway integration for OPTIONS /videos/upload-url
+resource "aws_api_gateway_integration" "videos_upload_url_options_integration" {
+  rest_api_id = aws_api_gateway_rest_api.video_api.id
+  resource_id = aws_api_gateway_resource.videos_upload_url_resource.id
+  http_method = aws_api_gateway_method.videos_upload_url_options.http_method
 
   integration_http_method = "POST"
   type                   = "AWS_PROXY"
@@ -707,6 +716,32 @@ resource "aws_api_gateway_method_response" "videos_options_response" {
   }
 }
 
+# API Gateway method response for POST /videos/upload-url
+resource "aws_api_gateway_method_response" "videos_upload_url_post_response" {
+  rest_api_id = aws_api_gateway_rest_api.video_api.id
+  resource_id = aws_api_gateway_resource.videos_upload_url_resource.id
+  http_method = aws_api_gateway_method.videos_upload_url_post.http_method
+  status_code = "200"
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Origin" = true
+  }
+}
+
+# API Gateway method response for OPTIONS (CORS) for upload-url
+resource "aws_api_gateway_method_response" "videos_upload_url_options_response" {
+  rest_api_id = aws_api_gateway_rest_api.video_api.id
+  resource_id = aws_api_gateway_resource.videos_upload_url_resource.id
+  http_method = aws_api_gateway_method.videos_upload_url_options.http_method
+  status_code = "200"
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Origin"  = true
+    "method.response.header.Access-Control-Allow-Methods" = true
+    "method.response.header.Access-Control-Allow-Headers" = true
+  }
+}
+
 # Admin API Gateway Method Responses
 resource "aws_api_gateway_method_response" "admin_users_get_response" {
   rest_api_id = aws_api_gateway_rest_api.video_api.id
@@ -792,26 +827,28 @@ resource "aws_api_gateway_method_response" "admin_user_videos_options_response" 
   }
 }
 
-# API Gateway integration responses for videos endpoint
-resource "aws_api_gateway_integration_response" "videos_post_integration_response" {
+# API Gateway integration responses for videos/upload-url endpoint
+resource "aws_api_gateway_integration_response" "videos_upload_url_post_integration_response" {
   rest_api_id = aws_api_gateway_rest_api.video_api.id
-  resource_id = aws_api_gateway_resource.videos_resource.id
-  http_method = aws_api_gateway_method.videos_post.http_method
-  status_code = aws_api_gateway_method_response.videos_post_response.status_code
+  resource_id = aws_api_gateway_resource.videos_upload_url_resource.id
+  http_method = aws_api_gateway_method.videos_upload_url_post.http_method
+  status_code = aws_api_gateway_method_response.videos_upload_url_post_response.status_code
 
   response_parameters = {
     "method.response.header.Access-Control-Allow-Origin" = "'*'"
   }
 }
 
-resource "aws_api_gateway_integration_response" "videos_get_integration_response" {
+resource "aws_api_gateway_integration_response" "videos_upload_url_options_integration_response" {
   rest_api_id = aws_api_gateway_rest_api.video_api.id
-  resource_id = aws_api_gateway_resource.videos_resource.id
-  http_method = aws_api_gateway_method.videos_get.http_method
-  status_code = aws_api_gateway_method_response.videos_get_response.status_code
+  resource_id = aws_api_gateway_resource.videos_upload_url_resource.id
+  http_method = aws_api_gateway_method.videos_upload_url_options.http_method
+  status_code = aws_api_gateway_method_response.videos_upload_url_options_response.status_code
 
   response_parameters = {
-    "method.response.header.Access-Control-Allow-Origin" = "'*'"
+    "method.response.header.Access-Control-Allow-Origin"  = "'*'"
+    "method.response.header.Access-Control-Allow-Methods" = "'POST,OPTIONS'"
+    "method.response.header.Access-Control-Allow-Headers" = "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
   }
 }
 
@@ -827,99 +864,6 @@ resource "aws_api_gateway_integration_response" "videos_options_integration_resp
     "method.response.header.Access-Control-Allow-Methods" = "'GET,POST,OPTIONS'"
     "method.response.header.Access-Control-Allow-Headers" = "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
   }
-
-  depends_on = [aws_api_gateway_integration.videos_options_integration]
-}
-
-# Admin API Gateway Integration Responses
-resource "aws_api_gateway_integration_response" "admin_users_get_integration_response" {
-  rest_api_id = aws_api_gateway_rest_api.video_api.id
-  resource_id = aws_api_gateway_resource.admin_users_resource.id
-  http_method = aws_api_gateway_method.admin_users_get.http_method
-  status_code = aws_api_gateway_method_response.admin_users_get_response.status_code
-
-  response_parameters = {
-    "method.response.header.Access-Control-Allow-Origin" = "'*'"
-  }
-}
-
-resource "aws_api_gateway_integration_response" "admin_videos_get_integration_response" {
-  rest_api_id = aws_api_gateway_rest_api.video_api.id
-  resource_id = aws_api_gateway_resource.admin_videos_resource.id
-  http_method = aws_api_gateway_method.admin_videos_get.http_method
-  status_code = aws_api_gateway_method_response.admin_videos_get_response.status_code
-
-  response_parameters = {
-    "method.response.header.Access-Control-Allow-Origin" = "'*'"
-  }
-}
-
-resource "aws_api_gateway_integration_response" "admin_videos_delete_integration_response" {
-  rest_api_id = aws_api_gateway_rest_api.video_api.id
-  resource_id = aws_api_gateway_resource.admin_videos_resource.id
-  http_method = aws_api_gateway_method.admin_videos_delete.http_method
-  status_code = aws_api_gateway_method_response.admin_videos_delete_response.status_code
-
-  response_parameters = {
-    "method.response.header.Access-Control-Allow-Origin" = "'*'"
-  }
-}
-
-resource "aws_api_gateway_integration_response" "admin_user_videos_get_integration_response" {
-  rest_api_id = aws_api_gateway_rest_api.video_api.id
-  resource_id = aws_api_gateway_resource.admin_user_videos_sub_resource.id
-  http_method = aws_api_gateway_method.admin_user_videos_get.http_method
-  status_code = aws_api_gateway_method_response.admin_user_videos_get_response.status_code
-
-  response_parameters = {
-    "method.response.header.Access-Control-Allow-Origin" = "'*'"
-  }
-}
-
-# Admin OPTIONS integration responses
-resource "aws_api_gateway_integration_response" "admin_users_options_integration_response" {
-  rest_api_id = aws_api_gateway_rest_api.video_api.id
-  resource_id = aws_api_gateway_resource.admin_users_resource.id
-  http_method = aws_api_gateway_method.admin_users_options.http_method
-  status_code = aws_api_gateway_method_response.admin_users_options_response.status_code
-
-  response_parameters = {
-    "method.response.header.Access-Control-Allow-Origin"  = "'*'"
-    "method.response.header.Access-Control-Allow-Methods" = "'GET,DELETE,OPTIONS'"
-    "method.response.header.Access-Control-Allow-Headers" = "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
-  }
-
-  depends_on = [aws_api_gateway_integration.admin_users_options_integration]
-}
-
-resource "aws_api_gateway_integration_response" "admin_videos_options_integration_response" {
-  rest_api_id = aws_api_gateway_rest_api.video_api.id
-  resource_id = aws_api_gateway_resource.admin_videos_resource.id
-  http_method = aws_api_gateway_method.admin_videos_options.http_method
-  status_code = aws_api_gateway_method_response.admin_videos_options_response.status_code
-
-  response_parameters = {
-    "method.response.header.Access-Control-Allow-Origin"  = "'*'"
-    "method.response.header.Access-Control-Allow-Methods" = "'GET,DELETE,OPTIONS'"
-    "method.response.header.Access-Control-Allow-Headers" = "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
-  }
-
-  depends_on = [aws_api_gateway_integration.admin_videos_options_integration]
-}
-
-resource "aws_api_gateway_integration_response" "admin_user_videos_options_integration_response" {
-  rest_api_id = aws_api_gateway_rest_api.video_api.id
-  resource_id = aws_api_gateway_resource.admin_user_videos_sub_resource.id
-  http_method = aws_api_gateway_method.admin_user_videos_options.http_method
-  status_code = aws_api_gateway_method_response.admin_user_videos_options_response.status_code
-
-  response_parameters = {
-    "method.response.header.Access-Control-Allow-Origin"  = "'*'"
-    "method.response.header.Access-Control-Allow-Methods" = "'GET,OPTIONS'"
-    "method.response.header.Access-Control-Allow-Headers" = "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
-  }
-
-  depends_on = [aws_api_gateway_integration.admin_user_videos_options_integration]
 }
 
 # Lambda permission for API Gateway
@@ -948,6 +892,8 @@ resource "aws_api_gateway_deployment" "video_api_deployment" {
     aws_api_gateway_integration.videos_post_integration,
     aws_api_gateway_integration.videos_get_integration,
     aws_api_gateway_integration.videos_options_integration,
+    aws_api_gateway_integration.videos_upload_url_post_integration,
+    aws_api_gateway_integration.videos_upload_url_options_integration,
     aws_api_gateway_integration.admin_users_get_integration,
     aws_api_gateway_integration.admin_videos_get_integration,
     aws_api_gateway_integration.admin_videos_delete_integration,
@@ -959,6 +905,8 @@ resource "aws_api_gateway_deployment" "video_api_deployment" {
     aws_api_gateway_integration_response.videos_post_integration_response,
     aws_api_gateway_integration_response.videos_get_integration_response,
     aws_api_gateway_integration_response.videos_options_integration_response,
+    aws_api_gateway_integration_response.videos_upload_url_post_integration_response,
+    aws_api_gateway_integration_response.videos_upload_url_options_integration_response,
     # Add admin integration responses
     aws_api_gateway_integration_response.admin_users_get_integration_response,
     aws_api_gateway_integration_response.admin_videos_get_integration_response,
@@ -967,7 +915,7 @@ resource "aws_api_gateway_deployment" "video_api_deployment" {
     aws_api_gateway_integration_response.admin_users_options_integration_response,
     aws_api_gateway_integration_response.admin_videos_options_integration_response,
     aws_api_gateway_integration_response.admin_user_videos_options_integration_response,
-    # Note: Audio and AI video integrations are defined in ai-video-extensions.tf
+    # Note: Audio and AI video resources are defined in ai-video-extensions.tf
   ]
 
   rest_api_id = aws_api_gateway_rest_api.video_api.id
@@ -975,17 +923,23 @@ resource "aws_api_gateway_deployment" "video_api_deployment" {
   triggers = {
     redeployment = sha1(jsonencode([
       aws_api_gateway_resource.videos_resource.id,
+      aws_api_gateway_resource.videos_upload_url_resource.id,
       aws_api_gateway_method.videos_post.id,
       aws_api_gateway_method.videos_get.id,
       aws_api_gateway_method.videos_options.id,
+      aws_api_gateway_method.videos_upload_url_post.id,
+      aws_api_gateway_method.videos_upload_url_options.id,
       aws_api_gateway_integration.videos_post_integration.id,
       aws_api_gateway_integration.videos_get_integration.id,
       aws_api_gateway_integration.videos_options_integration.id,
+      aws_api_gateway_integration.videos_upload_url_post_integration.id,
+      aws_api_gateway_integration.videos_upload_url_options_integration.id,
       # Videos integration responses
       aws_api_gateway_integration_response.videos_post_integration_response.id,
       aws_api_gateway_integration_response.videos_get_integration_response.id,
       aws_api_gateway_integration_response.videos_options_integration_response.id,
-      aws_api_gateway_authorizer.cognito_authorizer.id,
+      aws_api_gateway_integration_response.videos_upload_url_post_integration_response.id,
+      aws_api_gateway_integration_response.videos_upload_url_options_integration_response.id,
       # Admin resources
       aws_api_gateway_resource.admin_resource.id,
       aws_api_gateway_resource.admin_users_resource.id,
@@ -1196,4 +1150,112 @@ resource "aws_api_gateway_method" "admin_user_videos_options" {
   resource_id   = aws_api_gateway_resource.admin_user_videos_sub_resource.id
   http_method   = "OPTIONS"
   authorization = "NONE"
+}
+
+# Missing API Gateway integration responses for videos endpoints
+resource "aws_api_gateway_integration_response" "videos_post_integration_response" {
+  rest_api_id = aws_api_gateway_rest_api.video_api.id
+  resource_id = aws_api_gateway_resource.videos_resource.id
+  http_method = aws_api_gateway_method.videos_post.http_method
+  status_code = aws_api_gateway_method_response.videos_post_response.status_code
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Origin" = "'*'"
+  }
+}
+
+resource "aws_api_gateway_integration_response" "videos_get_integration_response" {
+  rest_api_id = aws_api_gateway_rest_api.video_api.id
+  resource_id = aws_api_gateway_resource.videos_resource.id
+  http_method = aws_api_gateway_method.videos_get.http_method
+  status_code = aws_api_gateway_method_response.videos_get_response.status_code
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Origin" = "'*'"
+  }
+}
+
+# Missing API Gateway integration responses for admin endpoints
+resource "aws_api_gateway_integration_response" "admin_users_get_integration_response" {
+  rest_api_id = aws_api_gateway_rest_api.video_api.id
+  resource_id = aws_api_gateway_resource.admin_users_resource.id
+  http_method = aws_api_gateway_method.admin_users_get.http_method
+  status_code = aws_api_gateway_method_response.admin_users_get_response.status_code
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Origin" = "'*'"
+  }
+}
+
+resource "aws_api_gateway_integration_response" "admin_videos_get_integration_response" {
+  rest_api_id = aws_api_gateway_rest_api.video_api.id
+  resource_id = aws_api_gateway_resource.admin_videos_resource.id
+  http_method = aws_api_gateway_method.admin_videos_get.http_method
+  status_code = aws_api_gateway_method_response.admin_videos_get_response.status_code
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Origin" = "'*'"
+  }
+}
+
+resource "aws_api_gateway_integration_response" "admin_videos_delete_integration_response" {
+  rest_api_id = aws_api_gateway_rest_api.video_api.id
+  resource_id = aws_api_gateway_resource.admin_videos_resource.id
+  http_method = aws_api_gateway_method.admin_videos_delete.http_method
+  status_code = aws_api_gateway_method_response.admin_videos_delete_response.status_code
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Origin" = "'*'"
+  }
+}
+
+resource "aws_api_gateway_integration_response" "admin_user_videos_get_integration_response" {
+  rest_api_id = aws_api_gateway_rest_api.video_api.id
+  resource_id = aws_api_gateway_resource.admin_user_videos_sub_resource.id
+  http_method = aws_api_gateway_method.admin_user_videos_get.http_method
+  status_code = aws_api_gateway_method_response.admin_user_videos_get_response.status_code
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Origin" = "'*'"
+  }
+}
+
+# Missing OPTIONS integration responses
+resource "aws_api_gateway_integration_response" "admin_users_options_integration_response" {
+  rest_api_id = aws_api_gateway_rest_api.video_api.id
+  resource_id = aws_api_gateway_resource.admin_users_resource.id
+  http_method = aws_api_gateway_method.admin_users_options.http_method
+  status_code = aws_api_gateway_method_response.admin_users_options_response.status_code
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Origin"  = "'*'"
+    "method.response.header.Access-Control-Allow-Methods" = "'GET,OPTIONS'"
+    "method.response.header.Access-Control-Allow-Headers" = "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+  }
+}
+
+resource "aws_api_gateway_integration_response" "admin_videos_options_integration_response" {
+  rest_api_id = aws_api_gateway_rest_api.video_api.id
+  resource_id = aws_api_gateway_resource.admin_videos_resource.id
+  http_method = aws_api_gateway_method.admin_videos_options.http_method
+  status_code = aws_api_gateway_method_response.admin_videos_options_response.status_code
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Origin"  = "'*'"
+    "method.response.header.Access-Control-Allow-Methods" = "'GET,DELETE,OPTIONS'"
+    "method.response.header.Access-Control-Allow-Headers" = "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+  }
+}
+
+resource "aws_api_gateway_integration_response" "admin_user_videos_options_integration_response" {
+  rest_api_id = aws_api_gateway_rest_api.video_api.id
+  resource_id = aws_api_gateway_resource.admin_user_videos_sub_resource.id
+  http_method = aws_api_gateway_method.admin_user_videos_options.http_method
+  status_code = aws_api_gateway_method_response.admin_user_videos_options_response.status_code
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Origin"  = "'*'"
+    "method.response.header.Access-Control-Allow-Methods" = "'GET,OPTIONS'"
+    "method.response.header.Access-Control-Allow-Headers" = "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+  }
 }

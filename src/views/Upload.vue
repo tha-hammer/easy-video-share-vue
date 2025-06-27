@@ -182,7 +182,6 @@
 import { defineComponent, ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useVideosStore } from '@/stores/videos'
-import { useAuthStore } from '@/stores/auth'
 import { useVideoUpload } from '@/composables/useVideoUpload'
 
 export default defineComponent({
@@ -190,7 +189,6 @@ export default defineComponent({
   setup() {
     const router = useRouter()
     const videosStore = useVideosStore()
-    const authStore = useAuthStore()
     const videoUpload = useVideoUpload()
 
     // Form data
@@ -198,13 +196,18 @@ export default defineComponent({
     const selectedFile = ref<File | null>(null)
     const fileInput = ref<HTMLInputElement>()
 
-    // Upload state
-    const isUploading = ref(false)
+    // Upload state - connect to composable
+    const isUploading = computed(() => videoUpload.isUploading.value)
+    const currentProgress = computed(() => videoUpload.currentProgress.value)
+    const uploadProgress = computed(() => currentProgress.value?.percentage || 0)
+    const uploadSpeed = computed(() => currentProgress.value?.uploadSpeed || 0)
+    const estimatedTimeRemaining = computed(
+      () => currentProgress.value?.estimatedTimeRemaining || 0,
+    )
+
+    // Local UI state
     const isPaused = ref(false)
     const isDragOver = ref(false)
-    const uploadProgress = ref(0)
-    const uploadSpeed = ref(0)
-    const estimatedTimeRemaining = ref(0)
 
     // Error handling
     const titleError = ref('')
@@ -293,35 +296,16 @@ export default defineComponent({
       }
 
       try {
-        isUploading.value = true
-        uploadProgress.value = 0
+        // Start the upload with the new simplified API
+        const videoMetadata = await videoUpload.uploadVideo(
+          selectedFile.value,
+          videoTitle.value.trim(),
+        )
 
-        // Create video metadata
-        const user = authStore.user
-        if (!user) {
-          throw new Error('User not authenticated')
-        }
+        console.log('✅ Upload completed:', videoMetadata)
 
-        const videoId = `${user.userId}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-        const metadata = {
-          video_id: videoId,
-          user_id: user.userId,
-          user_email: user.email,
-          title: videoTitle.value.trim(),
-          filename: selectedFile.value.name,
-          bucketLocation: `videos/${videoId}/${selectedFile.value.name}`,
-          upload_date: new Date().toISOString(),
-          file_size: selectedFile.value.size,
-          content_type: selectedFile.value.type,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        }
-
-        // Real multipart upload to S3
-        await videoUpload.uploadVideo(selectedFile.value, metadata)
-
-        // Save metadata to API
-        await videosStore.saveVideoMetadata(metadata)
+        // Save metadata to store for local state management
+        await videosStore.saveVideoMetadata(videoMetadata)
 
         // Redirect to videos page
         router.push('/videos')
@@ -348,8 +332,6 @@ export default defineComponent({
         } else {
           fileError.value = `Upload failed: ${errorMessage}`
         }
-
-        isUploading.value = false
       }
     }
 
@@ -366,27 +348,13 @@ export default defineComponent({
     const cancelUpload = async () => {
       if (confirm('Are you sure you want to cancel the upload?')) {
         await videoUpload.cancelUpload()
-        isUploading.value = false
         isPaused.value = false
-        uploadProgress.value = 0
         selectedFile.value = null
       }
     }
 
-    // Utility functions
-    const formatFileSize = (bytes: number): string => {
-      if (bytes === 0) return '0 Bytes'
-      const k = 1024
-      const sizes = ['Bytes', 'KB', 'MB', 'GB']
-      const i = Math.floor(Math.log(bytes) / Math.log(k))
-      return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
-    }
-
-    const formatTime = (seconds: number): string => {
-      const mins = Math.floor(seconds / 60)
-      const secs = Math.floor(seconds % 60)
-      return `${mins}m ${secs}s`
-    }
+    // Utility functions from composable
+    const { formatFileSize, formatTime } = videoUpload
 
     return {
       videoTitle,

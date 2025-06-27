@@ -56,14 +56,20 @@ output "dynamodb_table_name" {
   value       = aws_dynamodb_table.video_metadata.name
 }
 
+# API Gateway Configuration
 output "api_gateway_endpoint" {
-  description = "API Gateway endpoint URL"
+  description = "Base API Gateway endpoint URL"
   value       = "https://${aws_api_gateway_rest_api.video_api.id}.execute-api.${var.aws_region}.amazonaws.com/${var.environment}"
 }
 
 output "api_videos_endpoint" {
   description = "Full API endpoint for video operations"
   value       = "https://${aws_api_gateway_rest_api.video_api.id}.execute-api.${var.aws_region}.amazonaws.com/${var.environment}/videos"
+}
+
+output "api_videos_upload_url_endpoint" {
+  description = "Full API endpoint for video upload URL generation"  
+  value       = "https://${aws_api_gateway_rest_api.video_api.id}.execute-api.${var.aws_region}.amazonaws.com/${var.environment}/videos/upload-url"
 }
 
 # Admin API Endpoints
@@ -83,7 +89,7 @@ output "cognito_user_pool_id" {
   value       = aws_cognito_user_pool.video_app_users.id
 }
 
-output "cognito_user_pool_client_id" {
+output "cognito_client_id" {
   description = "Cognito User Pool Client ID"
   value       = aws_cognito_user_pool_client.video_app_client.id
 }
@@ -124,4 +130,4 @@ output "ai_video_lambda_function_name" {
 output "api_ai_video_endpoint" {
   description = "Full API endpoint for AI video operations"
   value       = "https://${aws_api_gateway_rest_api.video_api.id}.execute-api.${var.aws_region}.amazonaws.com/${var.environment}/ai-video"
-} 
+}
