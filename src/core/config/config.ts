@@ -5,6 +5,8 @@
 export const AWS_CONFIG = {
   region: import.meta.env.VITE_AWS_REGION || 'us-east-1',
   bucketName: import.meta.env.VITE_AWS_BUCKET_NAME || 'easy-video-share-silmari-dev',
+  audioBucketName:
+    import.meta.env.VITE_AWS_AUDIO_BUCKET_NAME || 'easy-video-share-silmari-dev-audio',
   credentials: {
     accessKeyId: import.meta.env.VITE_AWS_ACCESS_KEY_ID || 'YOUR_ACCESS_KEY_ID',
     secretAccessKey: import.meta.env.VITE_AWS_SECRET_ACCESS_KEY || 'YOUR_SECRET_ACCESS_KEY',

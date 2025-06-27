@@ -287,6 +287,14 @@ resource "aws_dynamodb_table" "video_metadata" {
     projection_type = "ALL"
   }
 
+  # Global Secondary Index for AI generation status queries
+  global_secondary_index {
+    name            = "user_id-ai_generation_status-index"
+    hash_key        = "user_id"
+    range_key       = "ai_generation_status"
+    projection_type = "ALL"
+  }
+
   tags = {
     Name        = "Video Metadata Table"
     Environment = var.environment
