@@ -1,10 +1,5 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb')
-const {
-  DynamoDBDocumentClient,
-  PutCommand,
-  QueryCommand,
-  ScanCommand,
-} = require('@aws-sdk/lib-dynamodb')
+const { DynamoDBDocumentClient, PutCommand, QueryCommand } = require('@aws-sdk/lib-dynamodb')
 const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3')
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner')
 
@@ -85,6 +80,11 @@ exports.handler = async (event) => {
     // Route audio requests
     if (path.includes('/audio')) {
       return await handleAudioRequest(httpMethod, path, event, userId, userEmail)
+    }
+
+    // Route video upload URL requests
+    if (path.includes('/videos/upload-url') && httpMethod === 'POST') {
+      return await handleVideoUploadUrl(event, userId, userEmail)
     }
 
     // Handle video requests (existing functionality)
@@ -295,6 +295,66 @@ async function handleAudioList(userId) {
     console.error('Error listing audio files:', error)
     return createResponse(500, {
       error: 'Failed to load audio files',
+      message: error.message,
+    })
+  }
+}
+
+// Generate presigned URL for video upload
+async function handleVideoUploadUrl(event, userId, userEmail) {
+  try {
+    const body = JSON.parse(event.body || '{}')
+
+    // Validate required fields
+    if (!body.title || !body.filename) {
+      return createResponse(400, {
+        error: 'Missing required fields: title, filename',
+      })
+    }
+
+    // Generate unique video ID
+    const videoId = `${userId}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+
+    // Create S3 key for video
+    const s3Key = `videos/${userId}/${videoId}/${body.filename}`
+
+    // Generate presigned URL for upload to main video bucket
+    const uploadCommand = new PutObjectCommand({
+      Bucket: process.env.S3_BUCKET_NAME,
+      Key: s3Key,
+      ContentType: body.content_type || 'video/mp4',
+    })
+
+    const uploadUrl = await getSignedUrl(s3Client, uploadCommand, {
+      expiresIn: 3600, // 1 hour
+    })
+
+    // Prepare video metadata for frontend
+    const videoMetadata = {
+      video_id: videoId,
+      user_id: userId,
+      user_email: userEmail,
+      title: body.title,
+      filename: body.filename,
+      bucket_location: s3Key,
+      upload_date: new Date().toISOString(),
+      file_size: body.file_size,
+      content_type: body.content_type,
+      duration: body.duration,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      media_type: 'video',
+    }
+
+    return createResponse(200, {
+      success: true,
+      upload_url: uploadUrl,
+      video: videoMetadata,
+    })
+  } catch (error) {
+    console.error('Error generating video upload URL:', error)
+    return createResponse(500, {
+      error: 'Failed to generate upload URL',
       message: error.message,
     })
   }
