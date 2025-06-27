@@ -39,16 +39,17 @@ output "audio_bucket_domain_name" {
   value       = aws_s3_bucket.audio_bucket.bucket_domain_name
 }
 
-output "app_user_access_key_id" {
-  description = "Access key ID for the application user"
-  value       = aws_iam_access_key.video_app_user_key.id
-}
+# REMOVED: Access keys for security (use IAM roles instead)
+# output "app_user_access_key_id" {
+#   description = "Access key ID for the application user"
+#   value       = aws_iam_access_key.video_app_user_key.id
+# }
 
-output "app_user_secret_access_key" {
-  description = "Secret access key for the application user"
-  value       = aws_iam_access_key.video_app_user_key.secret
-  sensitive   = true
-}
+# output "app_user_secret_access_key" {
+#   description = "Secret access key for the application user"
+#   value       = aws_iam_access_key.video_app_user_key.secret
+#   sensitive   = true
+# }
 
 output "dynamodb_table_name" {
   description = "Name of the DynamoDB table for video metadata"

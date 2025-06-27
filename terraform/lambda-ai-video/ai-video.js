@@ -20,7 +20,12 @@ const { S3Client, GetObjectCommand, PutObjectCommand } = require('@aws-sdk/clien
 
 // Initialize AWS clients
 const dynamoClient = new DynamoDBClient({ region: process.env.AWS_REGION })
-const docClient = DynamoDBDocumentClient.from(dynamoClient)
+const docClient = DynamoDBDocumentClient.from(dynamoClient, {
+  marshallOptions: {
+    removeUndefinedValues: true,
+    convertClassInstanceToMap: true,
+  },
+})
 const secretsClient = new SecretsManagerClient({ region: process.env.AWS_REGION })
 const transcribeClient = new TranscribeClient({ region: process.env.AWS_REGION })
 const s3Client = new S3Client({ region: process.env.AWS_REGION })
@@ -231,6 +236,7 @@ async function handleAIVideoGeneration(event, userId) {
 
   // Initialize AI generation data structure with mock processing steps
   const aiGenerationData = {
+    source_audio_id: body.audioId, // CRITICAL: Store reference to source audio
     processing_steps: [
       { step: 'transcription', status: 'pending', started_at: new Date().toISOString() },
       { step: 'scene_planning', status: 'pending' },
@@ -531,60 +537,43 @@ async function performRealTranscription(audioId, userId) {
 // Helper function to get video ID from audio ID
 async function getVideoIdFromAudioId(audioId, userId) {
   try {
-    console.log(`🔍 Looking for video with audio ID: ${audioId} for user: ${userId}`)
+    console.log(
+      `🔍 Looking for AI-generated video with source audio ID: ${audioId} for user: ${userId}`,
+    )
 
-    // Try to use the GSI first (if it exists)
-    try {
-      const queryCommand = new QueryCommand({
-        TableName: process.env.DYNAMODB_TABLE,
-        IndexName: 'user_id-ai_generation_status-index',
-        KeyConditionExpression: 'user_id = :userId',
-        FilterExpression: 'ai_generation_data.audio_id = :audioId',
-        ExpressionAttributeValues: {
-          ':userId': { S: userId },
-          ':audioId': { S: audioId },
-        },
-      })
-
-      const result = await dynamoClient.send(queryCommand)
-      console.log(`📋 GSI query result:`, {
-        itemsFound: result.Items?.length || 0,
-        scannedCount: result.ScannedCount,
-      })
-
-      if (result.Items && result.Items.length > 0) {
-        const videoId = result.Items[0].video_id.S
-        console.log(`✅ Found video ID via GSI: ${videoId} for audio: ${audioId}`)
-        return videoId
-      }
-    } catch (gsiError) {
-      console.log(`⚠️ GSI query failed, falling back to direct query:`, gsiError.message)
-    }
-
-    // Fallback: Use direct query on the audio ID (since audio_id is the video_id)
-    const scanCommand = new QueryCommand({
+    // Query the GSI to find videos for this user with ai_generation_status
+    const queryCommand = new QueryCommand({
       TableName: process.env.DYNAMODB_TABLE,
-      KeyConditionExpression: 'video_id = :audioId',
-      FilterExpression: 'user_id = :userId',
+      IndexName: 'user_id-ai_generation_status-index',
+      KeyConditionExpression: 'user_id = :userId AND ai_generation_status = :status',
       ExpressionAttributeValues: {
-        ':audioId': { S: audioId },
         ':userId': { S: userId },
+        ':status': { S: 'processing' }, // Look for videos currently being processed
       },
     })
 
-    const result = await dynamoClient.send(scanCommand)
-    console.log(`📋 Fallback query result:`, {
+    const result = await dynamoClient.send(queryCommand)
+    console.log(`📋 GSI query result:`, {
       itemsFound: result.Items?.length || 0,
       scannedCount: result.ScannedCount,
     })
 
+    // Find the video that references this audioId in its ai_generation_data
     if (result.Items && result.Items.length > 0) {
-      const videoId = result.Items[0].video_id.S
-      console.log(`✅ Found video ID via fallback: ${videoId} for audio: ${audioId}`)
-      return videoId
+      for (const item of result.Items) {
+        // Check if this video's AI generation data references our audioId
+        const aiData = item.ai_generation_data?.M
+        const sourceAudioId = aiData?.source_audio_id?.S || aiData?.audio_id?.S
+
+        if (sourceAudioId === audioId) {
+          const videoId = item.video_id.S
+          console.log(`✅ Found AI video ID: ${videoId} for source audio: ${audioId}`)
+          return videoId
+        }
+      }
     }
 
-    console.log(`❌ No video found for audio ID: ${audioId}`)
+    console.log(`❌ No AI-generated video found for audio ID: ${audioId}`)
     return null
   } catch (error) {
     console.error('Error getting video ID from audio ID:', error)
