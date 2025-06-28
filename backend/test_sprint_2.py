@@ -36,7 +36,8 @@ def test_sprint_2_integration():
     print("\n2. Testing upload initiation...")
     initiate_payload = {
         "filename": "test_video.mp4",
-        "content_type": "video/mp4"
+        "content_type": "video/mp4",
+        "file_size": 10485760  # 10MB test file size
     }
     
     try:

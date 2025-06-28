@@ -12,6 +12,45 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Configure MoviePy to use a simpler text method
+import moviepy.config as mp_config
+
+# Try to configure ImageMagick path on Windows
+import subprocess
+import sys
+import os
+
+def configure_imagemagick():
+    """Configure ImageMagick for MoviePy on Windows"""
+    try:
+        # Try to find ImageMagick
+        result = subprocess.run(['where', 'magick'], capture_output=True, text=True)
+        if result.returncode == 0:
+            magick_path = result.stdout.strip().split('\n')[0]
+            imagemagick_dir = os.path.dirname(magick_path)
+            magick_exe = os.path.join(imagemagick_dir, "magick.exe")
+            
+            if os.path.exists(magick_exe):
+                mp_config.IMAGEMAGICK_BINARY = magick_exe
+                logger.info(f"Configured ImageMagick binary: {magick_exe}")
+                return True
+    except Exception as e:
+        logger.warning(f"Could not configure ImageMagick: {e}")
+    
+    return False
+
+# Configure ImageMagick on import
+IMAGEMAGICK_CONFIGURED = configure_imagemagick()
+
+# Test if ImageMagick is working
+try:
+    from moviepy.video.tools.drawing import color_gradient
+    IMAGEMAGICK_AVAILABLE = True
+    logger.info("ImageMagick is available for advanced text features")
+except Exception as e:
+    IMAGEMAGICK_AVAILABLE = False
+    logger.warning(f"ImageMagick not available, using basic text rendering: {e}")
+
 
 def split_and_overlay_hardcoded(input_path: str, output_prefix: str) -> List[str]:
     """
@@ -56,15 +95,45 @@ def split_and_overlay_hardcoded(input_path: str, output_prefix: str) -> List[str
             # Extract segment
             segment = video.subclip(start_time, end_time)
             
-            # Create text overlay
-            text_clip = TextClip(
-                overlay_text,
-                fontsize=50,
-                color='white',
-                stroke_color='black',
-                stroke_width=2,
-                font='Arial-Bold'
-            ).set_position(('center', 'bottom')).set_duration(segment.duration)
+            # Create text overlay with fallback for missing ImageMagick
+            try:
+                if IMAGEMAGICK_AVAILABLE:
+                    # Use full-featured text with stroke
+                    text_clip = TextClip(
+                        overlay_text,
+                        fontsize=50,
+                        color='white',
+                        stroke_color='black',
+                        stroke_width=2,
+                        font='Arial-Bold'
+                    ).set_position(('center', 'bottom')).set_duration(segment.duration)
+                else:
+                    # Use basic text without stroke (ImageMagick not available)
+                    text_clip = TextClip(
+                        overlay_text,
+                        fontsize=50,
+                        color='white',
+                        method='caption',
+                        size=(segment.w, None)
+                    ).set_position(('center', 'bottom')).set_duration(segment.duration)
+                
+                # Ensure text clip has the same FPS as the video
+                if segment.fps:
+                    text_clip.fps = segment.fps
+                else:
+                    text_clip.fps = video.fps if video.fps else 24
+                    
+            except Exception as text_error:
+                logger.warning(f"Text overlay failed, using simple method: {text_error}")
+                # Fallback: very basic text
+                text_clip = TextClip(
+                    overlay_text,
+                    fontsize=40,
+                    color='white'
+                ).set_position(('center', 'bottom')).set_duration(segment.duration)
+                
+                # Set FPS for fallback text too
+                text_clip.fps = video.fps if video.fps else 24
             
             # Composite video with text overlay
             final_clip = CompositeVideoClip([segment, text_clip])
@@ -73,17 +142,40 @@ def split_and_overlay_hardcoded(input_path: str, output_prefix: str) -> List[str
             output_path = f"{output_prefix}_segment_{i+1:03d}.mp4"
             output_paths.append(output_path)
             
-            # Write the segment to file
+            # Write the segment to file with robust error handling and FPS fix
             logger.info(f"Writing segment to: {output_path}")
-            final_clip.write_videofile(
-                output_path,
-                codec='libx264',
-                audio_codec='aac',
-                temp_audiofile='temp-audio.m4a',
-                remove_temp=True,
-                verbose=False,
-                logger=None  # Suppress MoviePy logging
-            )
+            try:
+                # Ensure the clip has FPS set
+                if final_clip.fps is None:
+                    final_clip.fps = video.fps if video.fps else 24  # Default to 24 fps
+                
+                final_clip.write_videofile(
+                    output_path,
+                    codec='libx264',
+                    audio_codec='aac',
+                    fps=final_clip.fps,  # Explicitly set FPS
+                    preset='medium',  # Balanced speed/quality
+                    verbose=False,
+                    logger=None,  # Suppress MoviePy logging
+                    temp_audiofile='temp-audio.m4a',
+                    remove_temp=True,
+                    ffmpeg_params=['-hide_banner', '-loglevel', 'error']  # Reduce FFmpeg output
+                )
+            except Exception as write_error:
+                logger.error(f"Failed to write segment {i+1}: {write_error}")
+                # Try with simpler settings
+                try:
+                    logger.info(f"Retrying segment {i+1} with simpler settings...")
+                    final_clip.write_videofile(
+                        output_path,
+                        fps=24,  # Force 24 fps
+                        verbose=False,
+                        logger=None,
+                        preset='ultrafast'
+                    )
+                except Exception as retry_error:
+                    logger.error(f"Retry also failed for segment {i+1}: {retry_error}")
+                    raise Exception(f"Could not write video segment: {retry_error}")
             
             # Clean up clips to free memory
             segment.close()

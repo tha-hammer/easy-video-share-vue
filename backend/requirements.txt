@@ -9,6 +9,7 @@ botocore==1.34.0
 # Video processing
 moviepy==1.0.3
 ffmpeg-python==0.2.0
+Pillow==10.1.0  # For text rendering fallback
 
 # Task queue
 celery==5.3.4

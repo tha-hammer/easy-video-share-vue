@@ -7,11 +7,27 @@ from config import settings
 
 
 def get_s3_client():
-    """Get configured S3 client using AWS CLI credentials"""
-    # Use the SSO profile from settings
+    """Get configured S3 client with fallback authentication methods"""
     import boto3
-    session = boto3.Session(profile_name=settings.AWS_PROFILE)
-    return session.client('s3', region_name=settings.AWS_REGION)
+    from botocore.exceptions import TokenRetrievalError, ProfileNotFound
+    
+    try:
+        # First, try to use the SSO profile from settings
+        session = boto3.Session(profile_name=settings.AWS_PROFILE)
+        client = session.client('s3', region_name=settings.AWS_REGION)
+        
+        # Test the client with a simple operation to verify credentials
+        client.get_caller_identity = session.client('sts').get_caller_identity
+        client.get_caller_identity()
+        
+        return client
+        
+    except (TokenRetrievalError, ProfileNotFound) as e:
+        print(f"SSO authentication failed: {e}")
+        print("Falling back to environment variables or default credentials...")
+        
+        # Fallback to environment variables or default AWS credentials
+        return boto3.client('s3', region_name=settings.AWS_REGION)
 
 
 def generate_presigned_url(bucket_name: str, object_key: str, content_type: str, expiration: int = 3600) -> str:
