@@ -1,0 +1,5 @@
+# Critical Resource IDs for Import
+USER_POOL_ID=us-east-1_8L0Sa4BCn
+BUCKET_NAME=easy-video-share-silmari-dev
+TABLE_NAME=easy-video-share-video-metadata
+API_GATEWAY_ID=ip60d4qmjf

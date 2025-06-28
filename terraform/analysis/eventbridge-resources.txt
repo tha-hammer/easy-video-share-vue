@@ -1,0 +1,4 @@
+EventBridge/CloudWatch:
+aws_cloudwatch_event_rule.transcribe_job_state_change
+aws_cloudwatch_event_target.transcribe_lambda_target
+aws_lambda_permission.allow_eventbridge_transcription
