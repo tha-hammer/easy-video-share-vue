@@ -1,0 +1,137 @@
+# Environment Configuration Mapping
+# This file defines the relationship between git branches, terraform workspaces, and configurations
+
+environments:
+  # Simple/Core Configuration
+  main:
+    workspace: 'main-simple'
+    config_type: 'Simple Core'
+    description: 'Basic video sharing without AI features'
+    terraform_file: 'main.tf'
+    required_vars: ['bucket_name', 'project_name', 'aws_region']
+    optional_features: []
+
+  # AI Video Processing
+  feature/ai-video:
+    workspace: 'ai-video-features'
+    config_type: 'AI Video Processing'
+    description: 'Full AI video generation and processing pipeline'
+    terraform_file: 'main.tf'
+    required_vars: ['bucket_name', 'audio_bucket_name', 'project_name', 'aws_region']
+    optional_features: ['transcription', 'websocket', 'eventbridge']
+
+  # Audio Processing Only
+  feature/audio-only:
+    workspace: 'audio-processing'
+    config_type: 'Audio Processing'
+    description: 'Audio transcription without video AI generation'
+    terraform_file: 'main.tf'
+    required_vars: ['bucket_name', 'audio_bucket_name', 'project_name', 'aws_region']
+    optional_features: ['transcription']
+
+  # Development/Testing
+  develop:
+    workspace: 'development'
+    config_type: 'Development'
+    description: 'Development environment with all features enabled'
+    terraform_file: 'main.tf'
+    required_vars: ['bucket_name', 'audio_bucket_name', 'project_name', 'aws_region']
+    optional_features: ['transcription', 'websocket', 'eventbridge', 'debug_logging']
+
+  # Production Staging
+  staging:
+    workspace: 'staging'
+    config_type: 'Staging'
+    description: 'Production-like staging environment'
+    terraform_file: 'main.tf'
+    required_vars: ['bucket_name', 'audio_bucket_name', 'project_name', 'aws_region']
+    optional_features: ['transcription', 'websocket', 'eventbridge']
+
+  # Experimental Features
+  experimental/*:
+    workspace: 'experimental'
+    config_type: 'Experimental'
+    description: 'Bleeding edge features and experiments'
+    terraform_file: 'experimental.tf'
+    required_vars: ['bucket_name', 'project_name', 'aws_region']
+    optional_features: ['*']
+
+# Feature definitions
+features:
+  transcription:
+    description: 'AWS Transcribe integration for audio processing'
+    resources: ['aws_cloudwatch_event_rule', 'aws_lambda_function.transcription_processor']
+
+  websocket:
+    description: 'Real-time WebSocket API for live updates'
+    resources: ['aws_apigatewayv2_api.websocket_api', 'aws_lambda_function.websocket_handler']
+
+  eventbridge:
+    description: 'EventBridge integration for event-driven architecture'
+    resources: ['aws_cloudwatch_event_rule', 'aws_cloudwatch_event_target']
+
+  debug_logging:
+    description: 'Enhanced CloudWatch logging for debugging'
+    resources: ['aws_cloudwatch_log_group']
+
+  ai_video:
+    description: 'AI video generation and processing'
+    resources: ['aws_lambda_function.ai_video_processor', 'aws_lambda_layer_version.ai_video_layer']
+
+# Workspace configuration
+workspaces:
+  main-simple:
+    cost_tier: 'low'
+    auto_destroy_unused: true
+    backup_state: true
+
+  ai-video-features:
+    cost_tier: 'high'
+    auto_destroy_unused: false
+    backup_state: true
+
+  audio-processing:
+    cost_tier: 'medium'
+    auto_destroy_unused: true
+    backup_state: true
+
+  development:
+    cost_tier: 'medium'
+    auto_destroy_unused: true
+    backup_state: false
+
+  staging:
+    cost_tier: 'high'
+    auto_destroy_unused: false
+    backup_state: true
+
+  experimental:
+    cost_tier: 'low'
+    auto_destroy_unused: true
+    backup_state: false
+
+# Branch patterns and fallback rules
+branch_patterns:
+  - pattern: 'main'
+    environment: 'main'
+
+  - pattern: 'feature/ai-*'
+    environment: 'feature/ai-video'
+
+  - pattern: 'feature/audio*'
+    environment: 'feature/audio-only'
+
+  - pattern: 'develop*'
+    environment: 'develop'
+
+  - pattern: 'staging*'
+    environment: 'staging'
+
+  - pattern: 'experimental/*'
+    environment: 'experimental/*'
+
+  - pattern: 'hotfix/*'
+    environment: 'main' # Hotfixes go to simple environment
+
+  - pattern: '*' # Fallback
+    environment: 'interactive_choice'
