@@ -5,10 +5,11 @@ from models import (
     InitiateUploadRequest, 
     InitiateUploadResponse, 
     CompleteUploadRequest, 
-    JobCreatedResponse
+    JobCreatedResponse,
+    JobStatusResponse
 )
 from s3_utils import generate_presigned_url, generate_s3_key
-from tasks import process_video_task
+from tasks import process_video_task, celery_app
 from config import settings
 
 # Initialize FastAPI app
@@ -78,14 +79,63 @@ async def complete_upload(request: CompleteUploadRequest) -> JobCreatedResponse:
         # Dispatch video processing task to Celery
         task = process_video_task.delay(request.s3_key, request.job_id)
         
+        # Use the Celery task ID as the job ID for tracking
         return JobCreatedResponse(
-            job_id=request.job_id,
+            job_id=task.id,  # Use Celery task ID instead of original job_id
             status="QUEUED",
             message="Video processing job has been queued successfully"
         )
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to start processing: {str(e)}")
+
+
+@router.get("/jobs/{job_id}/status", response_model=JobStatusResponse)
+async def get_job_status(job_id: str) -> JobStatusResponse:
+    """
+    Get the status of a video processing job
+    
+    This endpoint allows the frontend to poll for job status updates
+    and retrieve the results when processing is complete.
+    """
+    try:
+        # Get task result from Celery
+        task_result = celery_app.AsyncResult(job_id)
+        
+        # Map Celery states to our status format
+        status_mapping = {
+            "PENDING": "QUEUED",
+            "STARTED": "PROCESSING", 
+            "SUCCESS": "COMPLETED",
+            "FAILURE": "FAILED",
+            "RETRY": "PROCESSING",
+            "REVOKED": "CANCELLED"
+        }
+        
+        status = status_mapping.get(task_result.state, "UNKNOWN")
+        
+        response_data = {
+            "job_id": job_id,
+            "status": status
+        }
+        
+        if task_result.state == "SUCCESS":
+            # Task completed successfully
+            result = task_result.result
+            if isinstance(result, dict):
+                response_data["output_urls"] = result.get("output_urls", [])
+        elif task_result.state == "FAILURE":
+            # Task failed
+            response_data["error_message"] = str(task_result.info)
+        elif task_result.state == "STARTED":
+            # Task is running, try to get progress if available
+            if hasattr(task_result, 'info') and isinstance(task_result.info, dict):
+                response_data["progress"] = task_result.info.get("progress")
+        
+        return JobStatusResponse(**response_data)
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get job status: {str(e)}")
 
 
 @router.get("/health")

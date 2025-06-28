@@ -1,119 +1,77 @@
-You've hit on a absolutely crucial point that often trips up even human developers, and it's a fantastic insight for LLM-driven development! LLMs are excellent at writing code given a defined scope, but they frequently miss the surrounding **environmental and infrastructure dependencies** – like needing Redis running in Docker for Celery, or `FFmpeg` binaries for `MoviePy`.
+This is a classic and incredibly common integration issue in distributed systems, and it's fantastic that your LLM was able to pinpoint it!
 
-This is a perfect example of where your human oversight and the iterative planning truly shine. Let's explicitly integrate planning for these "dependent modules" (external services, infrastructure components, system-level tools) into our sprint plan. The LLM should be guided to create not just the application code, but also the necessary _setup scripts_ and configuration snippets for these dependencies, and understand how the application code interacts with them.
+### **Characterization of the Error: Data Consistency / ID Mismatch**
 
-We'll add a new section to each relevant sprint: **"External Dependencies & Setup."**
+This error is a **Data Consistency** or **ID Mismatch** problem within a distributed system.
+
+- **Type of Error:** Integration/Coordination failure in a multi-component system (FastAPI, Celery, Redis, DynamoDB).
+- **Root Cause:** The unique identifier (the `job_id`) generated at the initiation point (your FastAPI `complete_upload` endpoint) is not being correctly propagated, used, or referenced by subsequent components in the processing chain (the Celery task, and likely the DynamoDB status updates).
+  - **Possible specific causes:**
+    - The Celery task might be generating its _own_ internal task ID and storing/using that, instead of the `job_id` passed from FastAPI.
+    - The `job_id` might be getting lost or corrupted during serialization/deserialization between FastAPI and Celery.
+    - The DynamoDB service might be using a different ID field or schema than expected.
+- **Impact:** The frontend loses visibility into the true status of the job it submitted, as it's querying for an ID that doesn't correctly map to the backend process.
+
+This highlights the challenge of ensuring a single source of truth for an identifier across different services.
+
+### **Modifying the Plan to Avoid This in the Future (Focus on ID Management)**
+
+This issue underscores the need for explicit **ID Management and Data Contract Enforcement** across your function chains. We'll add a new principle and enhance relevant sprint sections to make the LLM (and you) more aware of these consistency requirements.
 
 ---
 
-### Modified Sprint Plan with External Dependencies & Setup
+### **New Core Principle for LLM-Driven Development:**
+
+- **Explicit ID Management & Data Contract Enforcement:** For any unique identifier (like `job_id`), ensure it is generated once at its origin, clearly defined in data models, and consistently propagated as the single source of truth across all involved services (FastAPI, Celery, Database). If a service generates its own internal ID (e.g., Celery's `task.id`), clarify its relationship to the primary `job_id` (e.g., store Celery ID alongside `job_id`, but query by `job_id`).
 
 ---
+
+### **Modified Sprint Plan Sections:**
 
 **Sprint 1: Core Video Upload & S3 Storage Initiation**
 
-- **Goal:** A user can select a video, click "upload," and it lands securely in your `aws_s3_bucket.video_bucket`. Frontend gets a confirmation and a `job_id`.
-- **Key Features:** (Same as before)
-  - FastAPI endpoint (`/api/upload/initiate`) for pre-signed S3 PUT URLs.
-  - FastAPI endpoint (`/api/upload/complete`) to acknowledge S3 upload and dispatch placeholder background task.
-  - Frontend logic for pre-signed URL request, direct S3 PUT, and backend notification.
-- **LLM Context Strategy:** (Same as before)
-- **Expected Outputs:** (Same as before)
-- **External Dependencies & Setup:**
-  - **Required Dependencies:** **Redis** (for Celery/RQ broker).
-  - **LLM Instruction:**
-    - "Generate a `docker-compose.yml` file that includes a Redis service for local development. Configure it with a named volume for persistence."
-    - "Provide shell/PowerShell scripts to easily start and stop this Docker Compose setup."
-    - "In `tasks.py`, ensure the Celery/RQ app initialization points to the Redis service URL (e.g., `redis://redis:6379/0` if running in Docker Compose, or `redis://localhost:6379/0` if Redis is native on host)."
-  - **Testing/Verification:**
-    - "After generating the Docker Compose file, provide the `docker-compose up -d` command to start Redis."
-    - "Provide a Python snippet to test connectivity to Redis (e.g., using the `redis` client library to `ping()` the Redis server)."
-- **Testing Focus: Build & Verify Real Interaction** (Same as before)
-  - ... (add relevant verification steps as described in previous plan)
+- **Goal:** (Same) User can select a video, click "upload," and it lands securely in your `aws_s3_bucket.video_bucket`. Frontend gets a confirmation and a `job_id`.
+- **Function Chain 2: Completing S3 Upload & Dispatching Task**
+  - **Sequence:** (Same) Frontend (after direct S3 upload success) -> Frontend Service Call (`completeUpload`) -> FastAPI Endpoint (`/api/upload/complete`) -> Celery/RQ `send_task` -> FastAPI Response (with `job_id`).
+  - **LLM Focus (refinement):**
+    1.  **`models.py`:** Define `JobCreatedResponse` to explicitly return the _generated_ `job_id` from the backend to the frontend.
+    2.  **`main.py` (or `api/endpoints.py`):**
+        - **Crucially:** Instruct the LLM to generate the `job_id` **within this endpoint** (e.g., using `str(uuid.uuid4())`). This `job_id` is the primary identifier for the entire video processing task.
+        - When calling `process_video_task.delay()`, ensure this _same `job_id`_ is passed as an argument.
+        - _Clarification for LLM:_ "The `process_video_task.delay()` method also returns a Celery `AsyncResult` object which has its own `id`. For our job tracking, **we will use the `job_id` we generated ourselves** (`str(uuid.uuid4())`) as the primary key for all status updates and queries. The Celery task ID is an internal detail."
+  - **Testing Focus: Build & Verify Real Interaction (Enhanced)**
+    - **Verification Steps for LLM:**
+      - "After generating the `complete_upload` endpoint, provide the exact `curl` command (or Python `requests` snippet) to hit this endpoint, simulating a successful S3 upload notification (with a dummy `s3_key`). Specify the expected JSON response format including the **newly generated `job_id`**."
+      - **New Verification:** "Instruct me on how to confirm that the `job_id` returned by the `complete_upload` endpoint is successfully received as an argument by the `process_video_task` when it starts. (e.g., by logging that `job_id` at the very beginning of the `process_video_task` and checking worker logs)."
 
 ---
 
-**Sprint 2: Basic Video Splitting & Text Overlay Core (Background Task)**
+**Sprint 5: Status Tracking (DynamoDB) & Frontend Display (Modified)**
 
-- **Goal:** The backend can retrieve an original video from S3, split it into hardcoded 30-second segments, add a single, hardcoded text overlay, and upload the processed clips back to S3 within the same `video_bucket`.
-- **Key Features:** (Same as before)
-  - Flesh out the `process_video_task` (Celery/RQ) with actual video processing.
-  - S3 download/upload within the task.
-  - `MoviePy` usage for splitting, text overlay, and export.
-  - Local temporary file cleanup.
-- **LLM Context Strategy:** (Same as before)
-- **Expected Outputs:** (Same as before)
-- **External Dependencies & Setup:**
-  - **Required Dependencies:** **FFmpeg binaries** (required by MoviePy for video processing).
-  - **LLM Instruction:**
-    - "Provide platform-specific (Linux/macOS/Windows) shell/batch scripts or instructions for installing FFmpeg system-wide."
-    - "If using Docker for the Celery/RQ worker (recommended for this project due to MoviePy/FFmpeg), modify the `docker-compose.yml` from Sprint 1 to include the Celery/RQ worker service. Ensure the worker's Dockerfile includes FFmpeg installation."
-    - "In the worker's Dockerfile, ensure FFmpeg is installed and accessible in the PATH."
-  - **Testing/Verification:**
-    - "Provide a shell command to verify FFmpeg installation and version (e.g., `ffmpeg -version`)."
-    - "If running the worker in Docker, provide instructions to exec into the worker container and verify FFmpeg is installed there."
-- **Testing Focus: Real Background Task Execution & S3 Output Verification** (Same as before)
-  - ... (add relevant verification steps as described in previous plan)
-
----
-
-**Sprint 3: Dynamic User Input for Cutting & Text Strategy (Data Flow)**
-
-- **Goal:** The frontend sends user-defined cutting parameters (fixed duration or random range) and the selected text strategy. Backend correctly receives and interprets these and calculates the number of segments. Frontend can preview this count.
-- **Key Features:** (Same as before)
-  - Updated Pydantic models for `CuttingParams` and `TextStrategy`.
-  - FastAPI endpoint (`/api/video/analyze-duration`) for duration/segment calculation.
-  - `process_video_task` uses user-provided cutting parameters.
-- **LLM Context Strategy:** (Same as before)
-- **Expected Outputs:** (Same as before)
-- **External Dependencies & Setup:** (No new core external dependencies introduced in this sprint beyond those established.)
-  - **Consideration:** If `get_video_duration_from_s3` uses `ffprobe` (part of FFmpeg), ensure FFmpeg is available where the _FastAPI app_ runs, not just the worker.
-  - **LLM Instruction:** "Review the `get_video_duration_from_s3` implementation. If it directly invokes `ffprobe`, ensure `ffmpeg-python` (and thus FFmpeg) is included in the FastAPI app's environment setup (e.g., its `Dockerfile` if separate from worker, or `requirements.txt`)."
-- **Testing Focus: Real API & Parameter Flow Validation** (Same as before)
-  - ... (add relevant verification steps as described in previous plan)
-
----
-
-**Sprint 4: Dynamic Text Generation & Advanced Text UI**
-
-- **Goal:** Implement "base text + vary" (LLM-powered) and "unique for all" UI.
-- **Key Features:** (Same as before)
-  - LLM integration for text variations.
-  - Frontend UI for unique text per segment.
-- **LLM Context Strategy:** (Same as before)
-- **Expected Outputs:** (Same as before)
-- **External Dependencies & Setup:**
-  - **Required Dependencies:** Access to the **Gemini API** (or chosen LLM).
-  - **LLM Instruction:**
-    - "In `llm_service.py`, ensure the Gemini API key is loaded from an environment variable (e.g., `os.getenv("GEMINI_API_KEY")`) for secure access."
-    - "Provide instructions on how to set this environment variable for local development and for the production deployment environment (worker's environment variables)."
-  - **Testing/Verification:**
-    - "Provide a simple Python script that just calls `llm_service.generate_text_variations` directly, to verify API key configuration and LLM responsiveness without a full video processing job."
-- **Testing Focus: Actual LLM Interaction & Visual Confirmation** (Same as before)
-  - ... (add relevant verification steps as described in previous plan)
-
----
-
-**Sprint 5: Status Tracking (DynamoDB) & Frontend Display**
-
-- **Goal:** Frontend polls for job status, and processed video links are displayed once complete, using DynamoDB as the backend for job state.
-- **Key Features:** (Same as before)
-  - `boto3` DynamoDB client integration.
+- **Goal:** Frontend polls for job status, and processed video links are displayed once complete, using DynamoDB as the backend for job state, **with secure access to the video files.**
+- **Key Features (Addition/Refinement):**
+  - `boto3` DynamoDB client integration (existing).
   - FastAPI endpoint (`/api/jobs/{job_id}/status`) to retrieve job status.
-  - Background task updates job status in DynamoDB.
-  - Frontend polling/display logic.
-- **LLM Context Strategy:** (Same as before)
-- **Expected Outputs:** (Same as before)
-- **External Dependencies & Setup:**
-  - **Required Dependencies:** AWS Credentials (IAM Role/Access Keys) with DynamoDB permissions for both the FastAPI application and the Celery/RQ worker.
-  - **LLM Instruction:**
-    - "Ensure `boto3` in `dynamodb_service.py` is configured to pick up credentials securely (e.g., via IAM roles for EC2/Fargate, or environment variables `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN` for local development)."
-    - "Provide a minimal Python script to test direct connectivity to DynamoDB and perform a sample `put_item` and `get_item` operation on the `video_metadata` table, using the table name from `main.tf`."
-  - **Testing/Verification:**
-    - "Provide AWS CLI commands to verify successful DynamoDB interactions (e.g., `aws dynamodb get-item --table-name ... --key ...`)."
-- **Testing Focus: Real DynamoDB Interaction & Live Status Updates** (Same as before)
-  - ... (add relevant verification steps as described in previous plan)
+  - **New:** This endpoint will **dynamically generate pre-signed URLs for download access** for each processed video segment returned.
+  - Background task updates job status in DynamoDB (existing).
+  - Frontend polling/display logic (existing).
+- **LLM Context Strategy (Refinement for `dynamodb_service.py` and `main.py`):**
+  - **For `dynamodb_service.py`:**
+    - The `get_job_status` function will retrieve the S3 keys of the processed videos.
+  - **For `s3_utils.py` (or a new `s3_download_utils.py` if preferred):**
+    - **Task:** Generate a new helper function `generate_presigned_download_url`.
+    - **LLM Context:** `import boto3`, `s3_client`, function signature: `def generate_presigned_download_url(bucket_name: str, object_key: str, expiration: int = 3600) -> str:`. Instruct it to use `s3_client.generate_presigned_url` for a `GET` operation.
+  - **For `main.py` (or `api/endpoints.py`):**
+    - **Task:** Modify the `get_job_status` FastAPI endpoint.
+    - **LLM Context:**
+      - When retrieving a job that is `COMPLETED`, iterate through the list of `output_s3_keys` (retrieved from DynamoDB).
+      - For each `output_s3_key`, call `s3_utils.generate_presigned_download_url` to get a temporary, time-limited URL.
+      - The `JobStatusResponse` Pydantic model should be updated to include `download_urls: List[str]` (optional, only present when completed).
+      - _Clarification for LLM:_ Emphasize that these URLs are for _download/viewing_ and are distinct from the _upload_ pre-signed URLs from Sprint 1. The frontend should use these generated URLs directly for `GET` requests (e.g., in `<img>` or `<video>` tags, or for actual file downloads).
+- **Testing Focus: Real DynamoDB Interaction, Live Status Updates, and Secure Download Verification**
+  - **Verification Steps for LLM (Addition):**
+    - "After modifying the `get_job_status` endpoint, provide `curl` commands to test it for a `COMPLETED` job. Verify that the response JSON includes valid `download_urls`."
+    - "Provide instructions on how to use one of these generated `download_urls` (e.g., paste into a browser, or use a simple `curl -o` command) to confirm that the video file can be successfully downloaded/viewed and that the URL expires after its set duration (e.g., 1 hour)."
+    - "Instruct on how the frontend will display these `download_urls` for user access."
 
----
-
-This refined plan now includes a dedicated focus on external dependencies, guiding the LLM to provide not just application code, but also the surrounding setup scripts and configuration knowledge required to get everything running and testable in a real environment.
+By adding this explicit focus on ID management and providing specific verification steps to ensure consistency across components, we can help avoid this type of error in future sprints.
