@@ -39,17 +39,16 @@ resource "aws_lambda_function" "transcription_processor" {
     variables = {
       DYNAMODB_TABLE = aws_dynamodb_table.video_metadata.name
       AUDIO_BUCKET   = aws_s3_bucket.audio_bucket.bucket
-      AWS_REGION     = var.aws_region
     }
   }
 
   depends_on = [
-    aws_iam_role_policy_attachment.transcription_processor_policy,
+    aws_iam_role_policy.transcription_processor_policy,
     aws_cloudwatch_log_group.transcription_processor_logs
   ]
 
   lifecycle {
-    ignore_changes = [filename, last_modified, source_code_hash]
+    ignore_changes = [filename, source_code_hash]
   }
 
   tags = {
@@ -235,17 +234,16 @@ resource "aws_lambda_function" "websocket_handler" {
   environment {
     variables = {
       DYNAMODB_TABLE = aws_dynamodb_table.video_metadata.name
-      AWS_REGION     = var.aws_region
     }
   }
 
   depends_on = [
-    aws_iam_role_policy_attachment.websocket_handler_policy,
+    aws_iam_role_policy.websocket_handler_policy,
     aws_cloudwatch_log_group.websocket_handler_logs
   ]
 
   lifecycle {
-    ignore_changes = [filename, last_modified, source_code_hash]
+    ignore_changes = [filename, source_code_hash]
   }
 
   tags = {
@@ -359,8 +357,9 @@ resource "aws_dynamodb_table" "websocket_connections" {
   }
 
   global_secondary_index {
-    name     = "userId-index"
-    hash_key = "userId"
+    name            = "userId-index"
+    hash_key        = "userId"
+    projection_type = "ALL"
   }
 
   ttl {

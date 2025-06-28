@@ -644,7 +644,6 @@ resource "aws_api_gateway_deployment" "ai_video_deployment" {
   ]
 
   rest_api_id = aws_api_gateway_rest_api.video_api.id
-  stage_name  = var.environment
 
   # Force new deployment on every apply
   triggers = {
