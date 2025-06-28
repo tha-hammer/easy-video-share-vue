@@ -196,9 +196,11 @@
             "statement": [
               {
                 "actions": ["sts:AssumeRoleWithWebIdentity"],
+                "actions": ["sts:AssumeRoleWithWebIdentity"],
                 "condition": [
                   {
                     "test": "StringEquals",
+                    "values": ["sts.amazonaws.com"],
                     "values": ["sts.amazonaws.com"],
                     "variable": "token.actions.githubusercontent.com:aud"
                   },
@@ -3948,6 +3950,7 @@
           "identity_schema_version": 0,
           "private": "bnVsbA==",
           "dependencies": ["aws_api_gateway_rest_api.video_api"],
+          "dependencies": ["aws_api_gateway_rest_api.video_api"],
           "create_before_destroy": true
         }
       ]
@@ -4104,6 +4107,7 @@
           "identity_schema_version": 0,
           "private": "bnVsbA==",
           "dependencies": ["aws_api_gateway_rest_api.video_api"],
+          "dependencies": ["aws_api_gateway_rest_api.video_api"],
           "create_before_destroy": true
         }
       ]
@@ -4126,6 +4130,7 @@
           "sensitive_attributes": [],
           "identity_schema_version": 0,
           "private": "bnVsbA==",
+          "dependencies": ["aws_api_gateway_rest_api.video_api"]
           "dependencies": ["aws_api_gateway_rest_api.video_api"]
         }
       ]
@@ -4173,6 +4178,7 @@
           "sensitive_attributes": [],
           "identity_schema_version": 0,
           "private": "bnVsbA==",
+          "dependencies": ["aws_api_gateway_rest_api.video_api"],
           "dependencies": ["aws_api_gateway_rest_api.video_api"],
           "create_before_destroy": true
         }
@@ -4223,6 +4229,7 @@
             "endpoint_configuration": [
               {
                 "ip_address_type": "ipv4",
+                "types": ["REGIONAL"],
                 "types": ["REGIONAL"],
                 "vpc_endpoint_ids": []
               }
@@ -4813,6 +4820,7 @@
           "identity_schema_version": 0,
           "private": "bnVsbA==",
           "dependencies": ["aws_cognito_user_pool.video_app_users"]
+          "dependencies": ["aws_cognito_user_pool.video_app_users"]
         }
       ]
     },
@@ -4835,6 +4843,7 @@
           "sensitive_attributes": [],
           "identity_schema_version": 0,
           "private": "bnVsbA==",
+          "dependencies": ["aws_cognito_user_pool.video_app_users"]
           "dependencies": ["aws_cognito_user_pool.video_app_users"]
         }
       ]
@@ -4865,7 +4874,9 @@
               }
             ],
             "alias_attributes": ["email"],
+            "alias_attributes": ["email"],
             "arn": "arn:aws:cognito-idp:us-east-1:571960159088:userpool/us-east-1_8L0Sa4BCn",
+            "auto_verified_attributes": ["email"],
             "auto_verified_attributes": ["email"],
             "creation_date": "2025-06-21T14:39:29Z",
             "custom_domain": "",
@@ -4905,6 +4916,7 @@
             "schema": [],
             "sign_in_policy": [
               {
+                "allowed_first_auth_factors": ["PASSWORD"]
                 "allowed_first_auth_factors": ["PASSWORD"]
               }
             ],
@@ -4982,6 +4994,7 @@
             "refresh_token_rotation": [],
             "refresh_token_validity": 30,
             "supported_identity_providers": ["COGNITO"],
+            "supported_identity_providers": ["COGNITO"],
             "token_validity_units": [
               {
                 "access_token": "hours",
@@ -5001,6 +5014,7 @@
             ]
           ],
           "identity_schema_version": 0,
+          "dependencies": ["aws_cognito_user_pool.video_app_users"]
           "dependencies": ["aws_cognito_user_pool.video_app_users"]
         }
       ]
@@ -5203,6 +5217,7 @@
           "attributes": {
             "arn": "arn:aws:iam::571960159088:oidc-provider/token.actions.githubusercontent.com",
             "client_id_list": ["sts.amazonaws.com"],
+            "client_id_list": ["sts.amazonaws.com"],
             "id": "arn:aws:iam::571960159088:oidc-provider/token.actions.githubusercontent.com",
             "tags": {
               "Environment": "dev",
@@ -5224,6 +5239,7 @@
           "sensitive_attributes": [],
           "identity_schema_version": 0,
           "private": "bnVsbA==",
+          "dependencies": ["data.tls_certificate.github"]
           "dependencies": ["data.tls_certificate.github"]
         }
       ]
@@ -5531,6 +5547,7 @@
           "schema_version": 0,
           "attributes": {
             "architectures": ["x86_64"],
+            "architectures": ["x86_64"],
             "arn": "arn:aws:lambda:us-east-1:571960159088:function:easy-video-share-admin-api",
             "code_sha256": "WHbhtARlDnVaJaHlv8tZjXoWVmsr8EYT+Yiz2KgxHfE=",
             "code_signing_config_arn": "",
@@ -5629,6 +5646,7 @@
           "status": "tainted",
           "schema_version": 0,
           "attributes": {
+            "architectures": ["x86_64"],
             "architectures": ["x86_64"],
             "arn": "arn:aws:lambda:us-east-1:571960159088:function:easy-video-share-ai-video-processor",
             "code_sha256": "6SUzPr9M3+MWBWE4mtvTSt9VtxwKVysE7OOo2JqBjFU=",
@@ -5733,6 +5751,7 @@
           "schema_version": 0,
           "attributes": {
             "architectures": ["x86_64"],
+            "architectures": ["x86_64"],
             "arn": "arn:aws:lambda:us-east-1:571960159088:function:easy-video-share-transcription-processor",
             "code_sha256": "K+Od9lmh+/bisxRZS2FBsaBFdl5ZDV1u3035baHHzO4=",
             "code_signing_config_arn": "",
@@ -5831,6 +5850,7 @@
         {
           "schema_version": 0,
           "attributes": {
+            "architectures": ["x86_64"],
             "architectures": ["x86_64"],
             "arn": "arn:aws:lambda:us-east-1:571960159088:function:easy-video-share-video-metadata-api",
             "code_sha256": "S+RtLvFg5HAJif0ffU3z9oOvh+t/Uwx6c+P70aUsuZU=",
@@ -5931,6 +5951,7 @@
         {
           "schema_version": 0,
           "attributes": {
+            "architectures": ["x86_64"],
             "architectures": ["x86_64"],
             "arn": "arn:aws:lambda:us-east-1:571960159088:function:easy-video-share-websocket-handler",
             "code_sha256": "6e6nWTgr7QM8dJjveWjl4hhqilwOKWVoQr0L4iFtdEI=",
@@ -6034,6 +6055,7 @@
             "code_sha256": "W66FcsGsZJeXYEThMk56UgGierNZTefLVmEFMEz7rRk=",
             "compatible_architectures": [],
             "compatible_runtimes": ["nodejs18.x"],
+            "compatible_runtimes": ["nodejs18.x"],
             "created_date": "2025-06-28T00:52:18.608+0000",
             "description": "AI video generation dependencies (Google Cloud SDK, OpenAI SDK)",
             "filename": "ai_video_layer.zip",
@@ -6064,6 +6086,7 @@
             "arn": "arn:aws:lambda:us-east-1:571960159088:layer:easy-video-share-ai-video-layer:20",
             "code_sha256": "NvIGoX3fQi9keaDo2ljhuR3FSkGHuOuxT+1ALTK14xw=",
             "compatible_architectures": [],
+            "compatible_runtimes": ["nodejs18.x"],
             "compatible_runtimes": ["nodejs18.x"],
             "created_date": "2025-06-27T21:22:19.136+0000",
             "description": "AI video generation dependencies (Google Cloud SDK, OpenAI SDK)",
@@ -6096,6 +6119,7 @@
             "code_sha256": "6x0Pd4mbNZjcVLOcNR08EOdjRh35KhsD+Nre9e/5lO4=",
             "compatible_architectures": [],
             "compatible_runtimes": ["nodejs18.x"],
+            "compatible_runtimes": ["nodejs18.x"],
             "created_date": "2025-06-27T20:24:09.200+0000",
             "description": "AI video generation dependencies (Google Cloud SDK, OpenAI SDK)",
             "filename": "ai_video_layer.zip",
@@ -6126,6 +6150,7 @@
             "arn": "arn:aws:lambda:us-east-1:571960159088:layer:easy-video-share-ai-video-layer:19",
             "code_sha256": "aMUaiyBSU0FwUn45+GwlIeaOJMRhXFTciFO16LXikLM=",
             "compatible_architectures": [],
+            "compatible_runtimes": ["nodejs18.x"],
             "compatible_runtimes": ["nodejs18.x"],
             "created_date": "2025-06-27T20:36:53.019+0000",
             "description": "AI video generation dependencies (Google Cloud SDK, OpenAI SDK)",
@@ -6158,6 +6183,7 @@
             "code_sha256": "ePv2AZD9lD+7mYFTUKztMS5TBJATSf6R2qo0Ludk8Yg=",
             "compatible_architectures": [],
             "compatible_runtimes": ["nodejs18.x"],
+            "compatible_runtimes": ["nodejs18.x"],
             "created_date": "2025-06-27T19:45:26.103+0000",
             "description": "AI video generation dependencies (Google Cloud SDK, OpenAI SDK)",
             "filename": "ai_video_layer.zip",
@@ -6189,6 +6215,7 @@
             "code_sha256": "pOfsJJtELVesv0jNIRGh1syAHj1wwfADabu4NxWM5vY=",
             "compatible_architectures": [],
             "compatible_runtimes": ["nodejs18.x"],
+            "compatible_runtimes": ["nodejs18.x"],
             "created_date": "2025-06-27T14:01:52.638+0000",
             "description": "AI video generation dependencies (Google Cloud SDK, OpenAI SDK)",
             "filename": "ai_video_layer.zip",
@@ -6219,6 +6246,7 @@
             "arn": "arn:aws:lambda:us-east-1:571960159088:layer:easy-video-share-ai-video-layer:16",
             "code_sha256": "vB9641RZPqy8RccAPJ8bc6rMjVnS2tEpz1D/KqVQZ+Q=",
             "compatible_architectures": [],
+            "compatible_runtimes": ["nodejs18.x"],
             "compatible_runtimes": ["nodejs18.x"],
             "created_date": "2025-06-27T15:57:41.239+0000",
             "description": "AI video generation dependencies (Google Cloud SDK, OpenAI SDK)",
@@ -6452,6 +6480,10 @@
                 "allowed_methods": ["POST", "GET", "HEAD", "PUT", "DELETE"],
                 "allowed_origins": ["*"],
                 "expose_headers": ["ETag"],
+                "allowed_headers": ["*"],
+                "allowed_methods": ["POST", "GET", "HEAD", "PUT", "DELETE"],
+                "allowed_origins": ["*"],
+                "expose_headers": ["ETag"],
                 "max_age_seconds": 3000
               }
             ],
@@ -6459,6 +6491,7 @@
             "grant": [
               {
                 "id": "505a34a5edc5ac75d7cd77d86496785929708856b1aa3642d5e4c060ccf19738",
+                "permissions": ["FULL_CONTROL"],
                 "permissions": ["FULL_CONTROL"],
                 "type": "CanonicalUser",
                 "uri": ""
@@ -6539,6 +6572,10 @@
                 "allowed_methods": ["POST", "GET", "HEAD", "PUT", "DELETE"],
                 "allowed_origins": ["*"],
                 "expose_headers": ["ETag"],
+                "allowed_headers": ["*"],
+                "allowed_methods": ["POST", "GET", "HEAD", "PUT", "DELETE"],
+                "allowed_origins": ["*"],
+                "expose_headers": ["ETag"],
                 "max_age_seconds": 3000
               }
             ],
@@ -6546,6 +6583,7 @@
             "grant": [
               {
                 "id": "505a34a5edc5ac75d7cd77d86496785929708856b1aa3642d5e4c060ccf19738",
+                "permissions": ["FULL_CONTROL"],
                 "permissions": ["FULL_CONTROL"],
                 "type": "CanonicalUser",
                 "uri": ""
@@ -6629,6 +6667,7 @@
           "identity_schema_version": 0,
           "private": "bnVsbA==",
           "dependencies": ["aws_s3_bucket.audio_bucket"]
+          "dependencies": ["aws_s3_bucket.audio_bucket"]
         }
       ]
     },
@@ -6650,6 +6689,7 @@
           "identity_schema_version": 0,
           "private": "bnVsbA==",
           "dependencies": ["aws_s3_bucket.video_bucket"]
+          "dependencies": ["aws_s3_bucket.video_bucket"]
         }
       ]
     },
@@ -6669,6 +6709,10 @@
                 "allowed_methods": ["DELETE", "GET", "HEAD", "POST", "PUT"],
                 "allowed_origins": ["*"],
                 "expose_headers": ["ETag"],
+                "allowed_headers": ["*"],
+                "allowed_methods": ["DELETE", "GET", "HEAD", "POST", "PUT"],
+                "allowed_origins": ["*"],
+                "expose_headers": ["ETag"],
                 "id": "",
                 "max_age_seconds": 3000
               }
@@ -6679,6 +6723,7 @@
           "sensitive_attributes": [],
           "identity_schema_version": 0,
           "private": "bnVsbA==",
+          "dependencies": ["aws_s3_bucket.audio_bucket"]
           "dependencies": ["aws_s3_bucket.audio_bucket"]
         }
       ]
@@ -6699,6 +6744,10 @@
                 "allowed_methods": ["DELETE", "GET", "HEAD", "POST", "PUT"],
                 "allowed_origins": ["*"],
                 "expose_headers": ["ETag"],
+                "allowed_headers": ["*"],
+                "allowed_methods": ["DELETE", "GET", "HEAD", "POST", "PUT"],
+                "allowed_origins": ["*"],
+                "expose_headers": ["ETag"],
                 "id": "",
                 "max_age_seconds": 3000
               }
@@ -6709,6 +6758,7 @@
           "sensitive_attributes": [],
           "identity_schema_version": 0,
           "private": "bnVsbA==",
+          "dependencies": ["aws_s3_bucket.video_bucket"]
           "dependencies": ["aws_s3_bucket.video_bucket"]
         }
       ]
@@ -6756,6 +6806,7 @@
           "identity_schema_version": 0,
           "private": "bnVsbA==",
           "dependencies": ["aws_s3_bucket.audio_bucket"]
+          "dependencies": ["aws_s3_bucket.audio_bucket"]
         }
       ]
     },
@@ -6778,6 +6829,7 @@
           "sensitive_attributes": [],
           "identity_schema_version": 0,
           "private": "bnVsbA==",
+          "dependencies": ["aws_s3_bucket.video_bucket"]
           "dependencies": ["aws_s3_bucket.video_bucket"]
         }
       ]
@@ -6810,6 +6862,7 @@
           "identity_schema_version": 0,
           "private": "bnVsbA==",
           "dependencies": ["aws_s3_bucket.audio_bucket"]
+          "dependencies": ["aws_s3_bucket.audio_bucket"]
         }
       ]
     },
@@ -6841,6 +6894,7 @@
           "identity_schema_version": 0,
           "private": "bnVsbA==",
           "dependencies": ["aws_s3_bucket.video_bucket"]
+          "dependencies": ["aws_s3_bucket.video_bucket"]
         }
       ]
     },
@@ -6868,6 +6922,7 @@
           "identity_schema_version": 0,
           "private": "bnVsbA==",
           "dependencies": ["aws_s3_bucket.audio_bucket"]
+          "dependencies": ["aws_s3_bucket.audio_bucket"]
         }
       ]
     },
@@ -6894,6 +6949,7 @@
           "sensitive_attributes": [],
           "identity_schema_version": 0,
           "private": "bnVsbA==",
+          "dependencies": ["aws_s3_bucket.video_bucket"]
           "dependencies": ["aws_s3_bucket.video_bucket"]
         }
       ]
@@ -6929,6 +6985,7 @@
           "sensitive_attributes": [],
           "identity_schema_version": 0,
           "private": "bnVsbA==",
+          "dependencies": ["aws_s3_bucket.video_bucket"]
           "dependencies": ["aws_s3_bucket.video_bucket"]
         }
       ]
@@ -6984,10 +7041,11 @@
             "id": "arn:aws:secretsmanager:us-east-1:571960159088:secret:easy-video-share-ai-video-secrets-EB5kB8|terraform-20250626141056273400000001",
             "secret_binary": "",
             "secret_id": "arn:aws:secretsmanager:us-east-1:571960159088:secret:easy-video-share-ai-video-secrets-EB5kB8",
-            "secret_string": "{\"google_cloud_location\":\"us-central1\",\"google_cloud_project_id\":\"easy-video-share\",\"google_cloud_service_account_email\":\"easy-vide-share-sa@easy-video-share.iam.gserviceaccount.com\",\"openai_api_key\":\"your-openai-api-key-here\"}",
+            "secret_string": "{\"google_cloud_location\":\"us-central1\",\"google_cloud_project_id\":\"easy-video-share\",\"google_cloud_service_account_email\":\"easy-vide-share-sa@easy-video-share.iam.gserviceaccount.com\",\"openai_api_key\":\"toA-your-openai-api-key-here\"}",
             "secret_string_wo": null,
             "secret_string_wo_version": null,
             "version_id": "terraform-20250626141056273400000001",
+            "version_stages": ["AWSCURRENT"]
             "version_stages": ["AWSCURRENT"]
           },
           "sensitive_attributes": [
@@ -7012,6 +7070,7 @@
           ],
           "identity_schema_version": 0,
           "private": "bnVsbA==",
+          "dependencies": ["aws_secretsmanager_secret.ai_video_secrets"]
           "dependencies": ["aws_secretsmanager_secret.ai_video_secrets"]
         }
       ]
