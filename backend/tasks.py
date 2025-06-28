@@ -37,7 +37,7 @@ def process_video_task(self, s3_input_key: str, job_id: str):
     import tempfile
     import os
     from s3_utils import download_file_from_s3, upload_file_to_s3
-    from video_processing_utils import split_and_overlay_hardcoded, validate_video_file
+    from video_processing_utils_robust import split_and_overlay_hardcoded, validate_video_file
     from config import settings
     
     temp_dir = None
