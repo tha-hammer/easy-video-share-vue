@@ -1,5 +1,8 @@
 # Critical Resource IDs for Import
 USER_POOL_ID=us-east-1_8L0Sa4BCn
+COGNITO_CLIENT_ID=3ip5hntvq00uef8cfboolpasel
 BUCKET_NAME=easy-video-share-silmari-dev
 TABLE_NAME=easy-video-share-video-metadata
 API_GATEWAY_ID=ip60d4qmjf
+IAM_USER_NAME=
+IAM_ROLE_NAME=easy-video-share-lambda-execution-role

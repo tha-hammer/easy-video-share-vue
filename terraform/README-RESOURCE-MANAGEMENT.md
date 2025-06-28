@@ -1,47 +1,68 @@
-# Branch-Specific Terraform Resource Management
+# Terraform Workspace Management - MIGRATION COMPLETE ✅
 
-This directory contains tools and documentation for managing different Terraform configurations across git branches.
+## Current Status
+
+**✅ MIGRATION SUCCESSFUL**: Complex configuration has been migrated to simple configuration.
+
+**Current Production State**:
+
+- **`main-simple` workspace**: 44 resources (ACTIVE - use for development)
+- **`default` workspace**: 162 resources (LEGACY - can be cleaned up)
 
 ## Quick Start
 
-### 1. Emergency Setup (First Time)
+### 1. Use Simple Configuration (Recommended)
 
 ```bash
 cd terraform
-./scripts/emergency-setup.sh
-```
-
-This will:
-
-- Backup your current state
-- Create workspaces for different configurations
-- Prepare for branch-specific resource management
-
-### 2. Switch Environments
-
-```bash
-# Smart switcher - detects branch and switches workspace
-./scripts/switch-environment.sh
-
-# Manual workspace switching
-terraform workspace select main-simple      # For main branch (simple config)
-terraform workspace select complex-features # For feature branches (AI features)
-```
-
-### 3. Setup Simple Configuration
-
-```bash
-# After switching to main branch
 terraform workspace select main-simple
-./scripts/setup-simple-config.sh
+terraform plan    # Should show no changes
+terraform apply   # If needed
 ```
 
-## Workspace Strategy
+### 2. Optional Cleanup (Legacy Resources)
 
-| Git Branch  | Terraform Workspace | Configuration Type | Features                                  |
-| ----------- | ------------------- | ------------------ | ----------------------------------------- |
-| `main`      | `main-simple`       | Simple             | Core video sharing, basic API             |
-| `feature/*` | `complex-features`  | Complex            | AI video, audio processing, transcription |
+```bash
+# Review what legacy resources can be cleaned up
+terraform workspace select default
+./scripts/analyze-default-resources.sh
+
+# Selectively destroy complex features (optional)
+terraform destroy -target=aws_lambda_function.ai_video_processor
+terraform destroy -target=aws_s3_bucket.audio_bucket
+```
+
+## ✅ Migration Results
+
+| Metric              | Before            | After         | Change           |
+| ------------------- | ----------------- | ------------- | ---------------- |
+| **Total Resources** | 162               | 44            | -73%             |
+| **Configuration**   | Complex           | Simple        | Simplified       |
+| **Features**        | AI + Audio + Core | Core Only     | AI/Audio Removed |
+| **Workspace**       | `default`         | `main-simple` | Migrated         |
+
+### ✅ Preserved (Critical Data)
+
+- User accounts (Cognito User Pool)
+- Video files (S3 bucket)
+- Video metadata (DynamoDB table)
+- Core API functionality
+
+### ✅ Removed (Complex Features)
+
+- AI video generation
+- Audio processing
+- WebSocket real-time features
+- Complex Lambda layers
+- EventBridge automation
+
+## Current Workspace Strategy
+
+| Workspace          | Status        | Resources | Purpose             |
+| ------------------ | ------------- | --------- | ------------------- |
+| `main-simple`      | 🟢 **ACTIVE** | 44        | Current development |
+| `default`          | 🟡 **LEGACY** | 162       | Can be cleaned up   |
+| `complex-features` | ⚪ **EMPTY**  | 0         | Not used            |
 
 ## Resource Categories
 
@@ -109,149 +130,180 @@ terraform plan -var-file="environments/main.tfvars"
 terraform apply
 ```
 
-## File Structure
+## Current File Structure (Post-Migration)
 
 ```
 terraform/
-├── main.tf                                    # Current configuration
+├── main.tf                                    # Simple configuration (active)
+├── variables.tf                               # Updated with all required variables
+├── terraform.tfvars                           # Configuration values
 ├── old_main.tf                               # Complex configuration backup
-├── BRANCH-RESOURCE-MANAGEMENT-PLAN.md        # Detailed strategy
+├── RESOURCE-TRANSITION-STRATEGY.md           # Migration strategy (completed)
 ├── scripts/
-│   ├── emergency-setup.sh                    # Initial setup
-│   ├── setup-simple-config.sh               # Configure simple environment
-│   └── switch-environment.sh                # Smart environment switcher
-├── backups/                                  # State backups
-│   ├── state-backup-YYYYMMDD-HHMMSS.json
-│   └── old_main-YYYYMMDD-HHMMSS.tf
-└── environments/                             # Future: environment-specific configs
-    ├── main.tfvars
-    └── complex.tfvars
+│   ├── analyze-default-resources.sh          # ✅ Analyze legacy resources
+│   ├── migrate-default-to-simple.sh          # ✅ Migration (completed)
+│   ├── manage-environments.sh                # ✅ Environment management
+│   ├── switch-environment.sh                 # ✅ Workspace switcher
+│   ├── simple-analyze.sh                     # ✅ Alternative analyzer
+│   └── emergency-setup.sh                    # ⚠️  Emergency only
+├── backups/                                  # State backups from migration
+│   ├── default-workspace-pre-migration-*.json
+│   └── default-workspace-export-*.json
+└── analysis/                                 # Migration analysis files
+    ├── critical-resource-ids.txt
+    └── all-resources-default.txt
 ```
 
-## Safety Guidelines
+## Safety Guidelines (Post-Migration)
 
-1. **Always backup state before major changes**
+1. **Use main-simple for development**
 
    ```bash
-   terraform state pull > backup-$(date +%Y%m%d-%H%M%S).json
+   terraform workspace select main-simple
    ```
 
 2. **Verify workspace before operations**
 
    ```bash
    echo "Workspace: $(terraform workspace show)"
-   echo "Branch: $(git branch --show-current)"
+   terraform state list | wc -l  # Should show ~44 resources
    ```
 
-3. **Use plan extensively**
-
+3. **Backup before major changes**
    ```bash
-   terraform plan  # Review before apply
+   terraform state pull > backup-$(date +%Y%m%d-%H%M%S).json
    ```
 
-4. **Keep configurations in sync**
-   - Use `switch-environment.sh` when changing branches
-   - Verify main.tf matches intended workspace
+## Legacy Resource Cleanup (Optional)
 
-## Troubleshooting
-
-### State Mismatch
-
-If terraform plan shows unexpected changes:
+The `default` workspace still contains 162 resources that can be cleaned up:
 
 ```bash
-# Check current workspace
-terraform workspace show
+# Switch to legacy workspace
+terraform workspace select default
 
-# Check current branch
-git branch --show-current
+# See what can be safely destroyed
+./scripts/analyze-default-resources.sh
 
-# Run smart switcher
-./scripts/switch-environment.sh
+# Example cleanup commands (run individually)
+terraform destroy -target=aws_lambda_function.ai_video_processor
+terraform destroy -target=aws_s3_bucket.audio_bucket
+terraform destroy -target=aws_lambda_layer_version.ai_video_layer
+
+# Return to active workspace
+terraform workspace select main-simple
 ```
 
-### Configuration Mismatch
+## Team Workflow (Updated)
 
-If main.tf doesn't match workspace:
+### Developer Checklist (Simplified)
+
+For daily development:
+
+1. Use main-simple workspace: `terraform workspace select main-simple`
+2. Review plan: `terraform plan`
+3. Apply if needed: `terraform apply`
+
+### No More Branch Switching Complexity
+
+Since migration is complete, you can focus on the simple configuration without complex workspace switching.
+
+## Emergency Procedures (Updated)
+
+If something goes wrong with main-simple:
+
+1. Check backups: `ls backups/`
+2. Find latest: `ls -la backups/default-workspace-pre-migration-*`
+3. Can restore from default workspace if needed
+4. All critical data is preserved in both workspaces
+
+## Success Metrics ✅
+
+Your migration achieved:
+
+- **73% resource reduction** (162 → 44)
+- **100% data preservation** (users, videos, metadata)
+- **Eliminated complexity** (AI, audio, WebSocket features)
+- **Working simple configuration** ready for production
+
+## 📋 Script Guide - Updated for Post-Migration
+
+### 🎯 **Primary Scripts** (Ready to Use)
+
+**1. `analyze-default-resources.sh` - ANALYZE LEGACY RESOURCES**
+
+- **Purpose**: Analyze the 162 legacy resources in `default` workspace
+- **Usage**: `./scripts/analyze-default-resources.sh`
+- **Output**: Categorizes resources as AI, audio, core, etc.
+- **When to use**: To decide what legacy resources to clean up
+
+**2. `migrate-default-to-simple.sh` - MIGRATION COMPLETE ✅**
+
+- **Status**: ✅ **Already completed successfully**
+- **Purpose**: Was used to migrate from complex → simple configuration
+- **Result**: Created working `main-simple` workspace with 44 resources
+- **Note**: No need to run again unless rolling back
+
+### 🔧 **Utility Scripts**
+
+**3. `manage-environments.sh` - ENVIRONMENT MANAGEMENT**
+
+- **Purpose**: General workspace management and status checking
+- **Usage**: `./scripts/manage-environments.sh status`
+- **Features**: Lists workspaces, shows resource counts, backup state
+
+**4. `switch-environment.sh` - WORKSPACE SWITCHER**
+
+- **Purpose**: Switch between workspaces
+- **Usage**: `./scripts/switch-environment.sh main-simple`
+- **Note**: Mainly use `main-simple` for development now
+
+### ⚠️ **Legacy/Obsolete Scripts**
+
+**5. `setup-simple-config.sh` - OBSOLETE**
+
+- **Status**: ❌ No longer needed (migration complete)
+
+**6. `emergency-setup.sh` - EMERGENCY ONLY**
+
+- **Purpose**: Emergency recovery procedures
+- **When to use**: Only if something goes catastrophically wrong
+
+**7. `simple-analyze.sh` - ALTERNATIVE ANALYZER**
+
+- **Purpose**: Simpler version of resource analyzer
+- **Usage**: Alternative to `analyze-default-resources.sh`
+
+## 🚀 **Recommended Daily Workflow**
 
 ```bash
-# For simple config
-git checkout HEAD -- main.tf
-
-# For complex config
-cp old_main.tf main.tf
+# Standard development workflow (post-migration)
+cd terraform
+terraform workspace select main-simple
+terraform plan
+terraform apply   # if needed
 ```
 
-### Restore from Backup
+## 🧹 **Optional Cleanup of Legacy Resources**
 
 ```bash
-# Find backup
-ls backups/
+# See what legacy resources exist
+terraform workspace select default
+./scripts/analyze-default-resources.sh
 
-# Restore state
-terraform state push backups/state-backup-YYYYMMDD-HHMMSS.json
+# Selectively destroy complex features (optional)
+terraform destroy -target=aws_lambda_function.ai_video_processor
+terraform destroy -target=aws_s3_bucket.audio_bucket
+terraform destroy -target=aws_lambda_layer_version.ai_video_layer
 ```
 
-## Migration Path
+## ✅ **Migration Success Verification**
 
-### Phase 1: Setup (Current)
+Your migration was successful! Evidence:
 
-- [x] Create workspaces
-- [x] Backup current state
-- [x] Create switching scripts
+1. **`main-simple` workspace**: 44 resources (vs 162 original)
+2. **All critical data preserved**: Users, videos, metadata intact
+3. **Complex features removed**: No more AI, audio, WebSocket complexity
+4. **Working configuration**: `terraform plan` shows no changes needed
 
-### Phase 2: Stabilize
-
-- [ ] Test both configurations work
-- [ ] Document resource dependencies
-- [ ] Create environment-specific tfvars
-
-### Phase 3: Optimize
-
-- [ ] Extract shared resources to modules
-- [ ] Implement conditional resources
-- [ ] Automate branch detection
-
-### Phase 4: Scale
-
-- [ ] Add more environments (staging, prod)
-- [ ] Implement proper CI/CD integration
-- [ ] Add automated testing
-
-## Team Workflow
-
-### Developer Checklist
-
-Before any terraform operation:
-
-1. Check current branch: `git branch --show-current`
-2. Check current workspace: `terraform workspace show`
-3. Run environment switcher: `./scripts/switch-environment.sh`
-4. Review plan: `terraform plan`
-5. Apply if safe: `terraform apply`
-
-### Branch Switching
-
-```bash
-# When switching git branches
-git checkout <branch-name>
-./scripts/switch-environment.sh
-```
-
-### Emergency Procedures
-
-If something goes wrong:
-
-1. Don't panic
-2. Check backups: `ls backups/`
-3. Restore if needed: `terraform state push backups/latest-backup.json`
-4. Review state: `terraform state list`
-5. Plan carefully: `terraform plan`
-
-## Next Steps
-
-1. Run `./scripts/emergency-setup.sh` to start
-2. Test workspace switching
-3. Verify both configurations work
-4. Document any customizations
-5. Train team on new workflow
+**You can now focus on `main-simple` workspace for all development.**
