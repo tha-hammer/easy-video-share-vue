@@ -58,6 +58,10 @@ override.tf.json
 .env.local
 .env.*.local
 
+#backups
+/backups/*
+terraform/backups/*
+
 # Vue.js specific
 .nuxt
 .output
