@@ -66,3 +66,55 @@ terraform/backups/*
 .nuxt
 .output
 .generate
+
+# Backend Python
+backend/.venv/
+backend/__pycache__/
+backend/*.pyc
+backend/*.pyo
+backend/*.pyd
+backend/.Python
+backend/env/
+backend/venv/
+backend/ENV/
+backend/env.bak/
+backend/venv.bak/
+backend/.pytest_cache/
+backend/.coverage
+backend/htmlcov/
+backend/.tox/
+backend/.cache
+backend/nosetests.xml
+backend/coverage.xml
+backend/*.cover
+backend/.hypothesis/
+backend/.mypy_cache/
+backend/.dmypy.json
+backend/dmypy.json
+
+# Backend development
+backend/celerybeat-schedule
+backend/celerybeat.pid
+backend/*.db
+backend/*.sqlite3
+backend/temp_*
+backend/logs/
+backend/.DS_Store
+
+# Backend environment
+backend/.env
+backend/.env.local
+backend/.env.*.local
+
+# IDEs
+.vscode/settings.json
+.vscode/launch.json
+.vscode/tasks.json
+*.swp
+*.swo
+*~
+
+# OS
+Thumbs.db
+ehthumbs.db
+Desktop.ini

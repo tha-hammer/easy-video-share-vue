@@ -17,6 +17,40 @@ interface VideoMetadata {
   updated_at: string // ISO timestamp
 }
 
+// AI Video Processing interfaces
+interface InitiateUploadRequest {
+  filename: string
+  content_type: string
+  file_size: number
+}
+
+interface InitiateUploadResponse {
+  presigned_url: string
+  s3_key: string
+  job_id: string
+}
+
+interface CompleteUploadRequest {
+  s3_key: string
+  job_id: string
+}
+
+interface JobCreatedResponse {
+  job_id: string
+  status: string
+  message: string
+}
+
+interface JobStatusResponse {
+  job_id: string
+  status: string
+  progress?: number
+  output_urls?: string[]
+  error_message?: string
+  created_at?: string
+  updated_at?: string
+}
+
 export class VideoService {
   // Helper method to get auth headers
   private static async getAuthHeaders(): Promise<Record<string, string>> {
@@ -200,6 +234,165 @@ export class VideoService {
       throw error
     }
   }
+
+  // === AI Video Processing Methods (Sprint 1) ===
+
+  /**
+   * Initiate AI video upload - generates presigned URL for S3 direct upload
+   */
+  static async initiateAIVideoUpload(
+    request: InitiateUploadRequest,
+  ): Promise<InitiateUploadResponse> {
+    try {
+      console.log('🤖 Initiating AI video upload:', request)
+
+      const response = await fetch(`${API_CONFIG.aiVideoBackend}/upload/initiate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(request),
+      })
+
+      console.log('🤖 Response status:', response.status, response.statusText)
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.log('🤖 Error response:', errorText)
+        throw new Error(`Failed to initiate AI video upload: ${response.statusText}`)
+      }
+
+      const data = await response.json()
+      console.log('🤖 Upload initiated successfully:', data)
+      return data
+    } catch (error) {
+      console.error('Error initiating AI video upload:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Complete AI video upload - starts background processing
+   */
+  static async completeAIVideoUpload(request: CompleteUploadRequest): Promise<JobCreatedResponse> {
+    try {
+      console.log('🤖 Completing AI video upload:', request)
+
+      const response = await fetch(`${API_CONFIG.aiVideoBackend}/upload/complete`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(request),
+      })
+
+      console.log('🤖 Response status:', response.status, response.statusText)
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.log('🤖 Error response:', errorText)
+        throw new Error(`Failed to complete AI video upload: ${response.statusText}`)
+      }
+
+      const data = await response.json()
+      console.log('🤖 Upload completed successfully:', data)
+      return data
+    } catch (error) {
+      console.error('Error completing AI video upload:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Get AI video processing job status
+   */
+  static async getAIVideoJobStatus(jobId: string): Promise<JobStatusResponse> {
+    try {
+      console.log('🤖 Getting AI video job status for:', jobId)
+
+      const response = await fetch(`${API_CONFIG.aiVideoBackend}/jobs/${jobId}/status`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      })
+
+      console.log('🤖 Response status:', response.status, response.statusText)
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.log('🤖 Error response:', errorText)
+        throw new Error(`Failed to get AI video job status: ${response.statusText}`)
+      }
+
+      const data = await response.json()
+      console.log('🤖 Job status retrieved:', data)
+      return data
+    } catch (error) {
+      console.error('Error getting AI video job status:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Upload file directly to S3 using presigned URL
+   */
+  static async uploadToS3(presignedUrl: string, file: File): Promise<void> {
+    try {
+      console.log('📤 Uploading file to S3:', file.name, 'Size:', file.size)
+
+      const response = await fetch(presignedUrl, {
+        method: 'PUT',
+        body: file,
+        headers: {
+          'Content-Type': file.type,
+        },
+      })
+
+      console.log('📤 S3 upload response status:', response.status, response.statusText)
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.log('📤 S3 upload error:', errorText)
+        throw new Error(`S3 upload failed: ${response.statusText}`)
+      }
+
+      console.log('📤 File uploaded to S3 successfully')
+    } catch (error) {
+      console.error('Error uploading to S3:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Check backend health
+   */
+  static async checkBackendHealth(): Promise<{ status: string; message: string }> {
+    try {
+      const response = await fetch(`${API_CONFIG.aiVideoBackend}/health`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      })
+
+      if (!response.ok) {
+        throw new Error(`Backend health check failed: ${response.statusText}`)
+      }
+
+      return await response.json()
+    } catch (error) {
+      console.error('Backend health check failed:', error)
+      throw error
+    }
+  }
 }
 
-export type { VideoMetadata }
+export type {
+  VideoMetadata,
+  InitiateUploadRequest,
+  InitiateUploadResponse,
+  CompleteUploadRequest,
+  JobCreatedResponse,
+  JobStatusResponse,
+}

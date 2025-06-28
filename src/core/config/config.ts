@@ -39,6 +39,8 @@ export const API_CONFIG = {
   adminVideosEndpoint:
     import.meta.env.VITE_API_ADMIN_VIDEOS_ENDPOINT ||
     'https://ip60d4qmjf.execute-api.us-east-1.amazonaws.com/dev/admin/videos',
+  // AI Video Processing Backend (FastAPI)
+  aiVideoBackend: import.meta.env.VITE_AI_VIDEO_BACKEND_URL || 'http://localhost:8000/api',
 }
 
 // File upload constraints
