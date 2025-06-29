@@ -235,8 +235,8 @@ def process_segment_with_ffmpeg(
         
         # Create multi-line text filter
         max_chars_per_line = width // (font_size // 2)  # Estimate characters per line based on font size
-        max_chars_per_line = max(max_chars_per_line, 20)  # Minimum characters per line
-        max_chars_per_line = min(max_chars_per_line, 60)  # Maximum characters per line
+        max_chars_per_line = max(max_chars_per_line, 9)  # Minimum characters per line
+        max_chars_per_line = min(max_chars_per_line, 30)  # Maximum characters per line
         
         drawtext_filter = create_multiline_drawtext_filter(text_overlay, font_size, max_chars_per_line)
         
@@ -424,11 +424,10 @@ def create_multiline_drawtext_filter(text: str, font_size: int, max_width: int) 
     filters = []
     line_height = font_size + 4  # Add some padding between lines
     
+    total_lines = len(wrapped_lines)
     for i, line in enumerate(wrapped_lines):
         escaped_line = escape_text_for_ffmpeg(line)
-        y_offset = 30 + (i * line_height)  # Start 30px from bottom, stack upward
-        # Use x=20 for left alignment, y=h-th-{y_offset} for bottom alignment
-        # Adjust y position to stack text upward from the bottom
+        y_offset = 30 + ((total_lines - i - 1) * line_height)  # First line at top, stack downward
         filter_str = f"drawtext=text='{escaped_line}':fontsize={font_size}:fontcolor=white:borderw=1:bordercolor=black:x=20:y=h-th-{y_offset}"
         filters.append(filter_str)
     

@@ -1,3 +1,126 @@
+# Sprint 4 Update
+
+# Sprint 4: LLM-Powered Text Generation & Enhanced Video Processing
+
+## Overview
+
+Sprint 4 delivers a robust, production-ready pipeline for dynamic, context-aware text overlays on video segments, powered by Google Vertex AI Gemini. The backend now supports multi-line overlays, precise segment timing, and three flexible text strategies, all fully integrated with Celery and the API.
+
+---
+
+## Key Features
+
+### 1. LLM Integration (Vertex AI Gemini)
+
+- **Service:** `llm_service_vertexai.py` provides context-driven, robust prompt construction and error handling.
+- **Text Variation:** BASE_VARY strategy generates unique, context-aware text for each segment.
+- **Fallbacks:** If LLM fails, falls back to user base text.
+
+### 2. Text Overlay Strategies
+
+- **ONE_FOR_ALL:** Single user-provided text for all segments.
+- **BASE_VARY:** LLM-generated variations from a base text (context-aware).
+- **UNIQUE_FOR_ALL:** User provides unique text for each segment (multi-line supported).
+
+### 3. Multi-line & Dynamic Text Overlay
+
+- **Multi-line Support:** Overlays now support explicit newlines and automatic wrapping for long lines.
+- **Correct Line Order:** Text is rendered top-down, as expected for readable overlays.
+- **Font Size:** Font size is dynamically calculated for each video, ensuring overlays are visually appropriate and never overwhelm the frame.
+
+### 4. Precise Video Processing
+
+- **Exact Segment Timing:** Uses precise start/end times for each segment.
+- **Direct FFmpeg Integration:** Ensures accurate cutting and overlay, with robust error handling.
+
+### 5. API & Celery Integration
+
+- **API Models:** All endpoints support the new `text_input` parameter and dynamic cutting options.
+- **Celery Tasks:** Fully compatible with JSON-serializable arguments; robust error handling and logging.
+
+---
+
+## Usage Examples
+
+### 1. ONE_FOR_ALL Strategy
+
+```bash
+curl -X POST "http://localhost:8000/api/upload/complete" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "s3_key": "uploads/video.mp4",
+    "job_id": "abc-123",
+    "cutting_options": { "type": "fixed", "duration_seconds": 30 },
+    "text_strategy": "one_for_all",
+    "text_input": { "strategy": "one_for_all", "base_text": "Transform your business with AI!" }
+  }'
+```
+
+### 2. BASE_VARY Strategy (LLM-Powered)
+
+```bash
+curl -X POST "http://localhost:8000/api/upload/complete" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "s3_key": "uploads/video.mp4",
+    "job_id": "def-456",
+    "cutting_options": { "type": "random", "min_duration": 20, "max_duration": 40 },
+    "text_strategy": "base_vary",
+    "text_input": { "strategy": "base_vary", "base_text": "Start your fitness journey today" }
+  }'
+```
+
+### 3. UNIQUE_FOR_ALL Strategy (Multi-line Example)
+
+```bash
+curl -X POST "http://localhost:8000/api/upload/complete" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "s3_key": "uploads/video.mp4",
+    "job_id": "ghi-789",
+    "cutting_options": { "type": "fixed", "duration_seconds": 25 },
+    "text_strategy": "unique_for_all",
+    "text_input": {
+      "strategy": "unique_for_all",
+      "segment_texts": [
+        "Welcome to our product demo!\nSee these amazing features",
+        "Join 10,000+ happy customers",
+        "Order now and save 50%!"
+      ]
+    }
+  }'
+```
+
+---
+
+## Troubleshooting & Notes
+
+- **Font Size/Line Wrapping:** Font size and wrapping are dynamically calculated for each video. If overlays are still too large or wrap too early, adjust the divisor or max_chars_per_line in `video_processing_utils_sprint4.py`.
+- **Line Order:** Overlays are rendered top-down for natural reading order.
+- **Celery/LLM Errors:** All arguments to Celery tasks must be plain dicts/strings. LLM errors are logged and fallback text is used.
+- **FFmpeg Requirements:** Ensure FFmpeg is installed with text rendering support and the required fonts are available.
+
+---
+
+## Testing
+
+- `python test_sprint4_llm.py` — LLM service and text variation tests.
+- `python test_sprint4_e2e.py` — End-to-end API and backend tests for all strategies.
+- `python test_multiline_celery.py` — Celery worker test for multi-line overlays.
+- `python test_multiline_text.py` — Standalone multi-line overlay test.
+
+---
+
+## Next Steps
+
+- Frontend UI for rich text input and preview.
+- Advanced text styling and font management.
+- Caching and performance optimizations for LLM calls.
+
+---
+
+# Original Sprint 4 README
+
 # Sprint 4 Implementation: LLM-Powered Text Generation & Enhanced Video Processing
 
 ## Overview

@@ -93,7 +93,7 @@ def test_base_vary_multiline():
     print(f"{'='*40}")
     
     # Multi-line base text
-    base_text = "Discover amazing features\nthat will transform\nyour daily routine!"
+    base_text = "Disappointed by your doctor barely listening to you when you ask about the 10-15 pounds that came out of nowhere?\nFrustrated women succeed daily with the protocol we nearly give away at our clinic, but will you?\nCould your transformation start this weekend?"
     
     cutting_options = {"type": "fixed", "duration_seconds": 20}
     text_input = {
@@ -111,7 +111,7 @@ def test_base_vary_multiline():
         from tasks import process_video_task
         
         print(f"\n📤 Dispatching BASE_VARY task...")
-        job_id = "test_base_vary_multiline_02"
+        job_id = "test_base_vary_multiline_06"
         result = process_video_task.delay(
             s3_input_key="uploads/334ffc54-cb76-4f38-8c27-194911324caf/20250628_215659_test_video.mp4",
             job_id=job_id,
