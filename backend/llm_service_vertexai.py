@@ -7,7 +7,6 @@ import os
 import logging
 from typing import List, Optional
 from google import genai
-from google.genai.types import HttpOptions
 from config import settings
 
 # Configure logging
@@ -31,8 +30,7 @@ class LLMService:
             self.client = genai.Client(
                 project=self.project_id,
                 location=self.location,
-                vertexai=True,
-                http_options=HttpOptions(api_version="v1")
+                vertexai=True
             )
             logger.info(f"LLM Service initialized with Vertex AI - Project: {self.project_id}, Location: {self.location}")
         except Exception as e:

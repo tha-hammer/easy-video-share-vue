@@ -7,6 +7,7 @@ Tests user-provided unique text for each video segment
 import sys
 import os
 import json
+from celery.result import AsyncResult
 
 # Add backend directory to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
