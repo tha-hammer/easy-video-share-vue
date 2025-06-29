@@ -1,6 +1,6 @@
 We'll add **two new "Frontend Sprints"** to the overall plan. These sprints will detail the UI features and how they integrate with the backend APIs. While the LLM's primary role in these sprints would be to assist _you_ in generating Vue/TypeScript code snippets, you (the human developer) would lead the integration and overall UI/UX design.
 
----
+--- asdf
 
 ### **New Sprints: Dedicated UI Development Phases**
 
