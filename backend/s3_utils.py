@@ -30,7 +30,7 @@ def get_s3_client():
         return boto3.client('s3', region_name=settings.AWS_REGION)
 
 
-def generate_presigned_url(bucket_name: str, object_key: str, content_type: str, expiration: int = 3600) -> str:
+def generate_presigned_url(bucket_name: str, object_key: str, client_method: str,content_type: str, expiration: int = 3600) -> str:
     """
     Generate a presigned URL for S3 upload
     
@@ -44,15 +44,21 @@ def generate_presigned_url(bucket_name: str, object_key: str, content_type: str,
         Presigned URL string for direct upload to S3
     """
     s3_client = get_s3_client()
-    
+     
     try:
+        params = {
+            'Bucket': bucket_name,
+            'Key': object_key
+        }
+
+        # Conditionally add ContentType for 'put_object' operations only
+        if client_method == 'put_object' and content_type is not None:
+            params['ContentType'] = content_type
+        # No 'else' needed, ContentType is not added for 'get_object'
+
         presigned_url = s3_client.generate_presigned_url(
-            'put_object',
-            Params={
-                'Bucket': bucket_name,
-                'Key': object_key,
-                'ContentType': content_type
-            },
+            ClientMethod=client_method, # Use the new parameter here
+            Params=params,
             ExpiresIn=expiration
         )
         return presigned_url

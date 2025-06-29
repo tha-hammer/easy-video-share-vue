@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
 import uuid
+import traceback
 from models import (
     InitiateUploadRequest, 
     InitiateUploadResponse, 
@@ -12,6 +13,7 @@ from models import (
     CuttingOptions
 )
 from s3_utils import generate_presigned_url, generate_s3_key
+import dynamodb_service
 from tasks import process_video_task, celery_app
 from video_processing_utils import get_video_duration_from_s3, calculate_segments
 from config import settings
@@ -56,6 +58,7 @@ async def initiate_upload(request: InitiateUploadRequest) -> InitiateUploadRespo
         presigned_url = generate_presigned_url(
             bucket_name=settings.AWS_BUCKET_NAME,
             object_key=s3_key,
+            client_method='put_object',  # Use 'put_object' for uploads
             content_type=request.content_type,
             expiration=3600  # 1 hour
         )
@@ -102,10 +105,24 @@ async def complete_upload(request: CompleteUploadRequest) -> JobCreatedResponse:
             text_strategy_str,
             text_input_dict
         )
-        
-        # Use the Celery task ID as the job ID for tracking
+
+        # Immediately create DynamoDB job entry (QUEUED)
+        try:
+            from datetime import datetime, timezone
+            now_iso = datetime.utcnow().replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
+            dynamodb_service.create_job_entry(
+                job_id=request.job_id,
+                user_id="anonymous",
+                upload_date=now_iso,
+                status="QUEUED",
+                created_at=now_iso,
+                updated_at=now_iso
+            )
+        except Exception as e:
+            print(f"[DynamoDB] Failed to create job entry in /upload/complete for job_id={request.job_id}: {e}")
+
         return JobCreatedResponse(
-            job_id=task.id,  # Use Celery task ID instead of original job_id
+            job_id=request.job_id,
             status="QUEUED",
             message="Video processing job has been queued successfully"
         )
@@ -117,75 +134,111 @@ async def complete_upload(request: CompleteUploadRequest) -> JobCreatedResponse:
 @router.get("/jobs/{job_id}/status", response_model=JobStatusResponse)
 async def get_job_status(job_id: str) -> JobStatusResponse:
     """
-    Get the status of a video processing job
-    
-    This endpoint allows the frontend to poll for job status updates
-    and retrieve the results when processing is complete.
+    Get the status of a video processing job (Sprint 5: DynamoDB + presigned download URLs)
     """
+    # --- DEBUGGING PRINTS START ---
+    print(f"DEBUG: Entering get_job_status for job_id: {job_id}")
+    # --- DEBUGGING PRINTS END ---
+
     try:
-        # Get task result from Celery
-        task_result = celery_app.AsyncResult(job_id)
-        
-        # Map Celery states to our status format
-        status_mapping = {
-            "PENDING": "QUEUED",
-            "STARTED": "PROCESSING", 
-            "SUCCESS": "COMPLETED",
-            "FAILURE": "FAILED",
-            "RETRY": "PROCESSING",
-            "REVOKED": "CANCELLED"
-        }
-        
-        status = status_mapping.get(task_result.state, "UNKNOWN")
-        
-        response_data = {
-            "job_id": job_id,
-            "status": status
-        }
-        
-        if task_result.state == "SUCCESS":
-            # Task completed successfully
-            result = task_result.result
-            if isinstance(result, dict):
-                response_data["output_urls"] = result.get("output_urls", [])
-        elif task_result.state == "FAILURE":
-            # Task failed
-            response_data["error_message"] = str(task_result.info)
-        elif task_result.state == "STARTED":
-            # Task is running, try to get progress if available
-            if hasattr(task_result, 'info') and isinstance(task_result.info, dict):
-                response_data["progress"] = task_result.info.get("progress")
-        
-        return JobStatusResponse(**response_data)
-        
+        # Fetch job status from DynamoDB
+        # --- DEBUGGING PRINTS START ---
+        print(f"DEBUG: Attempting to fetch job {job_id} from DynamoDB.")
+        # --- DEBUGGING PRINTS END ---
+        job = dynamodb_service.get_job_status(job_id)
+        # --- DEBUGGING PRINTS START ---
+        print(f"DEBUG: DynamoDB raw response for {job_id}: {job}")
+        # --- DEBUGGING PRINTS END ---
+
+        if not job:
+            # --- DEBUGGING PRINTS START ---
+            print(f"DEBUG: Job {job_id} NOT found in DynamoDB. Raising 404.")
+            # --- DEBUGGING PRINTS END ---
+            raise HTTPException(status_code=404, detail="Job not found")
+
+        status = job.get("status", "UNKNOWN")
+        output_urls = job.get("output_s3_urls")
+        error_message = job.get("error_message")
+        created_at = job.get("created_at")
+        updated_at = job.get("updated_at")
+
+        # --- DEBUGGING PRINTS START ---
+        print(f"DEBUG: Job {job_id} found. Status: '{status}', raw output_urls: {output_urls}")
+        # --- DEBUGGING PRINTS END ---
+
+
+        # If job is completed, generate presigned download URLs
+        presigned_urls = None
+        if status == "COMPLETED" and output_urls:
+            # --- DEBUGGING PRINTS START ---
+            print(f"DEBUG: Job {job_id} is COMPLETED and has output_urls. Attempting to generate presigned URLs.")
+            # --- DEBUGGING PRINTS END ---
+            presigned_urls = []
+            
+            # --- DEBUGGING BLOCK START: Wrap loop in try/except ---
+            try:
+                for s3_url in output_urls: # This is a likely failure point if output_urls isn't iterable
+                    # --- DEBUGGING PRINTS START ---
+                    print(f"DEBUG: Processing S3 URL for presigning: {s3_url}")
+                    # --- DEBUGGING PRINTS END ---
+
+                    # Parse bucket and key from S3 URL
+                    if s3_url.startswith("s3://"):
+                        _, bucket, *key_parts = s3_url.split("/")
+                        key = "/".join(key_parts)
+                    else:
+                        # Assume https://bucket.s3.amazonaws.com/key format
+                        parts = s3_url.split("/")
+                        # This line is brittle if the URL format isn't exactly as assumed
+                        bucket = parts[2].split(".")[0]
+                        key = "/".join(parts[3:])
+                    
+                    # --- DEBUGGING PRINTS START ---
+                    print(f"DEBUG: Parsed Bucket: '{bucket}', Key: '{key}' for URL: {s3_url}")
+                    # --- DEBUGGING PRINTS END ---
+
+                    # This is another likely failure point if permissions are wrong or key/bucket are bad
+                    presigned = generate_presigned_url(
+                        bucket_name=bucket,
+                        object_key=key,
+                        client_method='get_object',
+                        content_type=None, # For GET operations, content_type is often not needed
+                        expiration=3600  # 1 hour
+                    )
+                    presigned_urls.append(presigned)
+                    # --- DEBUGGING PRINTS START ---
+                    print(f"DEBUG: Generated presigned URL for {s3_url}: {presigned[:60]}...") # Print truncated URL
+                    # --- DEBUGGING PRINTS END ---
+            except Exception as inner_e:
+                # --- DEBUGGING PRINTS START ---
+                print(f"DEBUG: ERROR CAUGHT DURING PRESIGNED URL GENERATION LOOP FOR JOB {job_id}: {type(inner_e).__name__}: {str(inner_e)}")
+                traceback.print_exc() # Print inner traceback
+                # --- DEBUGGING PRINTS END ---
+                # Re-raise the exception to be caught by the outer handler for the 500
+                raise
+
+        # --- DEBUGGING PRINTS START ---
+        print(f"DEBUG: Returning JobStatusResponse for {job_id}. Final presigned_urls count: {len(presigned_urls) if presigned_urls else 0}")
+        # --- DEBUGGING PRINTS END ---
+        return JobStatusResponse(
+            job_id=job_id,
+            status=status,
+            output_urls=presigned_urls if presigned_urls else None,
+            error_message=error_message,
+            created_at=created_at,
+            updated_at=updated_at
+        )
+    except HTTPException:
+        # Re-raise explicit HTTPExceptions (like the 404)
+        raise
     except Exception as e:
+        # Catch-all for unexpected errors, log explicitly before raising 500
+        # --- DEBUGGING PRINTS START ---
+        print(f"DEBUG: CRITICAL UNHANDLED ERROR IN get_job_status FOR JOB {job_id}: {type(e).__name__}: {str(e)}")
+        traceback.print_exc() # Print full traceback to console
+        # --- DEBUGGING PRINTS END ---
         raise HTTPException(status_code=500, detail=f"Failed to get job status: {str(e)}")
 
-
-@router.post("/analyze/duration", response_model=AnalyzeDurationResponse)
-async def analyze_video_duration(request: AnalyzeDurationRequest) -> AnalyzeDurationResponse:
-    """
-    Analyze video duration and suggest cutting points
-    
-    This endpoint analyzes the video duration and suggests cutting points
-    based on the specified options. It is used to prepare the video for
-    sharing by generating shorter clips.
-    """
-    try:
-        # Get video duration from S3
-        duration = get_video_duration_from_s3(request.s3_key)
-        
-        # Calculate segments based on duration and cutting options
-        segments = calculate_segments(duration, request.cutting_options)
-        
-        return AnalyzeDurationResponse(
-            job_id=request.job_id,
-            duration=duration,
-            segments=segments
-        )
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to analyze video duration: {str(e)}")
 
 
 @router.get("/health")

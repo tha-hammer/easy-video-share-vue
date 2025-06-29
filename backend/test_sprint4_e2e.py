@@ -167,7 +167,7 @@ def test_analyze_duration_api():
     print(f"{'='*40}")
     
     test_data = {
-        "s3_key": "test/sample_video.mp4",  # Mock S3 key
+        "s3_key": "uploads/108802a3-faeb-4e0c-b086-d99c91b883d8/20250628_215139_test_video.mp4",  # Mock S3 key
         "cutting_options": {
             "type": "random",
             "min_duration": 20,

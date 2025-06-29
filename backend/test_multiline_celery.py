@@ -27,7 +27,7 @@ def test_multiline_text_with_celery():
     print("=" * 60)
     
     # Test video path
-    test_video_key = "test/sample_video.mp4"  # Use the existing test video
+    test_video_key = "uploads/108802a3-faeb-4e0c-b086-d99c91b883d8/20250628_215139_test_video.mp4"  # Use the existing test video
     
     # Multi-line text examples
     multiline_texts = [

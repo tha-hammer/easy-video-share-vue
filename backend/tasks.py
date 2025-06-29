@@ -25,7 +25,7 @@ celery_app.conf.update(
 @celery_app.task(bind=True)
 def process_video_task(self, s3_input_key: str, job_id: str, cutting_options: dict = None, text_strategy: str = None, text_input: dict = None):
     """
-    Celery task for processing video - Sprint 4 implementation
+    Celery task for processing video - Sprint 5: DynamoDB job status tracking
     
     Downloads video from S3, splits into segments based on cutting options,
     adds text overlay based on text strategy with LLM integration, 
@@ -40,17 +40,42 @@ def process_video_task(self, s3_input_key: str, job_id: str, cutting_options: di
     """
     import tempfile
     import os
+    import uuid
+    from datetime import datetime, timezone
     from s3_utils import download_file_from_s3, upload_file_to_s3
     from video_processing_utils import calculate_segments, validate_video_file, get_video_duration_from_s3
     from video_processing_utils_sprint4 import split_video_with_precise_timing_and_dynamic_text
     from models import CuttingOptions, FixedCuttingParams, RandomCuttingParams, TextStrategy, TextInput
     from config import settings
-    
+    import dynamodb_service
+
     temp_dir = None
     local_input_path = None
     output_paths = []
-    
+
+    # Create DynamoDB job entry (QUEUED)
     try:
+        user_id = "anonymous"  # Placeholder for now
+        now_iso = datetime.utcnow().replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
+        dynamodb_service.create_job_entry(
+            job_id=job_id,
+            user_id=user_id,
+            upload_date=now_iso,
+            status="QUEUED",
+            created_at=now_iso,
+            updated_at=now_iso
+        )
+    except Exception as e:
+        print(f"[DynamoDB] Failed to create job entry for job_id={job_id}: {e}")
+        # Continue, but job status will not be tracked
+
+    try:
+        # Mark job as PROCESSING
+        try:
+            dynamodb_service.update_job_status(job_id, status="PROCESSING")
+        except Exception as e:
+            print(f"[DynamoDB] Failed to update job status to PROCESSING for job_id={job_id}: {e}")
+
         print(f"Processing video task started for job: {job_id}")
         print(f"Input S3 key: {s3_input_key}")
         
@@ -144,17 +169,33 @@ def process_video_task(self, s3_input_key: str, job_id: str, cutting_options: di
         print(f"Video processing completed for job: {job_id}")
         print(f"Generated {len(uploaded_urls)} processed video segments")
         
+        # Mark job as COMPLETED in DynamoDB
+        try:
+            dynamodb_service.update_job_status(
+                job_id,
+                status="COMPLETED",
+                output_s3_urls=uploaded_urls
+            )
+        except Exception as e:
+            print(f"[DynamoDB] Failed to update job status to COMPLETED for job_id={job_id}: {e}")
         return {
             "status": "completed",
             "job_id": job_id,
             "output_urls": uploaded_urls,
             "segments_created": len(uploaded_urls)
         }
-        
     except Exception as exc:
         print(f"Video processing failed for job {job_id}: {str(exc)}")
+        # Mark job as FAILED in DynamoDB
+        try:
+            dynamodb_service.update_job_status(
+                job_id,
+                status="FAILED",
+                error_message=str(exc)
+            )
+        except Exception as e:
+            print(f"[DynamoDB] Failed to update job status to FAILED for job_id={job_id}: {e}")
         raise self.retry(exc=exc, countdown=60, max_retries=3)
-        
     finally:
         # Clean up temporary files
         if temp_dir and os.path.exists(temp_dir):
