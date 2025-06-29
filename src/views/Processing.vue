@@ -99,16 +99,23 @@ export default defineComponent({
     }
 
     onMounted(() => {
+      console.log('Attempting to connect to SSE for jobId:', jobId)
       eventSource = new EventSource(`/api/job-progress/${jobId}/stream`)
+      eventSource.onopen = () => {
+        console.log('EventSource connected!')
+      }
       eventSource.onmessage = (event) => {
+        console.log('Received raw SSE data:', event.data)
         try {
           const data = JSON.parse(event.data)
+          console.log('Parsed SSE message:', data)
           progressUpdate.value = data
         } catch (e) {
-          // Ignore malformed events
+          console.warn('Malformed SSE event:', event.data)
         }
       }
-      eventSource.onerror = () => {
+      eventSource.onerror = (err) => {
+        console.error('EventSource error:', err)
         if (eventSource) eventSource.close()
       }
     })

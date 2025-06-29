@@ -1,12 +1,16 @@
 from celery import Celery
 from config import settings
+import redis
+import json
+from datetime import datetime, timezone
+from models import ProgressUpdate
 
 # Initialize Celery app
 celery_app = Celery(
     "video_processor",
     broker=settings.REDIS_URL,
     backend=settings.REDIS_URL,
-    include=["tasks"]  # Changed from "backend.tasks" to "tasks"
+    include=["tasks"]
 )
 
 # Celery configuration
@@ -21,6 +25,14 @@ celery_app.conf.update(
     task_soft_time_limit=25 * 60,  # 25 minutes
 )
 
+def publish_progress(job_id: str, progress: ProgressUpdate):
+    """
+    Publishes a ProgressUpdate to the Redis channel for SSE.
+    Uses synchronous Redis client.
+    """
+    r = redis.StrictRedis.from_url(settings.REDIS_URL, decode_responses=True)
+    channel = f"job_progress_{job_id}"
+    r.publish(channel, progress.model_dump_json())
 
 @celery_app.task(bind=True)
 def process_video_task(self, s3_input_key: str, job_id: str, cutting_options: dict = None, text_strategy: str = None, text_input: dict = None):
@@ -41,33 +53,40 @@ def process_video_task(self, s3_input_key: str, job_id: str, cutting_options: di
     import tempfile
     import os
     import uuid
-    from datetime import datetime, timezone
     from s3_utils import download_file_from_s3, upload_file_to_s3
     from video_processing_utils import calculate_segments, validate_video_file, get_video_duration_from_s3
     from video_processing_utils_sprint4 import split_video_with_precise_timing_and_dynamic_text
     from models import CuttingOptions, FixedCuttingParams, RandomCuttingParams, TextStrategy, TextInput
-    from config import settings
     import dynamodb_service
 
     temp_dir = None
     local_input_path = None
     output_paths = []
+    uploaded_urls = []
+    now_iso = lambda: datetime.utcnow().replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
+
+    # 1. Job received
+    publish_progress(job_id, ProgressUpdate(
+        job_id=job_id,
+        stage="queued",
+        message="Job received, initializing...",
+        progress_percentage=0.0,
+        timestamp=now_iso()
+    ))
 
     # Create DynamoDB job entry (QUEUED)
     try:
-        user_id = "anonymous"  # Placeholder for now
-        now_iso = datetime.utcnow().replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
+        user_id = "anonymous"
         dynamodb_service.create_job_entry(
             job_id=job_id,
             user_id=user_id,
-            upload_date=now_iso,
+            upload_date=now_iso(),
             status="QUEUED",
-            created_at=now_iso,
-            updated_at=now_iso
+            created_at=now_iso(),
+            updated_at=now_iso()
         )
     except Exception as e:
         print(f"[DynamoDB] Failed to create job entry for job_id={job_id}: {e}")
-        # Continue, but job status will not be tracked
 
     try:
         # Mark job as PROCESSING
@@ -76,99 +95,115 @@ def process_video_task(self, s3_input_key: str, job_id: str, cutting_options: di
         except Exception as e:
             print(f"[DynamoDB] Failed to update job status to PROCESSING for job_id={job_id}: {e}")
 
-        print(f"Processing video task started for job: {job_id}")
-        print(f"Input S3 key: {s3_input_key}")
-        
-        # Create temporary directory for processing
+        # 2. Downloading video
+        publish_progress(job_id, ProgressUpdate(
+            job_id=job_id,
+            stage="downloading_video",
+            message="Downloading video from S3...",
+            progress_percentage=2.0,
+            timestamp=now_iso()
+        ))
+
         temp_dir = tempfile.mkdtemp(prefix=f"video_proc_{job_id}_")
-        print(f"Created temp directory: {temp_dir}")
-        
-        # Download video from S3
         input_filename = os.path.basename(s3_input_key)
         local_input_path = os.path.join(temp_dir, f"input_{input_filename}")
-        
-        print(f"Downloading video from S3: {s3_input_key}")
         download_file_from_s3(
             bucket=settings.AWS_BUCKET_NAME,
             key=s3_input_key,
             local_path=local_input_path
         )
-        print(f"Downloaded to: {local_input_path}")
-        
-        # Validate the downloaded video
+
+        # 3. Analyzing duration
+        publish_progress(job_id, ProgressUpdate(
+            job_id=job_id,
+            stage="analyzing_duration",
+            message="Analyzing video duration...",
+            progress_percentage=5.0,
+            timestamp=now_iso()
+        ))
+
         if not validate_video_file(local_input_path):
             raise Exception("Downloaded file is not a valid video")
-        
-        # Parse cutting options or use defaults
+
+        # Parse cutting options
         if cutting_options:
-            # Convert dict back to Pydantic model
             if cutting_options.get("type") == "fixed":
                 cutting_params = FixedCuttingParams(**cutting_options)
             elif cutting_options.get("type") == "random":
                 cutting_params = RandomCuttingParams(**cutting_options)
             else:
-                # Default to 30-second fixed segments for backward compatibility
                 cutting_params = FixedCuttingParams(duration_seconds=30)
         else:
-            # Default to 30-second fixed segments for backward compatibility
             cutting_params = FixedCuttingParams(duration_seconds=30)
-        
-        # Parse text strategy or use default
+
         text_strategy_enum = TextStrategy(text_strategy) if text_strategy else TextStrategy.ONE_FOR_ALL
-        
-        # Parse text input if provided
-        text_input_obj = None
-        if text_input:
-            text_input_obj = TextInput(**text_input)
-        
-        print(f"Processing with cutting options: {cutting_params}")
-        print(f"Text strategy: {text_strategy_enum}")
-        print(f"Text input: {text_input_obj}")
-        
-        # Get video duration and calculate segments
+        text_input_obj = TextInput(**text_input) if text_input else None
+
         total_duration = get_video_duration_from_s3(settings.AWS_BUCKET_NAME, s3_input_key)
         num_segments, segment_times = calculate_segments(total_duration, cutting_params)
-        
-        print(f"Video duration: {total_duration:.2f}s, will create {num_segments} segments")
+
+        # 4. Generating text (if needed)
+        publish_progress(job_id, ProgressUpdate(
+            job_id=job_id,
+            stage="generating_text",
+            message="AI generating text variations...",
+            progress_percentage=10.0,
+            timestamp=now_iso()
+        ))
+
+        # 5. Processing segments
         for i, (start, end) in enumerate(segment_times):
-            print(f"Segment {i+1}: {start:.2f}s - {end:.2f}s ({end-start:.2f}s)")
-        
-        # Process video with precise timing and dynamic text overlay
-        output_prefix = os.path.join(temp_dir, f"processed_{job_id}")
-        print(f"Starting Sprint 4 video processing with output prefix: {output_prefix}")
-        
-        # Use new Sprint 4 processing function with precise timing and dynamic text
-        output_paths = split_video_with_precise_timing_and_dynamic_text(
-            input_path=local_input_path,
-            output_prefix=output_prefix,
-            segment_times=segment_times,
-            text_strategy=text_strategy_enum,
-            text_input=text_input_obj
-        )
-        print(f"Video processing completed. Generated {len(output_paths)} segments")
-        
-        # Upload processed segments back to S3
-        uploaded_urls = []
-        for i, output_path in enumerate(output_paths):
-            if os.path.exists(output_path):
-                # Generate S3 key for processed segment
+            publish_progress(job_id, ProgressUpdate(
+                job_id=job_id,
+                stage="processing_segment",
+                message=f"Processing segment {i+1}/{num_segments}...",
+                current_segment=i+1,
+                total_segments=num_segments,
+                progress_percentage=((i+1)/num_segments)*80+10,  # 10-90%
+                timestamp=now_iso()
+            ))
+            # Process segment
+            output_prefix = os.path.join(temp_dir, f"processed_{job_id}")
+            segment_output_paths = split_video_with_precise_timing_and_dynamic_text(
+                input_path=local_input_path,
+                output_prefix=output_prefix,
+                segment_times=[(start, end)],
+                text_strategy=text_strategy_enum,
+                text_input=text_input_obj
+            )
+            output_path = segment_output_paths[0] if segment_output_paths else None
+            if output_path and os.path.exists(output_path):
                 segment_filename = os.path.basename(output_path)
                 s3_output_key = f"processed/{job_id}/{segment_filename}"
-                
-                print(f"Uploading segment {i+1}/{len(output_paths)}: {segment_filename}")
                 s3_url = upload_file_to_s3(
                     local_path=output_path,
                     bucket=settings.AWS_BUCKET_NAME,
                     key=s3_output_key
                 )
                 uploaded_urls.append(s3_url)
-                print(f"Uploaded to: {s3_url}")
+                publish_progress(job_id, ProgressUpdate(
+                    job_id=job_id,
+                    stage="segment_uploaded",
+                    message=f"Segment {i+1} uploaded to S3.",
+                    current_segment=i+1,
+                    total_segments=num_segments,
+                    progress_percentage=((i+1)/num_segments)*90,
+                    timestamp=now_iso(),
+                    output_urls=uploaded_urls.copy()
+                ))
             else:
                 print(f"Warning: Output file does not exist: {output_path}")
-        
-        print(f"Video processing completed for job: {job_id}")
-        print(f"Generated {len(uploaded_urls)} processed video segments")
-        
+
+        # 6. Uploading results
+        publish_progress(job_id, ProgressUpdate(
+            job_id=job_id,
+            stage="uploading_results",
+            message="Finalizing upload to S3...",
+            progress_percentage=95.0,
+            timestamp=now_iso(),
+            output_urls=uploaded_urls.copy()
+        ))
+
         # Mark job as COMPLETED in DynamoDB
         try:
             dynamodb_service.update_job_status(
@@ -178,6 +213,16 @@ def process_video_task(self, s3_input_key: str, job_id: str, cutting_options: di
             )
         except Exception as e:
             print(f"[DynamoDB] Failed to update job status to COMPLETED for job_id={job_id}: {e}")
+
+        # 7. Completed
+        publish_progress(job_id, ProgressUpdate(
+            job_id=job_id,
+            stage="completed",
+            message="Video processing completed successfully!",
+            progress_percentage=100.0,
+            timestamp=now_iso(),
+            output_urls=uploaded_urls.copy()
+        ))
         return {
             "status": "completed",
             "job_id": job_id,
@@ -195,14 +240,20 @@ def process_video_task(self, s3_input_key: str, job_id: str, cutting_options: di
             )
         except Exception as e:
             print(f"[DynamoDB] Failed to update job status to FAILED for job_id={job_id}: {e}")
+        # 8. Failed
+        publish_progress(job_id, ProgressUpdate(
+            job_id=job_id,
+            stage="failed",
+            message=f"Processing failed: {str(exc)}",
+            progress_percentage=0.0,
+            timestamp=now_iso(),
+            error_message=str(exc)
+        ))
         raise self.retry(exc=exc, countdown=60, max_retries=3)
     finally:
-        # Clean up temporary files
         if temp_dir and os.path.exists(temp_dir):
-            print(f"Cleaning up temporary directory: {temp_dir}")
             try:
                 import shutil
                 shutil.rmtree(temp_dir)
-                print("Cleanup completed successfully")
             except Exception as cleanup_error:
                 print(f"Warning: Failed to clean up temp directory: {cleanup_error}")

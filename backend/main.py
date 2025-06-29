@@ -3,9 +3,9 @@ from fastapi.middleware.cors import CORSMiddleware
 import uuid
 import traceback
 from models import (
-    InitiateUploadRequest, 
-    InitiateUploadResponse, 
-    CompleteUploadRequest, 
+    InitiateUploadRequest,
+    InitiateUploadResponse,
+    CompleteUploadRequest,
     JobCreatedResponse,
     JobStatusResponse,
     AnalyzeDurationRequest,
@@ -42,12 +42,35 @@ app.add_middleware(
 # Create API router
 router = APIRouter(prefix="/api")
 
+# --- MODIFIED REDIS CLIENT SETUP START ---
+# Global async Redis client connection pool (initialized on app startup)
+# This prevents creating a new connection for every SSE request
+_redis_connection_pool = None
+
+@app.on_event("startup")
+async def startup_event():
+    global _redis_connection_pool
+    print("DEBUG: Initializing async Redis client pool on startup.")
+    _redis_connection_pool = redis.ConnectionPool.from_url(settings.REDIS_URL, decode_responses=True)
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    print("DEBUG: Closing async Redis client pool on shutdown.")
+    if _redis_connection_pool:
+        await _redis_connection_pool.disconnect()
+
+# Helper to get an async Redis client from the global pool
+async def get_async_redis_client_from_pool():
+    if not _redis_connection_pool:
+        raise RuntimeError("Redis connection pool not initialized.")
+    return redis.Redis(connection_pool=_redis_connection_pool)
+# --- MODIFIED REDIS CLIENT SETUP END ---
 
 @router.post("/upload/initiate", response_model=InitiateUploadResponse)
 async def initiate_upload(request: InitiateUploadRequest) -> InitiateUploadResponse:
     """
     Initiate video upload by generating S3 presigned URL
-    
+
     This endpoint generates a presigned URL for direct upload to S3,
     allowing the frontend to upload large video files directly to S3
     without going through the backend server.
@@ -55,10 +78,10 @@ async def initiate_upload(request: InitiateUploadRequest) -> InitiateUploadRespo
     try:
         # Generate unique job ID
         job_id = str(uuid.uuid4())
-        
+
         # Generate S3 key for the upload
         s3_key = generate_s3_key(request.filename, job_id)
-        
+
         # Generate presigned URL for S3 upload
         presigned_url = generate_presigned_url(
             bucket_name=settings.AWS_BUCKET_NAME,
@@ -67,13 +90,13 @@ async def initiate_upload(request: InitiateUploadRequest) -> InitiateUploadRespo
             content_type=request.content_type,
             expiration=3600  # 1 hour
         )
-        
+
         return InitiateUploadResponse(
             presigned_url=presigned_url,
             s3_key=s3_key,
             job_id=job_id
         )
-        
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to initiate upload: {str(e)}")
 
@@ -82,7 +105,7 @@ async def initiate_upload(request: InitiateUploadRequest) -> InitiateUploadRespo
 async def complete_upload(request: CompleteUploadRequest) -> JobCreatedResponse:
     """
     Complete upload and start video processing
-    
+
     This endpoint is called after the frontend successfully uploads
     the video to S3 using the presigned URL. It dispatches the video
     processing task to the Celery worker with user-specified cutting
@@ -93,18 +116,18 @@ async def complete_upload(request: CompleteUploadRequest) -> JobCreatedResponse:
         cutting_options_dict = None
         if request.cutting_options:
             cutting_options_dict = request.cutting_options.dict()
-            
+
         text_strategy_str = None
         if request.text_strategy:
             text_strategy_str = request.text_strategy.value
-        
+
         text_input_dict = None
         if request.text_input:
             text_input_dict = request.text_input.dict()
-        
+
         # Dispatch video processing task to Celery
         task = process_video_task.delay(
-            request.s3_key, 
+            request.s3_key,
             request.job_id,
             cutting_options_dict,
             text_strategy_str,
@@ -131,7 +154,7 @@ async def complete_upload(request: CompleteUploadRequest) -> JobCreatedResponse:
             status="QUEUED",
             message="Video processing job has been queued successfully"
         )
-        
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to start processing: {str(e)}")
 
@@ -179,7 +202,7 @@ async def get_job_status(job_id: str) -> JobStatusResponse:
             print(f"DEBUG: Job {job_id} is COMPLETED and has output_urls. Attempting to generate presigned URLs.")
             # --- DEBUGGING PRINTS END ---
             presigned_urls = []
-            
+
             # --- DEBUGGING BLOCK START: Wrap loop in try/except ---
             try:
                 for s3_url in output_urls: # This is a likely failure point if output_urls isn't iterable
@@ -197,7 +220,7 @@ async def get_job_status(job_id: str) -> JobStatusResponse:
                         # This line is brittle if the URL format isn't exactly as assumed
                         bucket = parts[2].split(".")[0]
                         key = "/".join(parts[3:])
-                    
+
                     # --- DEBUGGING PRINTS START ---
                     print(f"DEBUG: Parsed Bucket: '{bucket}', Key: '{key}' for URL: {s3_url}")
                     # --- DEBUGGING PRINTS END ---
@@ -256,26 +279,26 @@ async def health_check():
 async def analyze_duration(request: AnalyzeDurationRequest) -> AnalyzeDurationResponse:
     """
     Analyze video duration and calculate segment count based on cutting options
-    
+
     This endpoint allows the frontend to preview how many segments will be created
     for a given video and cutting parameters before starting the actual processing job.
     """
     try:
         # Get video duration from S3
         total_duration = get_video_duration_from_s3(settings.AWS_BUCKET_NAME, request.s3_key)
-        
+
         # Calculate segments based on cutting options
         num_segments, segment_times = calculate_segments(total_duration, request.cutting_options)
-        
+
         # Extract just the durations for the response
         segment_durations = [end - start for start, end in segment_times]
-        
+
         return AnalyzeDurationResponse(
             total_duration=total_duration,
             num_segments=num_segments,
             segment_durations=segment_durations
         )
-        
+
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Video file not found in S3")
     except Exception as e:
@@ -304,38 +327,34 @@ async def get_async_redis_client(): # Renamed for clarity
 async def job_progress_stream(job_id: str):
     """
     SSE endpoint to stream job progress updates from Redis Pub/Sub to the frontend.
+    Uses pubsub.listen() async iterator for robust message streaming.
     """
     async def event_generator():
-        # Get the async Redis client instance
-        redis_conn = await get_async_redis_client() # Get the client connection
-
-        # Create pubsub instance from the connection
+        redis_conn = await get_async_redis_client_from_pool()
         pubsub = redis_conn.pubsub()
         channel = f"job_progress_{job_id}"
-
-        # Subscribe to the channel
         await pubsub.subscribe(channel)
-        print(f"DEBUG: SSE subscribed to {channel}") # Debugging
-
+        print(f"DEBUG: SSE subscribed to {channel}")
         try:
-            while True:
-                # Get message from the channel
-                message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1)
-                if message is not None:
-                    # message['data'] is the JSON string sent by Celery
+            async for message in pubsub.listen():
+                print(f"DEBUG: SSE Generator - Received message from Redis on channel {channel}: {message}")
+                if message is None:
+                    continue
+                if message["type"] == "message":
+                    print(f"DEBUG: SSE Generator - Yielding message to client: {message['data']}")
                     yield {"event": "progress", "data": message["data"]}
-                await asyncio.sleep(0.1) # Prevent busy-waiting
         except asyncio.CancelledError:
             print(f"DEBUG: SSE client disconnected from {channel}")
         except Exception as e:
             print(f"DEBUG: ERROR in SSE event_generator for job {job_id}: {type(e).__name__}: {str(e)}")
             yield {"event": "error", "data": json.dumps({"message": f"Server error: {e}"})}
         finally:
-            await pubsub.unsubscribe(channel)
-            await pubsub.close() # Close the pubsub connection
-            await redis_conn.close() # Close the async redis client connection
-            print(f"DEBUG: SSE pubsub unsubscribed and connections closed for {job_id}") # Debugging
-
+            try:
+                await pubsub.unsubscribe(channel)
+                await pubsub.close()
+            except Exception as cleanup_error:
+                print(f"DEBUG: Error during pubsub cleanup: {cleanup_error}")
+            print(f"DEBUG: SSE pubsub unsubscribed and connections closed for {job_id}")
     return EventSourceResponse(event_generator())
 
 # Include router in app
