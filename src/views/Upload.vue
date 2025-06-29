@@ -483,8 +483,24 @@ export default defineComponent({
     // Step 3 -> Step 4
     const analyzeSegments = async () => {
       try {
-        const cuttingOptionsPayload = { ...cuttingOptions.value }
-        await videoUpload.analyzeDuration(cuttingOptionsPayload)
+        const opts = cuttingOptions.value
+        let payload: typeof opts
+        if (opts.type === 'fixed' && opts.duration_seconds != null) {
+          payload = { type: 'fixed', duration_seconds: opts.duration_seconds }
+        } else if (
+          opts.type === 'random' &&
+          opts.min_duration != null &&
+          opts.max_duration != null
+        ) {
+          payload = {
+            type: 'random',
+            min_duration: opts.min_duration,
+            max_duration: opts.max_duration,
+          }
+        } else {
+          throw new Error('Invalid cutting options')
+        }
+        await videoUpload.analyzeDuration(payload)
         currentStep.value = 3
       } catch (e) {
         fileError.value = (e as Error).message
