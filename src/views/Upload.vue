@@ -134,9 +134,9 @@
             </button>
           </div>
         </div>
-        <!-- Step 3: Cutting Options -->
+        <!-- Step 3: Configure & Review (Cutting Options, Segment Analysis, Text Customization) -->
         <div v-else-if="currentStep === 2">
-          <form @submit.prevent="analyzeSegments">
+          <form @submit.prevent="startProcessing">
             <div class="mb-6">
               <label class="form-label fw-bold">Cutting Strategy</label>
               <div class="form-check form-check-custom form-check-solid mb-2">
@@ -145,7 +145,7 @@
                   type="radio"
                   id="fixed"
                   value="fixed"
-                  v-model="cuttingOptions.type"
+                  v-model="cuttingOptions.strategy"
                 />
                 <label class="form-check-label" for="fixed">Fixed Duration</label>
               </div>
@@ -155,17 +155,17 @@
                   type="radio"
                   id="random"
                   value="random"
-                  v-model="cuttingOptions.type"
+                  v-model="cuttingOptions.strategy"
                 />
                 <label class="form-check-label" for="random">Random Duration</label>
               </div>
             </div>
-            <div v-if="cuttingOptions.type === 'fixed'" class="mb-6">
+            <div v-if="cuttingOptions.strategy === 'fixed'" class="mb-6">
               <label class="form-label">Segment Duration (seconds)</label>
               <input
                 type="number"
                 class="form-control"
-                v-model.number="cuttingOptions.duration_seconds"
+                v-model.number="cuttingOptions.params.duration_seconds"
                 min="5"
                 max="600"
                 required
@@ -177,7 +177,7 @@
               <input
                 type="number"
                 class="form-control mb-2"
-                v-model.number="cuttingOptions.min_duration"
+                v-model.number="cuttingOptions.params.min_seconds"
                 min="5"
                 max="600"
                 required
@@ -186,7 +186,7 @@
               <input
                 type="number"
                 class="form-control"
-                v-model.number="cuttingOptions.max_duration"
+                v-model.number="cuttingOptions.params.max_seconds"
                 min="5"
                 max="600"
                 required
@@ -194,6 +194,13 @@
               <div class="form-text">
                 Segments will be randomly between min and max (5-600 seconds).
               </div>
+            </div>
+            <!-- Segment Analysis Display -->
+            <div class="mb-6">
+              <h4 class="fw-bold">
+                Estimated Segments: <span class="text-primary">{{ estimatedSegments }}</span>
+              </h4>
+              <div class="text-muted">Video duration: {{ videoDuration }} seconds</div>
             </div>
             <!-- Text Customization UI -->
             <div class="mb-6">
@@ -239,38 +246,23 @@
               <label class="form-label">Context</label>
               <input type="text" class="form-control" v-model="context" required />
             </div>
-            <div v-if="textStrategy === 'unique_for_all'" class="mb-6">
+            <div v-if="textStrategy === 'unique_for_all' && estimatedSegments > 0" class="mb-6">
               <label class="form-label">Unique Texts (one per segment)</label>
-              <div v-for="(text, idx) in uniqueTexts" :key="idx" class="input-group mb-2">
-                <input type="text" class="form-control" v-model="uniqueTexts[idx]" required />
-                <button
-                  type="button"
-                  class="btn btn-danger"
-                  @click="uniqueTexts.splice(idx, 1)"
-                  v-if="uniqueTexts.length > 1"
-                >
-                  Remove
-                </button>
+              <div v-for="idx in estimatedSegments" :key="idx" class="input-group mb-2">
+                <input type="text" class="form-control" v-model="uniqueTexts[idx - 1]" required />
               </div>
-              <button type="button" class="btn btn-secondary" @click="uniqueTexts.push('')">
-                Add Text
-              </button>
             </div>
             <div class="d-flex justify-content-end">
-              <button type="submit" class="btn btn-primary">Analyze Segments</button>
+              <button type="submit" class="btn btn-primary">Start Processing</button>
             </div>
           </form>
         </div>
-        <!-- Step 4: Segment Analysis -->
+        <!-- Step 4: Processing Dashboard -->
         <div v-else-if="currentStep === 3">
-          <div class="mb-6">
-            <h4 class="fw-bold">
-              Estimated Segments: <span class="text-primary">{{ estimatedSegments }}</span>
-            </h4>
-            <div class="text-muted">Video duration: {{ videoDuration }} seconds</div>
-          </div>
-          <div class="d-flex justify-content-end">
-            <button class="btn btn-primary" @click="proceedToNext">Proceed</button>
+          <div class="text-center my-10">
+            <span class="spinner-border text-primary mb-4" style="width: 3rem; height: 3rem"></span>
+            <h4 class="fw-bold mt-4">Processing your video...</h4>
+            <div class="text-muted">This may take a few moments. Please wait.</div>
           </div>
         </div>
       </div>
@@ -292,7 +284,7 @@ export default defineComponent({
     const videoUpload = useVideoUpload()
 
     // Wizard state
-    const steps = ['Select Video', 'Upload', 'Cutting Options', 'Segment Analysis']
+    const steps = ['Select Video', 'Upload', 'Cutting Options', 'Segment Analysis', 'Processing']
     const currentStep = ref(0)
 
     // Form data
@@ -305,7 +297,13 @@ export default defineComponent({
     const isPaused = ref(false)
 
     // Cutting options (sync with composable)
-    const cuttingOptions = videoUpload.cuttingOptions
+    type CuttingOptionsPayload =
+      | { strategy: 'fixed'; params: { duration_seconds: number } }
+      | { strategy: 'random'; params: { min_seconds: number; max_seconds: number } }
+    const cuttingOptions = ref<CuttingOptionsPayload>({
+      strategy: 'fixed',
+      params: { duration_seconds: 30 },
+    })
 
     // Text customization state
     const textStrategy = ref<'one_for_all' | 'base_vary' | 'unique_for_all'>('one_for_all')
@@ -415,34 +413,7 @@ export default defineComponent({
           updated_at: new Date().toISOString(),
         }
         await videoUpload.uploadVideo(selectedFile.value, metadata)
-        // Notify backend to save metadata and start processing
-        const cuttingOptionsPayload = { ...cuttingOptions.value }
-        // Build text_input based on selected strategy
-        let text_input: any = {}
-        if (textStrategy.value === 'one_for_all') {
-          text_input = {
-            strategy: 'one_for_all',
-            base_text: baseText.value,
-            context: null,
-            unique_texts: null,
-          }
-        } else if (textStrategy.value === 'base_vary') {
-          text_input = {
-            strategy: 'base_vary',
-            base_text: baseText.value,
-            context: context.value,
-            unique_texts: null,
-          }
-        } else if (textStrategy.value === 'unique_for_all') {
-          text_input = {
-            strategy: 'unique_for_all',
-            base_text: null,
-            context: null,
-            unique_texts: uniqueTexts.value,
-          }
-        }
-        await videoUpload.completeUpload(cuttingOptionsPayload, textStrategy.value, text_input)
-        currentStep.value = 2 // Move directly to Cutting Options step
+        currentStep.value = 2 // Only advance to Cutting Options, do NOT call completeUpload here
       } catch (e) {
         fileError.value = (e as Error).message
       }
@@ -450,8 +421,24 @@ export default defineComponent({
     // Step 2 -> Step 3
     const goToCuttingOptions = async () => {
       try {
-        const cuttingOptionsPayload = { ...cuttingOptions.value }
-        let text_input: any = {}
+        currentStep.value = 2 // Only advance, do NOT call completeUpload here
+      } catch (e) {
+        fileError.value = (e as Error).message
+      }
+    }
+    // Step 3 -> Step 4
+    const startProcessing = async () => {
+      try {
+        currentStep.value = 3 // Show processing step
+        // Only pass the nested object, do NOT spread or add extra fields
+        const cuttingOptionsPayload = cuttingOptions.value
+        type TextInput = {
+          strategy: 'one_for_all' | 'base_vary' | 'unique_for_all'
+          base_text: string | null
+          context: string | null
+          unique_texts: string[] | null
+        }
+        let text_input: TextInput
         if (textStrategy.value === 'one_for_all') {
           text_input = {
             strategy: 'one_for_all',
@@ -466,7 +453,7 @@ export default defineComponent({
             context: context.value,
             unique_texts: null,
           }
-        } else if (textStrategy.value === 'unique_for_all') {
+        } else {
           text_input = {
             strategy: 'unique_for_all',
             base_text: null,
@@ -474,42 +461,90 @@ export default defineComponent({
             unique_texts: uniqueTexts.value,
           }
         }
+        // Only pass the nested object, do NOT spread or add extra fields
         await videoUpload.completeUpload(cuttingOptionsPayload, textStrategy.value, text_input)
-        currentStep.value = 2
+        setTimeout(() => {
+          router.push({ name: 'TextCustomization', params: { jobId: videoUpload.jobId.value } })
+        }, 1200)
       } catch (e) {
         fileError.value = (e as Error).message
       }
     }
-    // Step 3 -> Step 4
-    const analyzeSegments = async () => {
-      try {
-        const opts = cuttingOptions.value
-        let payload: typeof opts
-        if (opts.type === 'fixed' && opts.duration_seconds != null) {
-          payload = { type: 'fixed', duration_seconds: opts.duration_seconds }
-        } else if (
-          opts.type === 'random' &&
-          opts.min_duration != null &&
-          opts.max_duration != null
-        ) {
-          payload = {
-            type: 'random',
-            min_duration: opts.min_duration,
-            max_duration: opts.max_duration,
+    // Step 2: Auto-analyze segments when entering Configure & Review or when cutting options change
+    watch(
+      () => [
+        currentStep.value,
+        cuttingOptions.value.strategy,
+        cuttingOptions.value.strategy === 'fixed'
+          ? cuttingOptions.value.params.duration_seconds
+          : undefined,
+        cuttingOptions.value.strategy === 'random'
+          ? cuttingOptions.value.params.min_seconds
+          : undefined,
+        cuttingOptions.value.strategy === 'random'
+          ? cuttingOptions.value.params.max_seconds
+          : undefined,
+      ],
+      async ([step]) => {
+        if (step === 2) {
+          try {
+            let payload: CuttingOptionsPayload
+            if (
+              cuttingOptions.value.strategy === 'fixed' &&
+              cuttingOptions.value.params.duration_seconds != null
+            ) {
+              payload = {
+                strategy: 'fixed',
+                params: { duration_seconds: cuttingOptions.value.params.duration_seconds },
+              }
+            } else if (
+              cuttingOptions.value.strategy === 'random' &&
+              cuttingOptions.value.params.min_seconds != null &&
+              cuttingOptions.value.params.max_seconds != null
+            ) {
+              payload = {
+                strategy: 'random',
+                params: {
+                  min_seconds: cuttingOptions.value.params.min_seconds,
+                  max_seconds: cuttingOptions.value.params.max_seconds,
+                },
+              }
+            } else {
+              videoUpload.estimatedSegments.value = 0
+              videoUpload.videoDuration.value = 0
+              return
+            }
+            const result = await videoUpload.analyzeDuration(payload)
+            videoUpload.estimatedSegments.value = result.estimated_num_segments
+            videoUpload.videoDuration.value = result.duration_seconds
+            // Sync uniqueTexts array for UNIQUE_FOR_ALL
+            if (textStrategy.value === 'unique_for_all') {
+              const n = result.estimated_num_segments || 0
+              if (uniqueTexts.value.length !== n) {
+                uniqueTexts.value = Array.from({ length: n }, (_, i) => uniqueTexts.value[i] || '')
+              }
+            }
+          } catch (e) {
+            fileError.value = (e as Error).message
+            videoUpload.estimatedSegments.value = 0
+            videoUpload.videoDuration.value = 0
           }
-        } else {
-          throw new Error('Invalid cutting options')
         }
-        await videoUpload.analyzeDuration(payload)
-        currentStep.value = 3
-      } catch (e) {
-        fileError.value = (e as Error).message
-      }
-    }
-    // Step 4 -> Next (proceed to text customization/status UI)
-    const proceedToNext = () => {
-      router.push({ name: 'TextCustomization', params: { jobId: videoUpload.jobId.value } })
-    }
+      },
+      { immediate: true },
+    )
+    // Watch strategy to reset params when switching
+    watch(
+      () => cuttingOptions.value.strategy,
+      (newStrategy) => {
+        if (newStrategy === 'fixed') {
+          cuttingOptions.value.params = { duration_seconds: 30 }
+        } else if (newStrategy === 'random') {
+          cuttingOptions.value.params = { min_seconds: 28, max_seconds: 56 }
+        }
+      },
+      { immediate: true },
+    )
     // Utils
     const formatFileSize = videoUpload.formatFileSize
     const formatTime = videoUpload.formatTime
@@ -539,8 +574,7 @@ export default defineComponent({
       triggerFileSelect,
       goToUploadStep,
       goToCuttingOptions,
-      analyzeSegments,
-      proceedToNext,
+      startProcessing,
       formatFileSize,
       formatTime,
     }

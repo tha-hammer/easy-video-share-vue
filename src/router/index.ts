@@ -67,6 +67,26 @@ const routes: Array<RouteRecordRaw> = [
           requiresAdmin: true,
         },
       },
+      {
+        path: '/text-customization/:jobId',
+        name: 'TextCustomization',
+        component: () => import('@/views/TextCustomization.vue'),
+        props: true,
+        meta: {
+          pageTitle: 'Text Customization',
+          breadcrumbs: ['Videos', 'Text Customization'],
+        },
+      },
+      {
+        path: '/processing/:jobId',
+        name: 'Processing',
+        component: () => import('@/views/Processing.vue'),
+        props: true,
+        meta: {
+          pageTitle: 'Processing',
+          breadcrumbs: ['Videos', 'Processing'],
+        },
+      },
     ],
   },
   {

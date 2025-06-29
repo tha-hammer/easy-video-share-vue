@@ -97,3 +97,16 @@ class AnalyzeDurationResponse(BaseModel):
     total_duration: float = Field(..., description="Total video duration in seconds")
     num_segments: int = Field(..., description="Estimated number of segments")
     segment_durations: List[float] = Field(..., description="Duration of each segment")
+
+
+class ProgressUpdate(BaseModel):
+    """Model for streaming job progress updates via SSE"""
+    job_id: str
+    stage: str
+    message: str
+    current_segment: Optional[int] = None
+    total_segments: Optional[int] = None
+    progress_percentage: float
+    timestamp: str
+    output_urls: Optional[List[str]] = None
+    error_message: Optional[str] = None

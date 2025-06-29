@@ -10,13 +10,18 @@ from models import (
     JobStatusResponse,
     AnalyzeDurationRequest,
     AnalyzeDurationResponse,
-    CuttingOptions
+    CuttingOptions,
+    ProgressUpdate
 )
 from s3_utils import generate_presigned_url, generate_s3_key
 import dynamodb_service
 from tasks import process_video_task, celery_app
 from video_processing_utils import get_video_duration_from_s3, calculate_segments
 from config import settings
+from sse_starlette.sse import EventSourceResponse
+import redis.asyncio as redis
+import asyncio
+import json
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -285,6 +290,53 @@ async def analyze_duration(request: AnalyzeDurationRequest) -> AnalyzeDurationRe
         else:
             raise HTTPException(status_code=500, detail=f"Failed to analyze video: {error_msg}")
 
+
+# --- Redis PubSub utility for SSE ---
+# This function should return the async Redis client, not the pubsub object
+async def get_async_redis_client(): # Renamed for clarity
+    """
+    Returns an async Redis client connected to the configured Redis URL.
+    """
+    redis_client = redis.from_url(settings.REDIS_URL, decode_responses=True)
+    return redis_client
+
+@router.get("/job-progress/{job_id}/stream", response_class=EventSourceResponse)
+async def job_progress_stream(job_id: str):
+    """
+    SSE endpoint to stream job progress updates from Redis Pub/Sub to the frontend.
+    """
+    async def event_generator():
+        # Get the async Redis client instance
+        redis_conn = await get_async_redis_client() # Get the client connection
+
+        # Create pubsub instance from the connection
+        pubsub = redis_conn.pubsub()
+        channel = f"job_progress_{job_id}"
+
+        # Subscribe to the channel
+        await pubsub.subscribe(channel)
+        print(f"DEBUG: SSE subscribed to {channel}") # Debugging
+
+        try:
+            while True:
+                # Get message from the channel
+                message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1)
+                if message is not None:
+                    # message['data'] is the JSON string sent by Celery
+                    yield {"event": "progress", "data": message["data"]}
+                await asyncio.sleep(0.1) # Prevent busy-waiting
+        except asyncio.CancelledError:
+            print(f"DEBUG: SSE client disconnected from {channel}")
+        except Exception as e:
+            print(f"DEBUG: ERROR in SSE event_generator for job {job_id}: {type(e).__name__}: {str(e)}")
+            yield {"event": "error", "data": json.dumps({"message": f"Server error: {e}"})}
+        finally:
+            await pubsub.unsubscribe(channel)
+            await pubsub.close() # Close the pubsub connection
+            await redis_conn.close() # Close the async redis client connection
+            print(f"DEBUG: SSE pubsub unsubscribed and connections closed for {job_id}") # Debugging
+
+    return EventSourceResponse(event_generator())
 
 # Include router in app
 app.include_router(router)

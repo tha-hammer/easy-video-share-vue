@@ -60,12 +60,16 @@ interface AnalyzeDurationResponse {
   duration_seconds: number
 }
 
-interface CuttingOptions {
-  type: 'fixed' | 'random'
-  duration_seconds?: number
-  min_duration?: number
-  max_duration?: number
+// --- Replace CuttingOptions interface with backend-aligned structure ---
+interface CuttingOptionsFixed {
+  strategy: 'fixed'
+  params: { duration_seconds: number }
 }
+interface CuttingOptionsRandom {
+  strategy: 'random'
+  params: { min_seconds: number; max_seconds: number }
+}
+type CuttingOptions = CuttingOptionsFixed | CuttingOptionsRandom
 
 export function useVideoUpload() {
   // Reactive state
@@ -79,7 +83,10 @@ export function useVideoUpload() {
   const presignedUrl = ref<string | null>(null)
   const estimatedSegments = ref<number | null>(null)
   const videoDuration = ref<number | null>(null)
-  const cuttingOptions = ref<CuttingOptions>({ type: 'fixed', duration_seconds: 30 })
+  const cuttingOptions = ref<CuttingOptions>({
+    strategy: 'fixed',
+    params: { duration_seconds: 30 },
+  })
 
   // Upload configuration (adaptive based on device/network)
   const getUploadConfig = () => {
@@ -204,6 +211,14 @@ export function useVideoUpload() {
     return data
   }
 
+  // Utility to flatten cutting options for backend
+  function flattenCuttingOptions(options: CuttingOptions) {
+    if (!options) return options
+    const { strategy, params } = options as any
+    if (!params || typeof params !== 'object') return options
+    return { strategy, ...params }
+  }
+
   // API: Complete upload
   const completeUpload = async (
     cutting_options?: CuttingOptions,
@@ -214,7 +229,7 @@ export function useVideoUpload() {
     const req: CompleteUploadRequest = {
       s3_key: s3Key.value,
       job_id: jobId.value,
-      cutting_options,
+      cutting_options: cutting_options ? flattenCuttingOptions(cutting_options) : undefined,
       text_strategy,
       text_input,
     }
@@ -232,7 +247,7 @@ export function useVideoUpload() {
     if (!s3Key.value) throw new Error('Missing s3Key')
     const req: AnalyzeDurationRequest = {
       s3_key: s3Key.value,
-      cutting_options: payload || cuttingOptions.value,
+      cutting_options: flattenCuttingOptions(payload || cuttingOptions.value),
     }
     const res = await fetch('/api/video/analyze-duration', {
       method: 'POST',
