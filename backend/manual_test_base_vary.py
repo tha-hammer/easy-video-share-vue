@@ -19,7 +19,7 @@ def test_base_vary_strategy():
     """Test BASE_VARY strategy with real Celery task dispatch"""
     
     # Replace with your actual S3 video key
-    s3_video_key = "uploads/test-video.mp4"
+    s3_video_key = "uploads/334ffc54-cb76-4f38-8c27-194911324caf/20250628_215659_test_video.mp4"
     job_id = "test-base-vary-001"
     
     # Configure text input for BASE_VARY

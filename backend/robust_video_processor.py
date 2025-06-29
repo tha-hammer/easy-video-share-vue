@@ -76,19 +76,30 @@ def process_video_with_ffmpeg_direct(input_path: str, output_prefix: str) -> Lis
 def extract_segment_with_ffmpeg(input_path: str, output_path: str, start_time: float, end_time: float) -> bool:
     """
     Extract video segment using direct FFmpeg command
-    Includes text overlay using FFmpeg's drawtext filter
+    Includes text overlay using FFmpeg's drawtext filter with dynamic font size
     """
     try:
         duration = end_time - start_time
         
-        # FFmpeg command with text overlay
+        # Get video info to calculate appropriate font size
+        video_info = get_video_info_simple(input_path)
+        width, height = video_info['size']
+        
+        # Calculate font size: much smaller for better visibility
+        font_size = min(width, height) // 40  # Smaller divisor for smaller text
+        font_size = max(font_size, 16)       # Minimum size
+        font_size = min(font_size, 60)       # Maximum size
+        
+        logger.debug(f"Video resolution: {width}x{height}, calculated font size: {font_size}")
+        
+        # FFmpeg command with dynamic font size
         cmd = [
             'ffmpeg',
             '-y',  # Overwrite output files
             '-i', input_path,
             '-ss', str(start_time),  # Start time
             '-t', str(duration),     # Duration
-            '-vf', 'drawtext=text=\'AI Generated Video\':fontcolor=white:fontsize=40:x=(w-text_w)/2:y=h-text_h-10:box=1:boxcolor=black@0.5:boxborderw=5',
+            '-vf', f'drawtext=text=\'AI Generated Video\':fontcolor=white:fontsize={font_size}:x=(w-text_w)/2:y=h-text_h-30:box=1:boxcolor=black@0.5:boxborderw=2',
             '-c:v', 'libx264',
             '-c:a', 'aac',
             '-preset', 'medium',

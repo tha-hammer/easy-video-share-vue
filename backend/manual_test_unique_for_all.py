@@ -19,8 +19,8 @@ def test_unique_for_all_strategy():
     """Test UNIQUE_FOR_ALL strategy with real Celery task dispatch"""
     
     # Replace with your actual S3 video key
-    s3_video_key = "uploads/test-video.mp4"
-    job_id = "test-unique-for-all-001"
+    s3_video_key = "uploads/334ffc54-cb76-4f38-8c27-194911324caf/20250628_215659_test_video.mp4"
+    job_id = "test-unique-for-all-010"
     
     # Configure text input for UNIQUE_FOR_ALL
     unique_texts = [

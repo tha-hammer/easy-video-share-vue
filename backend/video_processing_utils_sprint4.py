@@ -7,6 +7,7 @@ import os
 import tempfile
 import subprocess
 import shutil
+import json
 from typing import List, Tuple, Optional
 import logging
 from models import TextStrategy, TextInput, CuttingOptions
@@ -15,6 +16,47 @@ from llm_service_vertexai import generate_text_variations
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+def get_video_info(video_path: str) -> dict:
+    """
+    Get video information including dimensions using FFprobe
+    
+    Args:
+        video_path: Path to the video file
+        
+    Returns:
+        Dictionary containing video information (width, height, duration, etc.)
+    """
+    try:
+        cmd = [
+            'ffprobe',
+            '-v', 'quiet',
+            '-print_format', 'json',
+            '-show_streams',
+            '-select_streams', 'v:0',  # First video stream
+            video_path
+        ]
+        
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        
+        if result.returncode == 0:
+            data = json.loads(result.stdout)
+            if 'streams' in data and len(data['streams']) > 0:
+                stream = data['streams'][0]
+                return {
+                    'width': int(stream.get('width', 1920)),
+                    'height': int(stream.get('height', 1080)),
+                    'duration': float(stream.get('duration', 0)),
+                    'fps': eval(stream.get('r_frame_rate', '30/1'))
+                }
+        
+        logger.warning(f"Could not get video info for {video_path}, using defaults")
+        return {'width': 1920, 'height': 1080, 'duration': 0, 'fps': 30}
+        
+    except Exception as e:
+        logger.error(f"Error getting video info: {e}")
+        return {'width': 1920, 'height': 1080, 'duration': 0, 'fps': 30}
 
 
 def split_video_with_precise_timing_and_dynamic_text(
@@ -177,13 +219,34 @@ def process_segment_with_ffmpeg(
         # Escape special characters in text for FFmpeg
         escaped_text = escape_text_for_ffmpeg(text_overlay)
         
-        # Build FFmpeg command for precise cutting with text overlay
+        # Get video dimensions to calculate appropriate font size
+        video_info = get_video_info(input_path)
+        width = video_info.get('width', 1920)
+        height = video_info.get('height', 1080)
+        
+        # Calculate font size as a percentage of the smaller dimension
+        # This ensures text is readable but not overwhelming
+        font_size = min(width, height) // 20  # Much smaller divisor for very small text
+        font_size = max(font_size, 16)  # Minimum font size for readability
+        font_size = min(font_size, 18)  # Maximum font size to prevent huge text
+        
+        logger.info(f"Video dimensions: {width}x{height}, calculated font size: {font_size}")
+        print(f"DEBUG: Video dimensions: {width}x{height}, calculated font size: {font_size}")
+        
+        # Create multi-line text filter
+        max_chars_per_line = width // (font_size // 2)  # Estimate characters per line based on font size
+        max_chars_per_line = max(max_chars_per_line, 20)  # Minimum characters per line
+        max_chars_per_line = min(max_chars_per_line, 80)  # Maximum characters per line
+        
+        drawtext_filter = create_multiline_drawtext_filter(text_overlay, font_size, max_chars_per_line)
+        
+        # Build FFmpeg command for precise cutting with multi-line text overlay
         cmd = [
             'ffmpeg',
             '-i', input_path,
             '-ss', str(start_time),  # Start time
             '-to', str(end_time),    # End time
-            '-vf', f"drawtext=text='{escaped_text}':fontfile='arial.ttf':fontsize=50:fontcolor=white:borderw=3:bordercolor=black:x=(w-text_w)/2:y=h-th-50",
+            '-vf', drawtext_filter,
             '-c:v', 'libx264',       # Video codec
             '-c:a', 'aac',           # Audio codec
             '-preset', 'medium',      # Encoding preset for balance of speed and quality
@@ -322,3 +385,51 @@ def get_video_info_ffprobe(file_path: str) -> dict:
     except Exception as e:
         logger.error(f"Error getting video info for {file_path}: {str(e)}")
         raise
+
+
+def create_multiline_drawtext_filter(text: str, font_size: int, max_width: int) -> str:
+    """
+    Create FFmpeg drawtext filter string for multi-line text
+    
+    Args:
+        text: Text to display (can contain newlines)
+        font_size: Font size to use
+        max_width: Maximum width for text wrapping (in characters)
+        
+    Returns:
+        FFmpeg filter string for multi-line text
+    """
+    import textwrap
+    
+    # Split text by explicit newlines first
+    lines = text.split('\n')
+    
+    # Then wrap long lines
+    wrapped_lines = []
+    for line in lines:
+        if len(line) > max_width:
+            # Wrap long lines
+            wrapped = textwrap.fill(line, width=max_width).split('\n')
+            wrapped_lines.extend(wrapped)
+        else:
+            wrapped_lines.append(line)
+    
+    # Remove empty lines
+    wrapped_lines = [line.strip() for line in wrapped_lines if line.strip()]
+    
+    if not wrapped_lines:
+        return "drawtext=text='':fontsize=1:x=0:y=0"  # Empty filter
+    
+    # Create multiple drawtext filters
+    filters = []
+    line_height = font_size + 4  # Add some padding between lines
+    
+    for i, line in enumerate(wrapped_lines):
+        escaped_line = escape_text_for_ffmpeg(line)
+        y_offset = 30 + (i * line_height)  # Start 30px from bottom, stack upward
+        
+        filter_str = f"drawtext=text='{escaped_line}':fontsize={font_size}:fontcolor=white:borderw=1:bordercolor=black:x=(w-text_w)/2:y=h-th-{y_offset}"
+        filters.append(filter_str)
+    
+    # Combine filters with comma separation
+    return ','.join(filters)
