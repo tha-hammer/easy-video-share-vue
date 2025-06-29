@@ -22,6 +22,15 @@ export default defineConfig({
       'Cross-Origin-Opener-Policy': 'same-origin-allow-popups',
       'Cross-Origin-Embedder-Policy': 'unsafe-none',
     },
+    proxy: {
+      '/api': {
+        target: 'http://localhost:8000', // Change to your backend URL/port
+        changeOrigin: true,
+        secure: false,
+        // Optionally remove /api prefix if backend does not use it
+        // rewrite: (path) => path.replace(/^\/api/, ''),
+      },
+    },
   },
   // Optimize dependencies for AWS SDK
   optimizeDeps: {

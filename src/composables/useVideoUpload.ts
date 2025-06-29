@@ -1,12 +1,4 @@
 import { ref, computed } from 'vue'
-import {
-  S3Client,
-  CreateMultipartUploadCommand,
-  UploadPartCommand,
-  CompleteMultipartUploadCommand,
-  AbortMultipartUploadCommand,
-} from '@aws-sdk/client-s3'
-import { config } from '@/core/config/config'
 
 interface UploadProgress {
   videoId: string
@@ -37,11 +29,57 @@ interface VideoMetadata {
   updated_at: string
 }
 
+// New interfaces for API integration
+interface InitiateUploadRequest {
+  filename: string
+  content_type: string
+  file_size: number
+}
+
+interface InitiateUploadResponse {
+  presigned_url: string
+  s3_key: string
+  job_id: string
+}
+
+interface CompleteUploadRequest {
+  s3_key: string
+  job_id: string
+  cutting_options?: CuttingOptions
+  text_strategy?: string
+  text_input?: any
+}
+
+interface AnalyzeDurationRequest {
+  s3_key: string
+  cutting_options: CuttingOptions
+}
+
+interface AnalyzeDurationResponse {
+  estimated_num_segments: number
+  duration_seconds: number
+}
+
+interface CuttingOptions {
+  type: 'fixed' | 'random'
+  duration_seconds?: number
+  min_duration?: number
+  max_duration?: number
+}
+
 export function useVideoUpload() {
   // Reactive state
   const uploadProgress = ref<Map<string, UploadProgress>>(new Map())
   const isUploading = ref(false)
   const currentUpload = ref<string | null>(null)
+
+  // New state for wizard
+  const jobId = ref<string | null>(null)
+  const s3Key = ref<string | null>(null)
+  const presignedUrl = ref<string | null>(null)
+  const estimatedSegments = ref<number | null>(null)
+  const videoDuration = ref<number | null>(null)
+  const cuttingOptions = ref<CuttingOptions>({ type: 'fixed', duration_seconds: 30 })
 
   // Upload configuration (adaptive based on device/network)
   const getUploadConfig = () => {
@@ -69,38 +107,20 @@ export function useVideoUpload() {
     }
   }
 
-  // Initialize S3 clients
-  const uploadConfig = getUploadConfig()
-
-  const s3Client = new S3Client({
-    region: config.aws.region,
-    credentials: config.aws.credentials,
-    useAccelerateEndpoint: uploadConfig.useTransferAcceleration,
-  })
-
-  const s3ClientFallback = new S3Client({
-    region: config.aws.region,
-    credentials: config.aws.credentials,
-    useAccelerateEndpoint: false,
-  })
-
   // Upload state management
-  let currentMultipartUpload: {
+  const currentMultipartUpload: {
     uploadId: string
     key: string
     abortController: AbortController
   } | null = null
-  let uploadedParts: { ETag: string; PartNumber: number }[] = []
-  let uploadStartTime: number = 0
+  const uploadedParts: { ETag: string; PartNumber: number }[] = []
+  const uploadStartTime: number = 0
   const lastProgressTime: number = 0
   const lastProgressBytes: number = 0
 
-  // Main upload function
+  // Main upload function using pre-signed URL
   const uploadVideo = async (file: File, metadata: VideoMetadata): Promise<void> => {
     const videoId = metadata.video_id
-
-    // Initialize progress tracking
-    const totalChunks = Math.ceil(file.size / uploadConfig.chunkSize)
     const progress: UploadProgress = {
       videoId,
       filename: file.name,
@@ -110,22 +130,18 @@ export function useVideoUpload() {
       status: 'pending',
       chunkProgress: new Map(),
       completedChunks: 0,
-      totalChunks,
+      totalChunks: 1,
     }
-
     uploadProgress.value.set(videoId, progress)
     isUploading.value = true
     currentUpload.value = videoId
-
     try {
-      const key = metadata.bucketLocation
-      await uploadWithMultipart(file, key, videoId)
-
-      // Mark as completed
+      // Use pre-signed URL for upload
+      if (!presignedUrl.value) throw new Error('No pre-signed URL available')
+      await uploadFileToPresignedUrl(file, presignedUrl.value, progress)
       progress.status = 'completed'
       progress.percentage = 100
       uploadProgress.value.set(videoId, { ...progress })
-
       console.log(`✅ Upload completed for ${videoId}`)
     } catch (error) {
       console.error(`❌ Upload failed for ${videoId}:`, error)
@@ -135,261 +151,99 @@ export function useVideoUpload() {
     } finally {
       isUploading.value = false
       currentUpload.value = null
-      currentMultipartUpload = null
-      uploadedParts = []
     }
   }
 
-  // Multipart upload implementation
-  const uploadWithMultipart = async (file: File, key: string, videoId: string): Promise<void> => {
-    const bucketName = config.aws.bucketName
-
-    try {
-      // Step 1: Create multipart upload
-      const createCommand = new CreateMultipartUploadCommand({
-        Bucket: bucketName,
-        Key: key,
-        ContentType: file.type,
-        Metadata: {
-          'original-filename': file.name,
-          'video-id': videoId,
-        },
-      })
-
-      const createResponse = await s3Client.send(createCommand)
-      const uploadId = createResponse.UploadId!
-
-      // Set up abort controller for cancellation
-      const abortController = new AbortController()
-      currentMultipartUpload = { uploadId, key, abortController }
-
-      // Step 2: Upload parts in parallel
-      uploadStartTime = Date.now()
-      await uploadPartsInParallel(file, key, uploadId, videoId, abortController)
-
-      // Step 3: Complete multipart upload
-      const completeCommand = new CompleteMultipartUploadCommand({
-        Bucket: bucketName,
-        Key: key,
-        UploadId: uploadId,
-        MultipartUpload: {
-          Parts: uploadedParts.sort((a, b) => a.PartNumber - b.PartNumber),
-        },
-      })
-
-      await s3Client.send(completeCommand)
-      console.log(`✅ Multipart upload completed for ${key}`)
-    } catch (error) {
-      // Clean up failed upload
-      if (currentMultipartUpload) {
-        await abortMultipartUpload()
-      }
-      throw error
-    }
-  }
-
-  // Upload parts in parallel with progress tracking
-  const uploadPartsInParallel = async (
+  // Upload file to S3 using pre-signed URL with progress
+  const uploadFileToPresignedUrl = async (
     file: File,
-    key: string,
-    uploadId: string,
-    videoId: string,
-    abortController: AbortController,
+    url: string,
+    progress: UploadProgress,
   ): Promise<void> => {
-    const totalChunks = Math.ceil(file.size / uploadConfig.chunkSize)
-    const semaphore = new Array(uploadConfig.maxConcurrentUploads).fill(null)
-    let partNumber = 1
-
-    const uploadPromises: Promise<void>[] = []
-
-    const uploadNextChunk = async (): Promise<void> => {
-      const currentPartNumber = partNumber++
-      if (currentPartNumber > totalChunks) return
-
-      const startByte = (currentPartNumber - 1) * uploadConfig.chunkSize
-      const endByte = Math.min(startByte + uploadConfig.chunkSize, file.size)
-      const chunk = file.slice(startByte, endByte)
-
-      try {
-        await uploadChunkWithProgress(
-          chunk,
-          key,
-          uploadId,
-          currentPartNumber,
-          startByte,
-          file.size,
-          totalChunks,
-          videoId,
-          abortController,
-        )
-
-        // Recursively upload next chunk
-        await uploadNextChunk()
-      } catch (error) {
-        if (!abortController.signal.aborted) {
-          throw error
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest()
+      xhr.open('PUT', url, true)
+      xhr.setRequestHeader('Content-Type', file.type)
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable) {
+          progress.uploadedSize = event.loaded
+          progress.percentage = Math.round((event.loaded / event.total) * 100)
+          progress.status = 'uploading'
+          uploadProgress.value.set(progress.videoId, { ...progress })
         }
       }
-    }
-
-    // Start parallel uploads
-    for (let i = 0; i < uploadConfig.maxConcurrentUploads && i < totalChunks; i++) {
-      uploadPromises.push(uploadNextChunk())
-    }
-
-    await Promise.all(uploadPromises)
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve()
+        } else {
+          reject(new Error(`S3 upload failed: ${xhr.status} ${xhr.statusText}`))
+        }
+      }
+      xhr.onerror = () => reject(new Error('S3 upload failed'))
+      xhr.send(file)
+    })
   }
 
-  // Upload individual chunk with progress tracking
-  const uploadChunkWithProgress = async (
-    chunk: Blob,
-    key: string,
-    uploadId: string,
-    partNumber: number,
-    startByte: number,
-    totalFileSize: number,
-    totalChunks: number,
-    videoId: string,
-    abortController: AbortController,
-  ): Promise<void> => {
-    const bucketName = config.aws.bucketName
-
-    try {
-      // Convert Blob to ArrayBuffer for AWS SDK v3 compatibility
-      const arrayBuffer = await chunk.arrayBuffer()
-      const uint8Array = new Uint8Array(arrayBuffer)
-
-      const uploadCommand = new UploadPartCommand({
-        Bucket: bucketName,
-        Key: key,
-        PartNumber: partNumber,
-        UploadId: uploadId,
-        Body: uint8Array,
-      })
-
-      // Send the upload command
-      const response = await s3Client.send(uploadCommand)
-
-      if (abortController.signal.aborted) {
-        throw new Error('Upload aborted')
-      }
-
-      // Store completed part
-      uploadedParts.push({
-        ETag: response.ETag!,
-        PartNumber: partNumber,
-      })
-
-      // Update progress
-      const progress = uploadProgress.value.get(videoId)
-      if (progress) {
-        progress.chunkProgress.set(partNumber, 100)
-        progress.completedChunks++
-        updateAggregatedProgress(totalFileSize, totalChunks, videoId)
-      }
-    } catch (error) {
-      if (!abortController.signal.aborted) {
-        console.error(`❌ Chunk ${partNumber} upload failed:`, error)
-        throw error
-      }
+  // API: Initiate upload
+  const initiateUpload = async (file: File): Promise<InitiateUploadResponse> => {
+    const req: InitiateUploadRequest = {
+      filename: file.name,
+      content_type: file.type,
+      file_size: file.size,
     }
+    const res = await fetch('/api/upload/initiate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req),
+    })
+    if (!res.ok) throw new Error('Failed to initiate upload')
+    const data = await res.json()
+    presignedUrl.value = data.presigned_url
+    s3Key.value = data.s3_key
+    jobId.value = data.job_id
+    return data
   }
 
-  // Update aggregated progress across all chunks
-  const updateAggregatedProgress = (
-    totalFileSize: number,
-    totalChunks: number,
-    videoId: string,
-  ): void => {
-    const progress = uploadProgress.value.get(videoId)
-    if (!progress) return
-
-    const completedBytes = progress.completedChunks * uploadConfig.chunkSize
-    const adjustedBytes = Math.min(completedBytes, totalFileSize)
-
-    progress.uploadedSize = adjustedBytes
-    progress.percentage = Math.round((adjustedBytes / totalFileSize) * 100)
-
-    // Calculate upload speed and ETA
-    const now = Date.now()
-    const timeElapsed = (now - uploadStartTime) / 1000 // seconds
-
-    if (timeElapsed > 0) {
-      progress.uploadSpeed = adjustedBytes / timeElapsed // bytes per second
-
-      if (progress.uploadSpeed > 0) {
-        const remainingBytes = totalFileSize - adjustedBytes
-        progress.estimatedTimeRemaining = remainingBytes / progress.uploadSpeed
-      }
+  // API: Complete upload
+  const completeUpload = async (
+    cutting_options?: CuttingOptions,
+    text_strategy?: string,
+    text_input?: any,
+  ): Promise<{ job_id: string }> => {
+    if (!s3Key.value || !jobId.value) throw new Error('Missing s3Key or jobId')
+    const req: CompleteUploadRequest = {
+      s3_key: s3Key.value,
+      job_id: jobId.value,
+      cutting_options,
+      text_strategy,
+      text_input,
     }
-
-    // Update reactive state
-    uploadProgress.value.set(videoId, { ...progress })
+    const res = await fetch('/api/upload/complete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req),
+    })
+    if (!res.ok) throw new Error('Failed to complete upload')
+    return await res.json()
   }
 
-  // Pause upload
-  const pauseUpload = async (): Promise<void> => {
-    if (currentUpload.value) {
-      const progress = uploadProgress.value.get(currentUpload.value)
-      if (progress) {
-        progress.status = 'paused'
-        uploadProgress.value.set(currentUpload.value, { ...progress })
-      }
+  // API: Analyze duration
+  const analyzeDuration = async (payload?: CuttingOptions): Promise<AnalyzeDurationResponse> => {
+    if (!s3Key.value) throw new Error('Missing s3Key')
+    const req: AnalyzeDurationRequest = {
+      s3_key: s3Key.value,
+      cutting_options: payload || cuttingOptions.value,
     }
-    // Note: AWS S3 doesn't support native pause, but we can implement it by stopping new chunks
-  }
-
-  // Resume upload
-  const resumeUpload = async (): Promise<void> => {
-    if (currentUpload.value) {
-      const progress = uploadProgress.value.get(currentUpload.value)
-      if (progress) {
-        progress.status = 'uploading'
-        uploadProgress.value.set(currentUpload.value, { ...progress })
-      }
-    }
-    // Resume logic would need to track completed parts and continue from where we left off
-  }
-
-  // Cancel upload
-  const cancelUpload = async (): Promise<void> => {
-    if (currentMultipartUpload) {
-      await abortMultipartUpload()
-    }
-
-    if (currentUpload.value) {
-      uploadProgress.value.delete(currentUpload.value)
-      currentUpload.value = null
-    }
-
-    isUploading.value = false
-  }
-
-  // Abort multipart upload
-  const abortMultipartUpload = async (): Promise<void> => {
-    if (!currentMultipartUpload) return
-
-    try {
-      const { uploadId, key, abortController } = currentMultipartUpload
-
-      // Signal all ongoing uploads to abort
-      abortController.abort()
-
-      // Abort the multipart upload on S3
-      const abortCommand = new AbortMultipartUploadCommand({
-        Bucket: config.aws.bucketName,
-        Key: key,
-        UploadId: uploadId,
-      })
-
-      await s3Client.send(abortCommand)
-      console.log('✅ Multipart upload aborted successfully')
-    } catch (error) {
-      console.error('❌ Error aborting multipart upload:', error)
-    } finally {
-      currentMultipartUpload = null
-      uploadedParts = []
-    }
+    const res = await fetch('/api/video/analyze-duration', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req),
+    })
+    if (!res.ok) throw new Error('Failed to analyze duration')
+    const data = await res.json()
+    estimatedSegments.value = data.estimated_num_segments
+    videoDuration.value = data.duration_seconds
+    return data
   }
 
   // Computed properties
@@ -423,11 +277,19 @@ export function useVideoUpload() {
     currentUpload,
     currentProgress,
 
+    // New state and actions
+    jobId,
+    s3Key,
+    presignedUrl,
+    estimatedSegments,
+    videoDuration,
+    cuttingOptions,
+    initiateUpload,
+    completeUpload,
+    analyzeDuration,
+
     // Actions
     uploadVideo,
-    pauseUpload,
-    resumeUpload,
-    cancelUpload,
 
     // Utils
     formatFileSize,
