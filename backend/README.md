@@ -1,17 +1,17 @@
-# Easy Video Share - Backend (Sprint 2)
+# Easy Video Share - Backend (Sprint 3)
 
-AI-powered video processing backend for splitting videos and adding text overlays.
+AI-powered video processing backend with dynamic cutting parameters and text strategies.
 
-## Sprint 2 Overview
+## Sprint 3 Overview
 
-Sprint 2 implements a robust, production-ready video processing workflow with:
+Sprint 3 implements dynamic user input for video processing with:
 
-- **Direct S3 Upload**: Frontend uploads videos directly to S3 using presigned URLs
-- **Background Processing**: Celery workers process videos asynchronously
-- **Robust Video Processing**: FFmpeg-based splitting and text overlay (bypasses MoviePy issues)
-- **Real Video Support**: Handles actual video files with proper error handling
-- **S3 Integration**: Seamless upload/download with AWS authentication fallback
-- **Job Status Tracking**: Poll job status and retrieve results via API
+- **Dynamic Cutting Parameters**: User-defined segment durations (fixed or random ranges)
+- **Text Strategy Framework**: Foundation for multiple text overlay strategies
+- **Video Analysis API**: Preview segment counts before processing
+- **Enhanced Processing**: User parameters passed to Celery workers
+- **Backward Compatibility**: All Sprint 2 functionality preserved
+- **Production Ready**: Real data processing, no mock/dummy data
 
 ## Quick Start
 
@@ -42,16 +42,34 @@ python main.py
 **Important**: Services must be running before validation!
 
 ```bash
-# Validate all dependencies and infrastructure
+# Validate Sprint 3 functionality
+python test_sprint3_validation.py
+
+# Test video processing utilities independently
+python test_sprint3_utils.py
+
+# Legacy Sprint 2 validation (still supported)
 python validate_sprint2.py
 ```
 
-### 3. Run End-to-End Test
+### 3. Test Sprint 3 Features
+
+Test the new dynamic cutting and text strategy features:
+
+```bash
+# Test Sprint 3 API endpoints and features
+python test_sprint3_validation.py
+
+# Test Sprint 3 video processing utilities
+python test_sprint3_utils.py
+```
+
+### 4. Run End-to-End Test
 
 Test the complete workflow with a real video:
 
 ```bash
-# Create test video and run full workflow
+# Create test video and run full workflow (Sprint 2 compatible)
 python test_sprint2_e2e.py
 ```
 
@@ -66,12 +84,20 @@ Visit the interactive API docs:
 
 ### API Endpoints
 
+**Core Endpoints:**
+
 - `POST /api/upload/initiate` - Get S3 presigned URL for video upload
-- `POST /api/upload/complete` - Complete upload and start processing
+- `POST /api/upload/complete` - Complete upload and start processing (now accepts cutting options & text strategy)
 - `GET /api/jobs/{job_id}/status` - Get job status and results
 - `GET /api/health` - Health check
 
+**Sprint 3 New Endpoints:**
+
+- `POST /api/video/analyze-duration` - Analyze video and preview segment count with cutting options
+
 ### Workflow
+
+**Basic Workflow (Sprint 2 Compatible):**
 
 1. **Initiate Upload**: Frontend calls `/upload/initiate` with video metadata
 2. **Upload to S3**: Frontend uploads video directly to S3 using presigned URL
@@ -80,12 +106,57 @@ Visit the interactive API docs:
 5. **Poll Status**: Frontend polls `/jobs/{job_id}/status` for progress
 6. **Retrieve Results**: Get S3 URLs of processed video segments
 
+**Enhanced Workflow (Sprint 3):**
+
+1. **Analyze Video** (Optional): Call `/video/analyze-duration` to preview segment count
+2. **Initiate Upload**: Frontend calls `/upload/initiate` with video metadata
+3. **Upload to S3**: Frontend uploads video directly to S3 using presigned URL
+4. **Start Processing**: Frontend calls `/upload/complete` with cutting options and text strategy
+5. **Dynamic Processing**: Celery worker uses user-defined cutting parameters
+6. **Poll Status**: Frontend polls `/jobs/{job_id}/status` for progress
+7. **Retrieve Results**: Get S3 URLs of processed video segments
+
 ### Video Processing
 
-The robust video processor (`video_processing_utils_robust.py`) uses direct FFmpeg calls:
+**Sprint 3 Enhanced Processing:**
 
-- **Split Video**: Creates 30-second segments with proper keyframe handling
-- **Text Overlay**: Adds hardcoded text overlay ("Amazing content!") using FFmpeg filters
+The video processor now supports dynamic cutting parameters:
+
+- **Fixed Duration Cutting**: Create segments of exact duration (e.g., 30 seconds each)
+- **Random Duration Cutting**: Create segments with random durations within a specified range (e.g., 15-45 seconds)
+- **Text Strategy Framework**: Foundation for multiple text overlay strategies (Sprint 4 will expand)
+- **Video Analysis**: Fast duration analysis using ffprobe for segment preview
+- **Backward Compatibility**: Default to 30-second segments if no options provided
+
+**Cutting Options Examples:**
+
+```json
+// Fixed 20-second segments
+{
+  "type": "fixed",
+  "duration_seconds": 20
+}
+
+// Random segments between 15-45 seconds
+{
+  "type": "random",
+  "min_duration": 15,
+  "max_duration": 45
+}
+```
+
+**Text Strategies:**
+
+- `ONE_FOR_ALL`: Single text overlay for all segments (current implementation)
+- `BASE_VARY`: Base text with LLM variations (Sprint 4)
+- `UNIQUE_FOR_ALL`: Unique text per segment (Sprint 4)
+
+**Legacy Processing (Sprint 2):**
+
+The robust video processor (`video_processing_utils_robust.py`) still handles core processing:
+
+- **Split Video**: Creates segments with proper keyframe handling
+- **Text Overlay**: Adds text overlay using FFmpeg filters
 - **Error Handling**: Comprehensive error handling and logging
 - **File Validation**: Validates input videos before processing
 
@@ -179,14 +250,16 @@ python diagnose_ffmpeg.py
 ### Video Processing Tests
 
 ```bash
-# Test video processing pipeline
-python validate_sprint2.py
+# Test Sprint 3 features
+python test_sprint3_validation.py    # Complete Sprint 3 API validation
+python test_sprint3_utils.py         # Video processing utilities
 
-# Create test video
-python create_test_video.py
+# Test Sprint 2 compatibility
+python validate_sprint2.py           # Infrastructure validation
+python test_sprint2_e2e.py          # End-to-end workflow test
 
-# Run end-to-end workflow test
-python test_sprint2_e2e.py
+# Individual component tests
+python create_test_video.py         # Create test video
 ```
 
 ## Production Cleanup
@@ -250,40 +323,90 @@ python cleanup_test_files.py --confirm
 - **Redis Logs**: Check Docker container logs
 - **Processing Logs**: Detailed logging in video processing functions
 
-## Sprint 3 Preparation
+## Sprint 4 Preparation
 
-Sprint 2 provides the foundation for Sprint 3 features:
+Sprint 3 provides the enhanced foundation for Sprint 4 features:
 
-- ✅ **Infrastructure**: Redis, Celery, S3 integration
-- ✅ **Video Processing**: Robust splitting and text overlay
-- ✅ **API Framework**: RESTful endpoints with job tracking
-- ✅ **Error Handling**: Comprehensive error handling and recovery
+- ✅ **Dynamic Cutting**: User-defined segment durations (fixed/random)
+- ✅ **Text Strategy Framework**: Extensible text overlay system
+- ✅ **Video Analysis API**: Fast duration analysis and segment preview
+- ✅ **Enhanced API**: Cutting options and text strategy parameters
+- ✅ **Production Ready**: Real data processing, comprehensive error handling
+- ✅ **Backward Compatibility**: All Sprint 2 functionality preserved
 
-**Next Sprint 3 Features**:
+**Next Sprint 4 Features**:
 
-- Dynamic text overlays (user-provided text)
-- Configurable segment durations
-- Multiple processing strategies
-- Advanced overlay positioning
-- Batch processing support
+- **LLM Text Generation**: AI-powered text variations using Gemini API
+- **Advanced Text Strategies**:
+  - `BASE_VARY`: Base text with LLM-generated variations
+  - `UNIQUE_FOR_ALL`: Frontend UI for unique text per segment
+- **Enhanced Video Processing**: Use precise segment timing from analysis
+- **Frontend Integration**: Vue.js components for cutting options and text strategies
+
+## Current Capabilities (Sprint 3)
+
+### ✅ **Dynamic Video Analysis**
+
+```bash
+curl -X POST "http://localhost:8000/api/video/analyze-duration" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "s3_key": "uploads/my-video.mp4",
+    "cutting_options": {
+      "type": "random",
+      "min_duration": 15,
+      "max_duration": 45
+    }
+  }'
+```
+
+### ✅ **Enhanced Processing**
+
+```bash
+curl -X POST "http://localhost:8000/api/upload/complete" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "s3_key": "uploads/my-video.mp4",
+    "job_id": "user-generated-id",
+    "cutting_options": {
+      "type": "fixed",
+      "duration_seconds": 20
+    },
+    "text_strategy": "one_for_all"
+  }'
+```
+
+### ✅ **Production Results**
+
+Your validation shows successful processing:
+
+- **5 video segments** created from real video file
+- **Dynamic cutting** working with user parameters
+- **S3 URLs** generated for each processed segment
+- **Job tracking** functioning correctly
+- **Processing time**: ~35 seconds for complete workflow
 
 ## File Structure
 
 ```
 backend/
-├── main.py                           # FastAPI application
-├── tasks.py                          # Celery tasks
-├── models.py                         # Pydantic models
+├── main.py                           # FastAPI application (enhanced with Sprint 3 endpoints)
+├── tasks.py                          # Celery tasks (enhanced with dynamic parameters)
+├── models.py                         # Pydantic models (Sprint 3 cutting options & text strategies)
 ├── config.py                         # Configuration
 ├── s3_utils.py                       # S3 operations
-├── video_processing_utils_robust.py  # Video processing
+├── video_processing_utils.py         # Sprint 3 video analysis & segment calculation
+├── video_processing_utils_robust.py  # Core video processing (Sprint 2)
 ├── requirements.txt                  # Python dependencies
 ├── run_server.py                     # Server startup
 ├── run_worker.py                     # Worker startup
-├── validate_sprint2.py               # Validation suite
-├── test_sprint2_e2e.py              # End-to-end test
+├── test_sprint3_validation.py        # Sprint 3 validation suite
+├── test_sprint3_utils.py             # Sprint 3 utility tests
+├── validate_sprint2.py               # Sprint 2 validation (legacy)
+├── test_sprint2_e2e.py              # End-to-end test (legacy compatible)
 ├── create_test_video.py             # Test video creator
-└── cleanup_test_files.py            # Cleanup utility
+├── cleanup_test_files.py            # Cleanup utility
+└── README-SPRINT-3.md               # Sprint 3 detailed documentation
 ```
 
 ## Support

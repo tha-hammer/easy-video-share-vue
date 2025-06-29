@@ -6,10 +6,14 @@ from models import (
     InitiateUploadResponse, 
     CompleteUploadRequest, 
     JobCreatedResponse,
-    JobStatusResponse
+    JobStatusResponse,
+    AnalyzeDurationRequest,
+    AnalyzeDurationResponse,
+    CuttingOptions
 )
 from s3_utils import generate_presigned_url, generate_s3_key
 from tasks import process_video_task, celery_app
+from video_processing_utils import get_video_duration_from_s3, calculate_segments
 from config import settings
 
 # Initialize FastAPI app
@@ -73,11 +77,31 @@ async def complete_upload(request: CompleteUploadRequest) -> JobCreatedResponse:
     
     This endpoint is called after the frontend successfully uploads
     the video to S3 using the presigned URL. It dispatches the video
-    processing task to the Celery worker.
+    processing task to the Celery worker with user-specified cutting
+    options and text strategy.
     """
     try:
+        # Convert Pydantic models to dicts for Celery serialization
+        cutting_options_dict = None
+        if request.cutting_options:
+            cutting_options_dict = request.cutting_options.dict()
+            
+        text_strategy_str = None
+        if request.text_strategy:
+            text_strategy_str = request.text_strategy.value
+        
+        text_input_dict = None
+        if request.text_input:
+            text_input_dict = request.text_input.dict()
+        
         # Dispatch video processing task to Celery
-        task = process_video_task.delay(request.s3_key, request.job_id)
+        task = process_video_task.delay(
+            request.s3_key, 
+            request.job_id,
+            cutting_options_dict,
+            text_strategy_str,
+            text_input_dict
+        )
         
         # Use the Celery task ID as the job ID for tracking
         return JobCreatedResponse(
@@ -138,10 +162,75 @@ async def get_job_status(job_id: str) -> JobStatusResponse:
         raise HTTPException(status_code=500, detail=f"Failed to get job status: {str(e)}")
 
 
+@router.post("/analyze/duration", response_model=AnalyzeDurationResponse)
+async def analyze_video_duration(request: AnalyzeDurationRequest) -> AnalyzeDurationResponse:
+    """
+    Analyze video duration and suggest cutting points
+    
+    This endpoint analyzes the video duration and suggests cutting points
+    based on the specified options. It is used to prepare the video for
+    sharing by generating shorter clips.
+    """
+    try:
+        # Get video duration from S3
+        duration = get_video_duration_from_s3(request.s3_key)
+        
+        # Calculate segments based on duration and cutting options
+        segments = calculate_segments(duration, request.cutting_options)
+        
+        return AnalyzeDurationResponse(
+            job_id=request.job_id,
+            duration=duration,
+            segments=segments
+        )
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to analyze video duration: {str(e)}")
+
+
 @router.get("/health")
 async def health_check():
     """Health check endpoint"""
     return {"status": "healthy", "message": "Video processing API is running"}
+
+
+@router.post("/video/analyze-duration", response_model=AnalyzeDurationResponse)
+async def analyze_duration(request: AnalyzeDurationRequest) -> AnalyzeDurationResponse:
+    """
+    Analyze video duration and calculate segment count based on cutting options
+    
+    This endpoint allows the frontend to preview how many segments will be created
+    for a given video and cutting parameters before starting the actual processing job.
+    """
+    try:
+        # Get video duration from S3
+        total_duration = get_video_duration_from_s3(settings.AWS_BUCKET_NAME, request.s3_key)
+        
+        # Calculate segments based on cutting options
+        num_segments, segment_times = calculate_segments(total_duration, request.cutting_options)
+        
+        # Extract just the durations for the response
+        segment_durations = [end - start for start, end in segment_times]
+        
+        return AnalyzeDurationResponse(
+            total_duration=total_duration,
+            num_segments=num_segments,
+            segment_durations=segment_durations
+        )
+        
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Video file not found in S3")
+    except Exception as e:
+        error_msg = str(e)
+        # Check for S3 404 errors (from ClientError wrapped in Exception)
+        if "404" in error_msg and "Not Found" in error_msg:
+            raise HTTPException(status_code=404, detail="Video file not found in S3")
+        elif "Invalid video file format" in error_msg or "corrupted" in error_msg:
+            raise HTTPException(status_code=400, detail=error_msg)
+        elif "too short" in error_msg:
+            raise HTTPException(status_code=400, detail=error_msg)
+        else:
+            raise HTTPException(status_code=500, detail=f"Failed to analyze video: {error_msg}")
 
 
 # Include router in app

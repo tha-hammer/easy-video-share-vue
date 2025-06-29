@@ -4,9 +4,16 @@ Handles video splitting and text overlay operations
 """
 import os
 import tempfile
-from typing import List
+import random
+import math
+import subprocess
+import json
+from typing import List, Tuple
 from moviepy.editor import VideoFileClip, TextClip, CompositeVideoClip
 import logging
+from models import CuttingOptions, FixedCuttingParams, RandomCuttingParams
+from s3_utils import download_file_from_s3
+from config import settings
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -16,10 +23,6 @@ logger = logging.getLogger(__name__)
 import moviepy.config as mp_config
 
 # Try to configure ImageMagick path on Windows
-import subprocess
-import sys
-import os
-
 def configure_imagemagick():
     """Configure ImageMagick for MoviePy on Windows"""
     try:
@@ -244,3 +247,151 @@ def validate_video_file(video_path: str) -> bool:
     except Exception as e:
         logger.warning(f"Video validation failed: {str(e)}")
         return False
+
+
+def get_video_duration_from_s3(s3_bucket: str, s3_key: str) -> float:
+    """
+    Get video duration from S3 file using ffprobe for efficient metadata extraction
+    
+    Args:
+        s3_bucket: S3 bucket name
+        s3_key: S3 object key
+        
+    Returns:
+        float: Video duration in seconds
+        
+    Raises:
+        Exception: If file cannot be downloaded, accessed, or is not a valid video
+    """
+    temp_dir = None
+    local_path = None
+    
+    try:
+        # Create temporary directory
+        temp_dir = tempfile.mkdtemp()
+        local_path = os.path.join(temp_dir, "temp_video_for_analysis")
+        
+        # Download file from S3
+        logger.info(f"Downloading video from S3 for duration analysis: {s3_key}")
+        download_file_from_s3(s3_bucket, s3_key, local_path)
+        
+        # Use ffprobe to get duration efficiently
+        cmd = [
+            'ffprobe',
+            '-v', 'quiet',
+            '-print_format', 'json',
+            '-show_format',
+            '-show_streams',
+            local_path
+        ]
+        
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        probe_data = json.loads(result.stdout)
+        
+        # Extract duration from format or video stream
+        duration = None
+        
+        # Try to get duration from format first
+        if 'format' in probe_data and 'duration' in probe_data['format']:
+            duration = float(probe_data['format']['duration'])
+        
+        # Fallback to video stream duration
+        if duration is None:
+            for stream in probe_data.get('streams', []):
+                if stream.get('codec_type') == 'video' and 'duration' in stream:
+                    duration = float(stream['duration'])
+                    break
+        
+        if duration is None:
+            raise Exception("Could not extract video duration from file")
+            
+        logger.info(f"Video duration extracted: {duration} seconds")
+        return duration
+        
+    except subprocess.CalledProcessError as e:
+        logger.error(f"ffprobe failed: {e.stderr}")
+        raise Exception(f"Invalid video file format or corrupted: {e.stderr}")
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse ffprobe output: {e}")
+        raise Exception("Failed to analyze video metadata")
+    except Exception as e:
+        logger.error(f"Error analyzing video duration: {e}")
+        raise
+    finally:
+        # Cleanup temporary files
+        if local_path and os.path.exists(local_path):
+            try:
+                os.remove(local_path)
+            except Exception as e:
+                logger.warning(f"Failed to cleanup temp file {local_path}: {e}")
+        if temp_dir and os.path.exists(temp_dir):
+            try:
+                os.rmdir(temp_dir)
+            except Exception as e:
+                logger.warning(f"Failed to cleanup temp directory {temp_dir}: {e}")
+
+
+def calculate_segments(total_duration: float, cutting_options: CuttingOptions) -> Tuple[int, List[Tuple[float, float]]]:
+    """
+    Calculate video segments based on cutting options
+    
+    Args:
+        total_duration: Total video duration in seconds
+        cutting_options: Cutting parameters (fixed or random)
+        
+    Returns:
+        Tuple[int, List[Tuple[float, float]]]: Number of segments and list of (start_time, end_time) pairs
+        
+    Raises:
+        Exception: If video is too short for the specified cutting parameters
+    """
+    segments = []
+    
+    if isinstance(cutting_options, FixedCuttingParams):
+        # Fixed duration segments
+        segment_duration = cutting_options.duration_seconds
+        
+        if segment_duration > total_duration:
+            raise Exception(f"Video is too short ({total_duration:.1f}s) to generate segments with duration {segment_duration}s")
+            
+        current_time = 0.0
+        while current_time < total_duration:
+            end_time = min(current_time + segment_duration, total_duration)
+            segments.append((current_time, end_time))
+            current_time = end_time
+            
+        logger.info(f"Generated {len(segments)} fixed segments of {segment_duration}s each")
+        
+    elif isinstance(cutting_options, RandomCuttingParams):
+        # Random duration segments
+        min_duration = cutting_options.min_duration
+        max_duration = cutting_options.max_duration
+        
+        if min_duration > total_duration:
+            raise Exception(f"Video is too short ({total_duration:.1f}s) for minimum segment duration {min_duration}s")
+            
+        current_time = 0.0
+        while current_time < total_duration:
+            # Generate random duration for this segment
+            remaining_time = total_duration - current_time
+            
+            # Ensure we don't exceed remaining time
+            max_possible = min(max_duration, remaining_time)
+            min_possible = min(min_duration, remaining_time)
+            
+            if min_possible > max_possible:
+                # Last segment is shorter than min_duration, include it anyway
+                segment_duration = remaining_time
+            else:
+                segment_duration = random.uniform(min_possible, max_possible)
+                
+            end_time = current_time + segment_duration
+            segments.append((current_time, end_time))
+            current_time = end_time
+            
+        logger.info(f"Generated {len(segments)} random segments (duration range: {min_duration}-{max_duration}s)")
+    
+    else:
+        raise Exception(f"Unsupported cutting options type: {type(cutting_options)}")
+    
+    return len(segments), segments

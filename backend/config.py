@@ -18,8 +18,9 @@ class Settings(BaseSettings):
     # Celery/Redis Configuration
     REDIS_URL: str = "redis://localhost:6379/0"
     
-    # Google AI Configuration
-    GOOGLE_AI_API_KEY: Optional[str] = None
+    # Google Cloud Vertex AI Configuration
+    GOOGLE_CLOUD_PROJECT: Optional[str] = None
+    GOOGLE_CLOUD_LOCATION: str = "us-central1"  # Default region for Vertex AI
     
     # FastAPI Configuration
     DEBUG: bool = True
