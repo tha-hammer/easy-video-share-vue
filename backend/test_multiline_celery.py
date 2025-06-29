@@ -95,31 +95,28 @@ def test_base_vary_multiline():
     # Multi-line base text
     base_text = "Discover amazing features\nthat will transform\nyour daily routine!"
     
-    cutting_options = FixedCuttingParams(
-        type="fixed",
-        duration_seconds=20
-    )
-    
-    text_input = TextInput(
-        strategy=TextStrategy.BASE_VARY,
-        base_text=base_text,
-        context="health and wellness product advertisement"
-    )
+    cutting_options = {"type": "fixed", "duration_seconds": 20}
+    text_input = {
+        "strategy": "base_vary",
+        "base_text": base_text,
+        "context": "health and wellness product advertisement"
+    }
     
     print(f"🎬 Base text (3 lines):")
     for i, line in enumerate(base_text.split('\n'), 1):
         print(f"   Line {i}: '{line}'")
-    print(f"   Context: {text_input.context}")
+    print(f"   Context: {text_input['context']}")
     
     try:
         from tasks import process_video_task
         
         print(f"\n📤 Dispatching BASE_VARY task...")
-        
+        job_id = "test_base_vary_multiline_02"
         result = process_video_task.delay(
-            s3_key="test/sample_video.mp4",
+            s3_input_key="uploads/334ffc54-cb76-4f38-8c27-194911324caf/20250628_215659_test_video.mp4",
+            job_id=job_id,
             cutting_options=cutting_options,
-            text_strategy=TextStrategy.BASE_VARY,
+            text_strategy="base_vary",
             text_input=text_input
         )
         
