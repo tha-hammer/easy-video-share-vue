@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     PORT: int = 8000
 
     # Video Processing Configuration
-    MAX_VIDEO_SIZE_MB: int = 500
+    MAX_VIDEO_SIZE_MB: int = 5000
     SEGMENT_DURATION_SECONDS: int = 30
 
     class Config:
