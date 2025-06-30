@@ -201,18 +201,48 @@ export function useVideoUpload() {
     }
 
     // Use Railway backend URL from environment or fallback to localhost for development
-    const baseUrl = import.meta.env.VITE_AI_VIDEO_BACKEND_URL || 'http://localhost:8000'
-    const res = await fetch(`${baseUrl}/api/upload/initiate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(req),
-    })
-    if (!res.ok) throw new Error('Failed to initiate upload')
-    const data = await res.json()
-    presignedUrl.value = data.presigned_url
-    s3Key.value = data.s3_key
-    jobId.value = data.job_id
-    return data
+    let baseUrl = import.meta.env.VITE_AI_VIDEO_BACKEND_URL || 'http://localhost:8000'
+
+    // Fix malformed URLs that might have been set incorrectly
+    if (baseUrl.includes('/easy-video-share-vue-production.up.railway.app')) {
+      baseUrl = baseUrl.replace('/easy-video-share-vue-production.up.railway.app', '')
+    }
+
+    const url = `${baseUrl}/api/upload/initiate`
+
+    console.log('🔍 Debug: Making request to:', url)
+    console.log('🔍 Debug: Request body:', req)
+    console.log(
+      '🔍 Debug: Environment VITE_AI_VIDEO_BACKEND_URL:',
+      import.meta.env.VITE_AI_VIDEO_BACKEND_URL,
+    )
+
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(req),
+      })
+
+      console.log('🔍 Debug: Response status:', res.status)
+      console.log('🔍 Debug: Response headers:', Object.fromEntries(res.headers.entries()))
+
+      if (!res.ok) {
+        const errorText = await res.text()
+        console.error('🔍 Debug: Error response body:', errorText)
+        throw new Error(`Failed to initiate upload: ${res.status} ${res.statusText}`)
+      }
+
+      const data = await res.json()
+      console.log('🔍 Debug: Success response:', data)
+      presignedUrl.value = data.presigned_url
+      s3Key.value = data.s3_key
+      jobId.value = data.job_id
+      return data
+    } catch (error) {
+      console.error('🔍 Debug: Fetch error:', error)
+      throw error
+    }
   }
 
   // Utility to flatten cutting options for backend
