@@ -131,7 +131,8 @@ async def complete_upload(request: CompleteUploadRequest) -> JobCreatedResponse:
             request.job_id,
             cutting_options_dict,
             text_strategy_str,
-            text_input_dict
+            text_input_dict,
+            request.user_id or "anonymous"  # Use provided user_id or default to "anonymous"
         )
 
         # Immediately create DynamoDB job entry (QUEUED)
@@ -140,7 +141,7 @@ async def complete_upload(request: CompleteUploadRequest) -> JobCreatedResponse:
             now_iso = datetime.utcnow().replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
             dynamodb_service.create_job_entry(
                 job_id=request.job_id,
-                user_id="anonymous",
+                user_id=request.user_id,
                 upload_date=now_iso,
                 status="QUEUED",
                 created_at=now_iso,

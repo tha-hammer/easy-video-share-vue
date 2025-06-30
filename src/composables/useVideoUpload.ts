@@ -48,6 +48,7 @@ interface CompleteUploadRequest {
   cutting_options?: CuttingOptions
   text_strategy?: string
   text_input?: any
+  user_id?: string // Optional user ID for tracking
 }
 
 interface AnalyzeDurationRequest {
@@ -224,6 +225,7 @@ export function useVideoUpload() {
     cutting_options?: CuttingOptions,
     text_strategy?: string,
     text_input?: any,
+    userId?: string,
   ): Promise<{ job_id: string }> => {
     if (!s3Key.value || !jobId.value) throw new Error('Missing s3Key or jobId')
     const req: CompleteUploadRequest = {
@@ -232,6 +234,7 @@ export function useVideoUpload() {
       cutting_options: cutting_options ? flattenCuttingOptions(cutting_options) : undefined,
       text_strategy,
       text_input,
+      user_id: userId, // Optional user ID for tracking
     }
     const res = await fetch('/api/upload/complete', {
       method: 'POST',

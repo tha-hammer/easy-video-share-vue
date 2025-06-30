@@ -35,7 +35,7 @@ def publish_progress(job_id: str, progress: ProgressUpdate):
     r.publish(channel, progress.model_dump_json())
 
 @celery_app.task(bind=True)
-def process_video_task(self, s3_input_key: str, job_id: str, cutting_options: dict = None, text_strategy: str = None, text_input: dict = None):
+def process_video_task(self, s3_input_key: str, job_id: str, cutting_options: dict = None, text_strategy: str = None, text_input: dict = None, user_id: str = "anonymous_fallback"):
     """
     Celery task for processing video - Sprint 5: DynamoDB job status tracking
     
@@ -76,7 +76,7 @@ def process_video_task(self, s3_input_key: str, job_id: str, cutting_options: di
 
     # Create DynamoDB job entry (QUEUED)
     try:
-        user_id = "anonymous"
+        
         dynamodb_service.create_job_entry(
             job_id=job_id,
             user_id=user_id,

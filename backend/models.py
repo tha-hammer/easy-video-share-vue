@@ -65,6 +65,7 @@ class CompleteUploadRequest(BaseModel):
     cutting_options: Optional[CuttingOptions] = Field(None, description="Video cutting parameters")
     text_strategy: Optional[TextStrategy] = Field(None, description="Text overlay strategy")
     text_input: Optional[TextInput] = Field(None, description="Text content and context for overlay")
+    user_id: Optional[str] = Field(..., description="User identifier for tracking job ownership")
 
 
 

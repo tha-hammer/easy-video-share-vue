@@ -461,8 +461,17 @@ export default defineComponent({
             unique_texts: uniqueTexts.value,
           }
         }
+        // Get logged-in user ID
+        const user = authStore.user // Assuming authStore.user is correctly populated
+        const userId = user?.userId || 'anonymous' // Use a fallback if user is somehow null
+
         // Only pass the nested object, do NOT spread or add extra fields
-        await videoUpload.completeUpload(cuttingOptionsPayload, textStrategy.value, text_input)
+        await videoUpload.completeUpload(
+          cuttingOptionsPayload,
+          textStrategy.value,
+          text_input,
+          userId,
+        )
         setTimeout(() => {
           router.push({ name: 'TextCustomization', params: { jobId: videoUpload.jobId.value } })
         }, 1200)
