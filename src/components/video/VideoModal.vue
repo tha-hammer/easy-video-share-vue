@@ -125,7 +125,7 @@
 
 <script lang="ts">
 import { defineComponent, ref, computed, watch, nextTick } from 'vue'
-import type { VideoMetadata } from '@/stores/videos'
+import type { VideoMetadata } from '@/core/services/VideoService'
 import { config } from '@/core/config/config'
 
 export default defineComponent({
@@ -151,7 +151,7 @@ export default defineComponent({
     // Construct video URL from S3 bucket location
     const videoUrl = computed(() => {
       if (!props.video) return ''
-      const bucketLocation = props.video.bucketLocation || props.video.bucket_location
+      const bucketLocation = props.video.bucket_location
       if (!bucketLocation) {
         return ''
       }

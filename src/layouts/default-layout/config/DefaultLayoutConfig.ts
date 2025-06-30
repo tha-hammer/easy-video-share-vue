@@ -1,28 +1,28 @@
-import type LayoutConfigTypes from "@/layouts/default-layout/config/types";
+import type { LayoutConfig } from '@/layouts/default-layout/config/types'
 
-const config: LayoutConfigTypes = {
+const config: LayoutConfig = {
   general: {
-    mode: "system",
-    iconsType: "duotone",
+    mode: 'system',
+    iconsType: 'duotone',
   },
   main: {
-    type: "default",
-    primaryColor: "#009EF7",
+    type: 'default',
+    primaryColor: '#009EF7',
     logo: {
-      dark: "media/logos/default-dark.svg",
-      light: "media/logos/default.svg",
+      dark: 'media/logos/default-dark.svg',
+      light: 'media/logos/default.svg',
     },
   },
   illustrations: {
-    set: "sketchy-1",
+    set: 'sketchy-1',
   },
   scrollTop: {
     display: true,
   },
   header: {
     display: true,
-    menuIcon: "keenthemes",
-    width: "fluid",
+    menuIcon: 'keenthemes',
+    width: 'fluid',
     fixed: {
       desktop: true,
       tabletAndMobile: true,
@@ -30,7 +30,7 @@ const config: LayoutConfigTypes = {
   },
   toolbar: {
     display: true,
-    width: "fluid",
+    width: 'fluid',
     fixed: {
       desktop: true,
       tabletAndMobile: true,
@@ -39,23 +39,23 @@ const config: LayoutConfigTypes = {
   pageTitle: {
     display: true,
     breadcrumb: true,
-    direction: "column",
+    direction: 'column',
   },
   aside: {
     display: true,
-    theme: "dark",
+    theme: 'dark',
     fixed: true,
-    menuIcon: "keenthemes",
+    menuIcon: 'keenthemes',
     minimized: false,
     minimize: true,
     hoverable: true,
   },
   content: {
-    width: "fixed",
+    width: 'fixed',
   },
   footer: {
-    width: "fluid",
+    width: 'fluid',
   },
-};
+}
 
-export default config;
+export default config

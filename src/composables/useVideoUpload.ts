@@ -20,7 +20,7 @@ interface VideoMetadata {
   user_email: string
   title: string
   filename: string
-  bucketLocation: string
+  bucket_location: string
   upload_date: string
   file_size?: number
   content_type?: string

@@ -246,7 +246,10 @@
               <label class="form-label">Context</label>
               <input type="text" class="form-control" v-model="context" required />
             </div>
-            <div v-if="textStrategy === 'unique_for_all' && estimatedSegments > 0" class="mb-6">
+            <div
+              v-if="textStrategy === 'unique_for_all' && estimatedSegments && estimatedSegments > 0"
+              class="mb-6"
+            >
               <label class="form-label">Unique Texts (one per segment)</label>
               <div v-for="idx in estimatedSegments" :key="idx" class="input-group mb-2">
                 <input type="text" class="form-control" v-model="uniqueTexts[idx - 1]" required />
@@ -405,7 +408,7 @@ export default defineComponent({
           user_email: user.email,
           title: videoTitle.value.trim(),
           filename: selectedFile.value.name,
-          bucketLocation: videoUpload.s3Key.value!,
+          bucket_location: videoUpload.s3Key.value!,
           upload_date: new Date().toISOString(),
           file_size: selectedFile.value.size,
           content_type: selectedFile.value.type,
