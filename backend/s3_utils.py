@@ -10,7 +10,7 @@ def get_s3_client():
     """Get configured S3 client using environment variables or IAM role."""
     return boto3.client(
         's3',
-        region_name=settings.AWS_REGION,
+        region_name="us-east-1",  # Use the region from settings
         aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
         aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
     )
