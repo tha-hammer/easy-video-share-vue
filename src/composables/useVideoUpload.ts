@@ -230,7 +230,13 @@ export function useVideoUpload() {
       if (!res.ok) {
         const errorText = await res.text()
         console.error('🔍 Debug: Error response body:', errorText)
-        throw new Error(`Failed to initiate upload: ${res.status} ${res.statusText}`)
+        console.error('🔍 Debug: Full error details:', {
+          status: res.status,
+          statusText: res.statusText,
+          url: res.url,
+          headers: Object.fromEntries(res.headers.entries()),
+        })
+        throw new Error(`Failed to initiate upload: ${res.status} ${res.statusText} - ${errorText}`)
       }
 
       const data = await res.json()
