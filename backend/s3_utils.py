@@ -10,12 +10,12 @@ def get_s3_client():
     """Get configured S3 client using environment variables or IAM role."""
     return boto3.client(
         's3',
-        region_name="us-east-1",  # Use the region from settings
+        region_name=settings.AWS_REGION,
         aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
         aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
     )
 
-
+print(f"DEBUG: AWS_REGION = {settings.AWS_REGION}")
 def generate_presigned_url(bucket_name: str, object_key: str, client_method: str,content_type: str, expiration: int = 3600) -> str:
     """
     Generate a presigned URL for S3 upload
