@@ -357,6 +357,21 @@ async def job_progress_stream(job_id: str):
             print(f"DEBUG: SSE pubsub unsubscribed and connections closed for {job_id}")
     return EventSourceResponse(event_generator())
 
+@router.get("/videos")
+async def list_videos(user_id: str = None):
+    """
+    List all video metadata entries for the current user (or all users if user_id is not provided).
+    Returns a list of VideoMetadata dicts.
+    """
+    try:
+        # If you have authentication, extract user_id from token/session instead of query param
+        videos = dynamodb_service.list_videos(user_id=user_id)
+        # Optionally filter/transform to match VideoMetadata interface
+        return videos
+    except Exception as e:
+        print(f"[ERROR] Failed to list videos: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to list videos: {str(e)}")
+
 # Include router in app
 app.include_router(router)
 
