@@ -76,13 +76,21 @@ async def initiate_upload(request: InitiateUploadRequest) -> InitiateUploadRespo
     without going through the backend server.
     """
     try:
+        print(f"DEBUG: initiate_upload called with request: {request}")
+        print(f"DEBUG: AWS_REGION = {settings.AWS_REGION}")
+        print(f"DEBUG: AWS_BUCKET_NAME = {settings.AWS_BUCKET_NAME}")
+        print(f"DEBUG: AWS_ACCESS_KEY_ID = {'SET' if settings.AWS_ACCESS_KEY_ID else 'NOT SET'}")
+        
         # Generate unique job ID
         job_id = str(uuid.uuid4())
+        print(f"DEBUG: Generated job_id = {job_id}")
 
         # Generate S3 key for the upload
         s3_key = generate_s3_key(request.filename, job_id)
+        print(f"DEBUG: Generated s3_key = {s3_key}")
 
         # Generate presigned URL for S3 upload
+        print(f"DEBUG: Calling generate_presigned_url with bucket={settings.AWS_BUCKET_NAME}, key={s3_key}")
         presigned_url = generate_presigned_url(
             bucket_name=settings.AWS_BUCKET_NAME,
             object_key=s3_key,
@@ -90,14 +98,20 @@ async def initiate_upload(request: InitiateUploadRequest) -> InitiateUploadRespo
             content_type=request.content_type,
             expiration=3600  # 1 hour
         )
+        print(f"DEBUG: Generated presigned_url = {presigned_url[:50]}...")
 
-        return InitiateUploadResponse(
+        response = InitiateUploadResponse(
             presigned_url=presigned_url,
             s3_key=s3_key,
             job_id=job_id
         )
+        print(f"DEBUG: Returning response: {response}")
+        return response
 
     except Exception as e:
+        print(f"DEBUG: ERROR in initiate_upload: {type(e).__name__}: {str(e)}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Failed to initiate upload: {str(e)}")
 
 
@@ -276,6 +290,59 @@ async def health_check():
     return {"status": "healthy", "message": "Video processing API is running"}
 
 
+@router.get("/routes")
+async def list_routes():
+    """List all available routes"""
+    routes = []
+    for route in app.routes:
+        if hasattr(route, 'path'):
+            routes.append({
+                "path": route.path,
+                "methods": list(route.methods) if hasattr(route, 'methods') else []
+            })
+    return {"routes": routes}
+
+
+@router.get("/debug/aws")
+async def debug_aws():
+    """Debug endpoint to test AWS configuration"""
+    try:
+        print(f"DEBUG: AWS_REGION = {settings.AWS_REGION}")
+        print(f"DEBUG: AWS_BUCKET_NAME = {settings.AWS_BUCKET_NAME}")
+        print(f"DEBUG: AWS_ACCESS_KEY_ID = {'SET' if settings.AWS_ACCESS_KEY_ID else 'NOT SET'}")
+        print(f"DEBUG: AWS_SECRET_ACCESS_KEY = {'SET' if settings.AWS_SECRET_ACCESS_KEY else 'NOT SET'}")
+        
+        # Test S3 connection
+        from s3_utils import generate_presigned_url
+        test_url = generate_presigned_url(
+            bucket_name=settings.AWS_BUCKET_NAME,
+            object_key="test.txt",
+            client_method='get_object',
+            content_type=None,
+            expiration=60
+        )
+        
+        return {
+            "status": "success",
+            "aws_region": settings.AWS_REGION,
+            "aws_bucket": settings.AWS_BUCKET_NAME,
+            "aws_credentials": "SET" if settings.AWS_ACCESS_KEY_ID else "NOT SET",
+            "test_presigned_url": test_url[:50] + "..." if test_url else None
+        }
+    except Exception as e:
+        print(f"DEBUG: AWS test failed: {type(e).__name__}: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return {
+            "status": "error",
+            "error": str(e),
+            "error_type": type(e).__name__,
+            "aws_region": getattr(settings, 'AWS_REGION', 'NOT SET'),
+            "aws_bucket": getattr(settings, 'AWS_BUCKET_NAME', 'NOT SET'),
+            "aws_credentials": "SET" if getattr(settings, 'AWS_ACCESS_KEY_ID', None) else "NOT SET"
+        }
+
+
 @router.post("/video/analyze-duration", response_model=AnalyzeDurationResponse)
 async def analyze_duration(request: AnalyzeDurationRequest) -> AnalyzeDurationResponse:
     """
@@ -382,6 +449,35 @@ async def list_videos(user_id: str = None):
 
 # Include router in app
 app.include_router(router)
+
+# Add debug endpoint directly to app (without /api prefix)
+@app.get("/debug/aws")
+async def debug_aws_direct():
+    """Debug endpoint to test AWS configuration (direct route)"""
+    try:
+        print(f"DEBUG: AWS_REGION = {settings.AWS_REGION}")
+        print(f"DEBUG: AWS_BUCKET_NAME = {settings.AWS_BUCKET_NAME}")
+        print(f"DEBUG: AWS_ACCESS_KEY_ID = {'SET' if settings.AWS_ACCESS_KEY_ID else 'NOT SET'}")
+        print(f"DEBUG: AWS_SECRET_ACCESS_KEY = {'SET' if settings.AWS_SECRET_ACCESS_KEY else 'NOT SET'}")
+        
+        return {
+            "status": "success",
+            "aws_region": settings.AWS_REGION,
+            "aws_bucket": settings.AWS_BUCKET_NAME,
+            "aws_credentials": "SET" if settings.AWS_ACCESS_KEY_ID else "NOT SET"
+        }
+    except Exception as e:
+        print(f"DEBUG: AWS test failed: {type(e).__name__}: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return {
+            "status": "error",
+            "error": str(e),
+            "error_type": type(e).__name__,
+            "aws_region": getattr(settings, 'AWS_REGION', 'NOT SET'),
+            "aws_bucket": getattr(settings, 'AWS_BUCKET_NAME', 'NOT SET'),
+            "aws_credentials": "SET" if getattr(settings, 'AWS_ACCESS_KEY_ID', None) else "NOT SET"
+        }
 
 
 if __name__ == "__main__":
