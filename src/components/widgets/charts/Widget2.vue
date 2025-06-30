@@ -6,9 +6,7 @@
       <h3 class="card-title align-items-start flex-column">
         <span class="card-label fw-bold fs-3 mb-1">Recent Orders</span>
 
-        <span class="text-muted fw-semibold fs-7"
-          >More than 500 new orders</span
-        >
+        <span class="text-muted fw-semibold fs-7">More than 500 new orders</span>
       </h3>
 
       <!--begin::Toolbar-->
@@ -53,73 +51,73 @@
 </template>
 
 <script lang="ts">
-import { computed, defineComponent, onBeforeMount, ref, watch } from "vue";
-import { useThemeStore } from "@/stores/theme";
-import type { ApexOptions } from "apexcharts";
-import { getCSSVariableValue } from "@/assets/ts/_utils";
-import type VueApexCharts from "vue3-apexcharts";
+import { computed, defineComponent, onBeforeMount, ref, watch } from 'vue'
+import { useThemeStore } from '@/stores/theme'
+import type { ApexOptions } from 'apexcharts'
+import { getCSSVariableValue } from '@/assets/ts/_utils'
+import type VueApexCharts from 'vue3-apexcharts'
 
 export default defineComponent({
-  name: "widget-1",
+  name: 'widget-1',
   props: {
     widgetClasses: String,
     height: Number,
   },
   components: {},
   setup() {
-    const chartRef = ref<typeof VueApexCharts | null>(null);
-    const chart = ref<ApexOptions>({});
-    const store = useThemeStore();
+    const chartRef = ref<typeof VueApexCharts | null>(null)
+    const chart = ref<ApexOptions>({})
+    const store = useThemeStore()
 
     const series = [
       {
-        name: "Net Profit",
+        name: 'Net Profit',
         data: [44, 55, 57, 56, 61, 58],
       },
       {
-        name: "Revenue",
+        name: 'Revenue',
         data: [76, 85, 101, 98, 87, 105],
       },
-    ];
+    ]
 
     const themeMode = computed(() => {
-      return store.mode;
-    });
+      return store.mode
+    })
 
     onBeforeMount(() => {
-      Object.assign(chart.value, chartOptions());
-    });
+      Object.assign(chart.value, chartOptions())
+    })
 
     const refreshChart = () => {
       if (!chartRef.value) {
-        return;
+        return
       }
 
-      chartRef.value.updateOptions(chartOptions());
-    };
+      chartRef.value.updateOptions(chartOptions())
+    }
 
     watch(themeMode, () => {
-      refreshChart();
-    });
+      refreshChart()
+    })
 
     return {
       chart,
       series,
       chartRef,
-    };
+    }
   },
-});
+})
 
 const chartOptions = (): ApexOptions => {
-  const labelColor = getCSSVariableValue("--bs-gray-500");
-  const borderColor = getCSSVariableValue("--bs-gray-200");
-  const baseColor = getCSSVariableValue("--bs-warning");
-  const secondaryColor = getCSSVariableValue("--bs-gray-300");
+  const labelColor = getCSSVariableValue('--bs-gray-500')
+  const borderColor = getCSSVariableValue('--bs-gray-200')
+  const baseColor = getCSSVariableValue('--bs-warning')
+  const secondaryColor = getCSSVariableValue('--bs-gray-300')
 
   return {
     chart: {
-      fontFamily: "inherit",
-      type: "bar",
+      fontFamily: 'inherit',
+      type: 'bar',
       toolbar: {
         show: false,
       },
@@ -127,7 +125,7 @@ const chartOptions = (): ApexOptions => {
     plotOptions: {
       bar: {
         horizontal: false,
-        columnWidth: "30%",
+        columnWidth: '30%',
         borderRadius: 5,
       },
     },
@@ -140,10 +138,10 @@ const chartOptions = (): ApexOptions => {
     stroke: {
       show: true,
       width: 2,
-      colors: ["transparent"],
+      colors: ['transparent'],
     },
     xaxis: {
-      categories: ["Feb", "Mar", "Apr", "May", "Jun", "Jul"],
+      categories: ['Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul'],
       axisBorder: {
         show: false,
       },
@@ -153,7 +151,7 @@ const chartOptions = (): ApexOptions => {
       labels: {
         style: {
           colors: labelColor,
-          fontSize: "12px",
+          fontSize: '12px',
         },
       },
     },
@@ -161,41 +159,20 @@ const chartOptions = (): ApexOptions => {
       labels: {
         style: {
           colors: labelColor,
-          fontSize: "12px",
+          fontSize: '12px',
         },
       },
     },
     fill: {
       opacity: 1,
     },
-    states: {
-      normal: {
-        filter: {
-          type: "none",
-          value: 0,
-        },
-      },
-      hover: {
-        filter: {
-          type: "none",
-          value: 0,
-        },
-      },
-      active: {
-        allowMultipleDataPointsSelection: false,
-        filter: {
-          type: "none",
-          value: 0,
-        },
-      },
-    },
     tooltip: {
       style: {
-        fontSize: "12px",
+        fontSize: '12px',
       },
       y: {
         formatter: function (val) {
-          return "$" + val + " thousands";
+          return '$' + val + ' thousands'
         },
       },
     },
@@ -209,6 +186,6 @@ const chartOptions = (): ApexOptions => {
         },
       },
     },
-  };
-};
+  }
+}
 </script>

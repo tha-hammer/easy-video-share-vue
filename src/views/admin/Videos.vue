@@ -51,7 +51,7 @@
     <DeleteConfirmationModal
       :show="showDeleteModal"
       :item-type="deleteModalType"
-      :item-name="deleteModalItem?.title || 'item'"
+      :item-name="getItemName(deleteModalItem)"
       @confirm="handleDeleteConfirm"
       @cancel="handleDeleteCancel"
     />
@@ -123,6 +123,17 @@ export default defineComponent({
       selectedVideo.value = null
     }
 
+    const getItemName = (item: User | VideoMetadata | null): string => {
+      if (item) {
+        if (deleteModalType.value === 'user') {
+          return (item as User).email || 'User'
+        } else if (deleteModalType.value === 'video') {
+          return (item as VideoMetadata).title || 'Video'
+        }
+      }
+      return 'Item'
+    }
+
     // Initialize admin data
     onMounted(async () => {
       console.log('Videos view mounted - initializing data...')
@@ -153,6 +164,7 @@ export default defineComponent({
       handleDeleteCancel,
       openVideoModal,
       closeVideoModal,
+      getItemName,
     }
   },
 })

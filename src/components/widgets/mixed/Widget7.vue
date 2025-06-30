@@ -7,13 +7,9 @@
       <div class="flex-grow-1 card-p pb-0">
         <div class="d-flex flex-stack flex-wrap">
           <div class="me-2">
-            <a href="#" class="text-gray-900 text-hover-primary fw-bold fs-3"
-              >Generate Reports</a
-            >
+            <a href="#" class="text-gray-900 text-hover-primary fw-bold fs-3">Generate Reports</a>
 
-            <div class="text-muted fs-7 fw-semibold">
-              Finance and accounting reports
-            </div>
+            <div class="text-muted fs-7 fw-semibold">Finance and accounting reports</div>
           </div>
 
           <div :class="`text-${chartColor}`" class="fw-bold fs-3">$24,500</div>
@@ -38,56 +34,51 @@
 </template>
 
 <script lang="ts">
-import { getAssetPath } from "@/core/helpers/assets";
-import { computed, defineComponent, onBeforeMount, ref, watch } from "vue";
-import { getCSSVariableValue } from "@/assets/ts/_utils";
-import type VueApexCharts from "vue3-apexcharts";
-import type { ApexOptions } from "apexcharts";
-import { useThemeStore } from "@/stores/theme";
+import { getAssetPath } from '@/core/helpers/assets'
+import { computed, defineComponent, onBeforeMount, ref, watch } from 'vue'
+import { getCSSVariableValue } from '@/assets/ts/_utils'
+import type VueApexCharts from 'vue3-apexcharts'
+import type { ApexOptions } from 'apexcharts'
+import { useThemeStore } from '@/stores/theme'
 
 export default defineComponent({
-  name: "widget-7",
+  name: 'widget-7',
   props: {
     widgetClasses: String,
     chartColor: String,
     chartHeight: String,
   },
   setup(props) {
-    const chartRef = ref<typeof VueApexCharts | null>(null);
-    const chart = ref<ApexOptions>({});
-    const store = useThemeStore();
+    const chartRef = ref<typeof VueApexCharts | null>(null)
+    const chart = ref<ApexOptions>({})
+    const store = useThemeStore()
 
     const series = ref([
       {
-        name: "Net Profit",
+        name: 'Net Profit',
         data: [15, 25, 15, 40, 20, 50],
       },
-    ]);
+    ])
 
     const themeMode = computed(() => {
-      return store.mode;
-    });
+      return store.mode
+    })
 
     onBeforeMount(() => {
-      Object.assign(
-        chart.value,
-        chartOptions(props.chartColor, props.chartHeight)
-      );
-    });
+      Object.assign(chart.value, chartOptions(props.chartColor, props.chartHeight))
+    })
 
     const refreshChart = () => {
       if (!chartRef.value) {
-        return;
+        return
       }
 
-      chartRef.value.updateOptions(
-        chartOptions(props.chartColor, props.chartHeight)
-      );
-    };
+      chartRef.value.updateOptions(chartOptions(props.chartColor, props.chartHeight))
+    }
 
     watch(themeMode, () => {
-      refreshChart();
-    });
+      refreshChart()
+    })
 
     return {
       chart,
@@ -95,23 +86,20 @@ export default defineComponent({
       chartRef,
       refreshChart,
       getAssetPath,
-    };
+    }
   },
-});
+})
 
-const chartOptions = (
-  color: string = "primary",
-  chartHeight: string = "auto"
-): ApexOptions => {
-  const labelColor = getCSSVariableValue("--bs-gray-800");
-  const strokeColor = getCSSVariableValue("--bs-gray-300");
-  const baseColor = getCSSVariableValue(`--bs-${color}`);
-  const lightColor = getCSSVariableValue(`--bs-${color}-light`);
+const chartOptions = (color: string = 'primary', chartHeight: string = 'auto'): ApexOptions => {
+  const labelColor = getCSSVariableValue('--bs-gray-800')
+  const strokeColor = getCSSVariableValue('--bs-gray-300')
+  const baseColor = getCSSVariableValue(`--bs-${color}`)
+  const lightColor = getCSSVariableValue(`--bs-${color}-light`)
 
   return {
     chart: {
-      fontFamily: "inherit",
-      type: "area",
+      fontFamily: 'inherit',
+      type: 'area',
       height: chartHeight,
       toolbar: {
         show: false,
@@ -131,17 +119,16 @@ const chartOptions = (
       enabled: false,
     },
     fill: {
-      type: "solid",
       opacity: 1,
     },
     stroke: {
-      curve: "smooth",
+      curve: 'smooth',
       show: true,
       width: 3,
       colors: [baseColor],
     },
     xaxis: {
-      categories: ["Feb", "Mar", "Apr", "May", "Jun", "Jul"],
+      categories: ['Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul'],
       axisBorder: {
         show: false,
       },
@@ -152,12 +139,12 @@ const chartOptions = (
         show: false,
         style: {
           colors: labelColor,
-          fontSize: "12px",
+          fontSize: '12px',
         },
       },
       crosshairs: {
         show: false,
-        position: "front",
+        position: 'front',
         stroke: {
           color: strokeColor,
           width: 1,
@@ -169,7 +156,7 @@ const chartOptions = (
         formatter: undefined,
         offsetY: 0,
         style: {
-          fontSize: "12px",
+          fontSize: '12px',
         },
       },
     },
@@ -180,38 +167,17 @@ const chartOptions = (
         show: false,
         style: {
           colors: labelColor,
-          fontSize: "12px",
-        },
-      },
-    },
-    states: {
-      normal: {
-        filter: {
-          type: "none",
-          value: 0,
-        },
-      },
-      hover: {
-        filter: {
-          type: "none",
-          value: 0,
-        },
-      },
-      active: {
-        allowMultipleDataPointsSelection: false,
-        filter: {
-          type: "none",
-          value: 0,
+          fontSize: '12px',
         },
       },
     },
     tooltip: {
       style: {
-        fontSize: "12px",
+        fontSize: '12px',
       },
       y: {
         formatter: function (val) {
-          return "$" + val + " thousands";
+          return '$' + val + ' thousands'
         },
       },
     },
@@ -221,6 +187,6 @@ const chartOptions = (
       strokeColors: [baseColor],
       strokeWidth: 3,
     },
-  };
-};
+  }
+}
 </script>

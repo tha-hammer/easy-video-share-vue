@@ -82,16 +82,16 @@
 </template>
 
 <script lang="ts">
-import { getAssetPath } from "@/core/helpers/assets";
-import { computed, defineComponent, onBeforeMount, ref, watch } from "vue";
-import { getCSSVariableValue } from "@/assets/ts/_utils";
-import type VueApexCharts from "vue3-apexcharts";
-import type { ApexOptions } from "apexcharts";
-import { useThemeStore } from "@/stores/theme";
-import Dropdown3 from "@/components/dropdown/Dropdown3.vue";
+import { getAssetPath } from '@/core/helpers/assets'
+import { computed, defineComponent, onBeforeMount, ref, watch } from 'vue'
+import { getCSSVariableValue } from '@/assets/ts/_utils'
+import type VueApexCharts from 'vue3-apexcharts'
+import type { ApexOptions } from 'apexcharts'
+import { useThemeStore } from '@/stores/theme'
+import Dropdown3 from '@/components/dropdown/Dropdown3.vue'
 
 export default defineComponent({
-  name: "widget-12",
+  name: 'widget-12',
   props: {
     widgetClasses: String,
     widgetColor: String,
@@ -101,40 +101,40 @@ export default defineComponent({
     Dropdown3,
   },
   setup(props) {
-    const chartRef = ref<typeof VueApexCharts | null>(null);
-    const chart = ref<ApexOptions>({});
-    const store = useThemeStore();
+    const chartRef = ref<typeof VueApexCharts | null>(null)
+    const chart = ref<ApexOptions>({})
+    const store = useThemeStore()
 
     const series = ref([
       {
-        name: "Net Profit",
+        name: 'Net Profit',
         data: [35, 65, 75, 55, 45, 60, 55],
       },
       {
-        name: "Revenue",
+        name: 'Revenue',
         data: [40, 70, 80, 60, 50, 65, 60],
       },
-    ]);
+    ])
 
     const themeMode = computed(() => {
-      return store.mode;
-    });
+      return store.mode
+    })
 
     onBeforeMount(() => {
-      Object.assign(chart.value, chartOptions(props.chartHeight));
-    });
+      Object.assign(chart.value, chartOptions(props.chartHeight))
+    })
 
     const refreshChart = () => {
       if (!chartRef.value) {
-        return;
+        return
       }
 
-      chartRef.value.updateOptions(chartOptions(props.chartHeight));
-    };
+      chartRef.value.updateOptions(chartOptions(props.chartHeight))
+    }
 
     watch(themeMode, () => {
-      refreshChart();
-    });
+      refreshChart()
+    })
 
     return {
       chart,
@@ -142,18 +142,18 @@ export default defineComponent({
       chartRef,
       refreshChart,
       getAssetPath,
-    };
+    }
   },
-});
+})
 
-const chartOptions = (chartHeight: string = "auto"): ApexOptions => {
-  const labelColor = getCSSVariableValue("--bs-gray-500");
-  const borderColor = getCSSVariableValue("--bs-gray-200");
+const chartOptions = (chartHeight: string = 'auto'): ApexOptions => {
+  const labelColor = getCSSVariableValue('--bs-gray-500')
+  const borderColor = getCSSVariableValue('--bs-gray-200')
 
   return {
     chart: {
-      fontFamily: "inherit",
-      type: "bar",
+      fontFamily: 'inherit',
+      type: 'bar',
       height: chartHeight,
       toolbar: {
         show: false,
@@ -165,7 +165,7 @@ const chartOptions = (chartHeight: string = "auto"): ApexOptions => {
     plotOptions: {
       bar: {
         horizontal: false,
-        columnWidth: "30%",
+        columnWidth: '30%',
       },
     },
     legend: {
@@ -177,10 +177,10 @@ const chartOptions = (chartHeight: string = "auto"): ApexOptions => {
     stroke: {
       show: true,
       width: 1,
-      colors: ["transparent"],
+      colors: ['transparent'],
     },
     xaxis: {
-      categories: ["Feb", "Mar", "Apr", "May", "Jun", "Jul"],
+      categories: ['Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul'],
       axisBorder: {
         show: false,
       },
@@ -190,7 +190,7 @@ const chartOptions = (chartHeight: string = "auto"): ApexOptions => {
       labels: {
         style: {
           colors: labelColor,
-          fontSize: "12px",
+          fontSize: '12px',
         },
       },
     },
@@ -200,49 +200,24 @@ const chartOptions = (chartHeight: string = "auto"): ApexOptions => {
       labels: {
         style: {
           colors: labelColor,
-          fontSize: "12px",
+          fontSize: '12px',
         },
       },
     },
     fill: {
-      type: ["solid", "solid"],
-      opacity: [0.25, 1],
-    },
-    states: {
-      normal: {
-        filter: {
-          type: "none",
-          value: 0,
-        },
-      },
-      hover: {
-        filter: {
-          type: "none",
-          value: 0,
-        },
-      },
-      active: {
-        allowMultipleDataPointsSelection: false,
-        filter: {
-          type: "none",
-          value: 0,
-        },
-      },
+      opacity: 1,
     },
     tooltip: {
       style: {
-        fontSize: "12px",
+        fontSize: '12px',
       },
       y: {
         formatter: function (val) {
-          return "$" + val + " thousands";
+          return '$' + val + ' thousands'
         },
       },
-      marker: {
-        show: false,
-      },
     },
-    colors: ["#ffffff", "#ffffff"],
+    colors: ['#ffffff', '#ffffff'],
     grid: {
       borderColor: borderColor,
       strokeDashArray: 4,
@@ -256,6 +231,6 @@ const chartOptions = (chartHeight: string = "auto"): ApexOptions => {
         right: 20,
       },
     },
-  };
-};
+  }
+}
 </script>

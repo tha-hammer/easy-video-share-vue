@@ -51,7 +51,7 @@
     <DeleteConfirmationModal
       :show="showDeleteModal"
       :item-type="deleteModalType"
-      :item-name="deleteModalItem?.email || 'item'"
+      :item-name="getItemName(deleteModalItem)"
       @confirm="handleDeleteConfirm"
       @cancel="handleDeleteCancel"
     />
@@ -123,36 +123,17 @@ export default defineComponent({
       selectedVideo.value = null
     }
 
-    // Initialize admin data
-    onMounted(async () => {
-      console.log('Users view mounted - initializing data...')
-      await adminStore.initializeAdmin()
-    })
-
-    // Provide methods to child components using Vue's provide/inject
-    provide('openDeleteModal', (type: 'user' | 'video', item: User | VideoMetadata) => {
-      deleteModalType.value = type
-      deleteModalItem.value = item
-      showDeleteModal.value = true
-    })
-
-    provide('openVideoModal', openVideoModal)
-
-    return {
-      adminStore,
-      isLoading,
-      showDeleteModal,
-      deleteModalType,
-      deleteModalItem,
-      showVideoModal,
-      selectedVideo,
-
-      // Methods
-      refreshData,
-      handleDeleteConfirm,
-      handleDeleteCancel,
-      openVideoModal,
-      closeVideoModal,
+    const getItemName = (item: User | VideoMetadata | null): string => {
+      if (item) {
+        if (deleteModalType.value === 'user') {
+          const user = item as User
+          return user.email
+        } else if (deleteModalType.value === 'video') {
+          const video = item as VideoMetadata
+          return video.title
+        }
+      }
+      return 'item'
     }
   },
 })

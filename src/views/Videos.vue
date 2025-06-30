@@ -41,6 +41,21 @@
             Upload Video
           </router-link>
           <!--end::Upload Button-->
+
+          <!--begin::Sort Dropdown-->
+          <select
+            v-model="sortBy"
+            class="form-select form-select-sm w-auto ms-3"
+            style="min-width: 140px"
+          >
+            <option value="newest">Newest</option>
+            <option value="oldest">Oldest</option>
+            <option value="title-asc">Title (A-Z)</option>
+            <option value="title-desc">Title (Z-A)</option>
+            <option value="duration-asc">Duration (Short-Long)</option>
+            <option value="duration-desc">Duration (Long-Short)</option>
+          </select>
+          <!--end::Sort Dropdown-->
         </div>
         <!--end::Actions-->
       </div>
@@ -98,7 +113,7 @@
         <!--begin::Videos Grid-->
         <div v-else-if="viewMode === 'grid'" class="row g-6 g-xl-9">
           <div
-            v-for="video in videosStore.userVideos"
+            v-for="video in sortedVideos"
             :key="video.video_id"
             class="col-md-6 col-lg-4 col-xl-3"
           >
@@ -120,7 +135,7 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-for="video in videosStore.userVideos" :key="video.video_id">
+              <tr v-for="video in sortedVideos" :key="video.video_id">
                 <td>
                   <div class="d-flex align-items-center">
                     <div class="symbol symbol-45px me-5">
@@ -193,7 +208,7 @@
 </template>
 
 <script lang="ts">
-import { defineComponent, ref, onMounted } from 'vue'
+import { defineComponent, ref, onMounted, computed } from 'vue'
 import { useVideosStore } from '@/stores/videos'
 import VideoCard from '@/components/video/VideoCard.vue'
 import VideoModal from '@/components/video/VideoModal.vue'
@@ -211,6 +226,31 @@ export default defineComponent({
     const selectedVideo = ref<VideoMetadata | null>(null)
     const showVideoModal = ref(false)
     const errorMessage = ref('')
+    const sortBy = ref<
+      'newest' | 'oldest' | 'title-asc' | 'title-desc' | 'duration-asc' | 'duration-desc'
+    >('newest')
+    const sortedVideos = computed(() => {
+      const videos = [...videosStore.userVideos]
+      switch (sortBy.value) {
+        case 'oldest':
+          return videos.sort(
+            (a, b) => new Date(a.upload_date).getTime() - new Date(b.upload_date).getTime(),
+          )
+        case 'title-asc':
+          return videos.sort((a, b) => (a.title || '').localeCompare(b.title || ''))
+        case 'title-desc':
+          return videos.sort((a, b) => (b.title || '').localeCompare(a.title || ''))
+        case 'duration-asc':
+          return videos.sort((a, b) => (a.duration || 0) - (b.duration || 0))
+        case 'duration-desc':
+          return videos.sort((a, b) => (b.duration || 0) - (a.duration || 0))
+        case 'newest':
+        default:
+          return videos.sort(
+            (a, b) => new Date(b.upload_date).getTime() - new Date(a.upload_date).getTime(),
+          )
+      }
+    })
 
     const loadData = async () => {
       try {
@@ -294,6 +334,8 @@ export default defineComponent({
       formatFileSize,
       formatDuration,
       formatDate,
+      sortBy,
+      sortedVideos,
     }
   },
 })
