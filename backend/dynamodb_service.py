@@ -3,12 +3,18 @@ import uuid
 from datetime import datetime, timezone
 import boto3
 from boto3.dynamodb.conditions import Key
+from config import settings
 
 from typing import List, Optional
 
 # Table name from settings or environment
 DYNAMODB_TABLE_NAME = os.getenv("DYNAMODB_TABLE_NAME", "easy-video-share-video-metadata")
-dynamodb = boto3.resource("dynamodb")
+dynamodb = boto3.resource(
+    "dynamodb",
+    region_name=settings.AWS_REGION,
+    aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
+    aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
+)
 table = dynamodb.Table(DYNAMODB_TABLE_NAME)
 
 
