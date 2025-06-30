@@ -33,7 +33,7 @@ app = FastAPI(
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],  # Vue dev server
+    allow_origins=["*"],  # Allow all origins for debug
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -356,6 +356,13 @@ async def job_progress_stream(job_id: str):
                 print(f"DEBUG: Error during pubsub cleanup: {cleanup_error}")
             print(f"DEBUG: SSE pubsub unsubscribed and connections closed for {job_id}")
     return EventSourceResponse(event_generator())
+
+
+
+@router.options("/videos")
+async def options_videos():
+    from fastapi.responses import Response
+    return Response(status_code=200)
 
 @router.get("/videos")
 async def list_videos(user_id: str = None):

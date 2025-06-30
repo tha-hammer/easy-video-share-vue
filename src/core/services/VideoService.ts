@@ -386,6 +386,28 @@ export class VideoService {
       throw error
     }
   }
+
+  /**
+   * Get all AI-processed video metadata from backend
+   */
+  static async getAIVideoMetadataList(): Promise<VideoMetadata[]> {
+    try {
+      const response = await fetch(`${API_CONFIG.aiVideoBackend}/videos`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      })
+      if (!response.ok) {
+        throw new Error(`Failed to fetch AI video metadata: ${response.statusText}`)
+      }
+      const data = await response.json()
+      return Array.isArray(data) ? data : data.videos || []
+    } catch (error) {
+      console.error('Error fetching AI video metadata:', error)
+      throw error
+    }
+  }
 }
 
 export type {

@@ -25,9 +25,10 @@ export const useVideosStore = defineStore('videos', () => {
   const loadUserVideos = async () => {
     try {
       loading.value = true
-      const videos = await VideoService.getUserVideos()
+      // Use AI backend endpoint for processed videos
+      const videos = await VideoService.getAIVideoMetadataList()
       userVideos.value = videos
-      console.log('Loaded videos from API:', videos.length)
+      console.log('Loaded AI processed videos from API:', videos.length)
     } catch (error) {
       console.error('Failed to load user videos:', error)
       throw error

@@ -64,3 +64,21 @@ def get_job_status(job_id: str) -> Optional[dict]:
     """
     resp = table.get_item(Key={"video_id": job_id})
     return resp.get("Item")
+
+
+def list_videos(user_id: Optional[str] = None) -> list:
+    """
+    List all video/job entries for a user (or all users if user_id is None).
+    Returns a list of dicts matching VideoMetadata.
+    """
+    if user_id:
+        # Query by user_id (assumes GSI on user_id)
+        resp = table.query(
+            IndexName="user_id-index",  # Make sure this GSI exists
+            KeyConditionExpression=Key("user_id").eq(user_id)
+        )
+        return resp.get("Items", [])
+    else:
+        # Scan all (for demo/dev; not recommended for prod with large tables)
+        resp = table.scan()
+        return resp.get("Items", [])
