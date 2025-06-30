@@ -214,7 +214,7 @@ export default defineComponent({
     const statusType = ref<'success' | 'error' | 'info'>('info')
 
     // Resend cooldown timer
-    let resendTimer: number | null = null
+    let resendTimer: ReturnType<typeof setInterval> | null = null
 
     // Clear errors when inputs change
     const clearErrors = () => {

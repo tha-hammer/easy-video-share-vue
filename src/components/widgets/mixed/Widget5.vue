@@ -48,23 +48,15 @@
             <!--begin::Symbol-->
             <div class="symbol symbol-50px me-3">
               <div class="symbol-label bg-light">
-                <img
-                  :src="getAssetPath('media/svg/brand-logos/plurk.svg')"
-                  alt=""
-                  class="h-50"
-                />
+                <img :src="getAssetPath('media/svg/brand-logos/plurk.svg')" alt="" class="h-50" />
               </div>
             </div>
             <!--end::Symbol-->
 
             <!--begin::Title-->
             <div>
-              <a href="#" class="fs-6 text-gray-800 text-hover-primary fw-bold"
-                >Top Authors</a
-              >
-              <div class="fs-7 text-muted fw-semibold mt-1">
-                Ricky Hunt, Sandra Trepp
-              </div>
+              <a href="#" class="fs-6 text-gray-800 text-hover-primary fw-bold">Top Authors</a>
+              <div class="fs-7 text-muted fw-semibold mt-1">Ricky Hunt, Sandra Trepp</div>
             </div>
             <!--end::Title-->
           </div>
@@ -83,20 +75,14 @@
             <!--begin::Symbol-->
             <div class="symbol symbol-50px me-3">
               <div class="symbol-label bg-light">
-                <img
-                  :src="getAssetPath('media/svg/brand-logos/figma-1.svg')"
-                  alt=""
-                  class="h-50"
-                />
+                <img :src="getAssetPath('media/svg/brand-logos/figma-1.svg')" alt="" class="h-50" />
               </div>
             </div>
             <!--end::Symbol-->
 
             <!--begin::Title-->
             <div>
-              <a href="#" class="fs-6 text-gray-800 text-hover-primary fw-bold"
-                >Top Sales</a
-              >
+              <a href="#" class="fs-6 text-gray-800 text-hover-primary fw-bold">Top Sales</a>
               <div class="fs-7 text-muted fw-semibold mt-1">PitStop Emails</div>
             </div>
             <!--end::Title-->
@@ -116,20 +102,14 @@
             <!--begin::Symbol-->
             <div class="symbol symbol-50px me-3">
               <div class="symbol-label bg-light">
-                <img
-                  :src="getAssetPath('media/svg/brand-logos/vimeo.svg')"
-                  alt=""
-                  class="h-50"
-                />
+                <img :src="getAssetPath('media/svg/brand-logos/vimeo.svg')" alt="" class="h-50" />
               </div>
             </div>
             <!--end::Symbol-->
 
             <!--begin::Title-->
             <div class="py-1">
-              <a href="#" class="fs-6 text-gray-800 text-hover-primary fw-bold"
-                >Top Engagement</a
-              >
+              <a href="#" class="fs-6 text-gray-800 text-hover-primary fw-bold">Top Engagement</a>
 
               <div class="fs-7 text-muted fw-semibold mt-1">KT.com</div>
             </div>
@@ -151,16 +131,16 @@
 </template>
 
 <script lang="ts">
-import { getAssetPath } from "@/core/helpers/assets";
-import { computed, defineComponent, onMounted, ref, watch } from "vue";
-import Dropdown3 from "@/components/dropdown/Dropdown3.vue";
-import { getCSSVariableValue } from "@/assets/ts/_utils";
-import type { ApexOptions } from "apexcharts";
-import type VueApexCharts from "vue3-apexcharts";
-import { useThemeStore } from "@/stores/theme";
+import { getAssetPath } from '@/core/helpers/assets'
+import { computed, defineComponent, onMounted, ref, watch } from 'vue'
+import Dropdown3 from '@/components/dropdown/Dropdown3.vue'
+import { getCSSVariableValue } from '@/assets/ts/_utils'
+import type { ApexOptions } from 'apexcharts'
+import type VueApexCharts from 'vue3-apexcharts'
+import { useThemeStore } from '@/stores/theme'
 
 export default defineComponent({
-  name: "widget-7",
+  name: 'widget-7',
   components: {
     Dropdown3,
   },
@@ -170,64 +150,56 @@ export default defineComponent({
     chartHeight: String,
   },
   setup(props) {
-    const chartRef = ref<typeof VueApexCharts | null>(null);
-    const chart = ref<ApexOptions>({});
-    const store = useThemeStore();
+    const chartRef = ref<typeof VueApexCharts | null>(null)
+    const chart = ref<ApexOptions>({})
+    const store = useThemeStore()
 
     const series = [
       {
-        name: "Net Profit",
+        name: 'Net Profit',
         data: [30, 30, 60, 25, 25, 40],
       },
-    ];
+    ]
 
     const themeMode = computed(() => {
-      return store.mode;
-    });
+      return store.mode
+    })
 
     onMounted(() => {
-      Object.assign(
-        chart.value,
-        chartOptions(props.chartColor, props.chartHeight)
-      );
-    });
+      Object.assign(chart.value, chartOptions(props.chartColor, props.chartHeight))
+    })
 
     const refreshChart = () => {
       if (!chartRef.value) {
-        return;
+        return
       }
 
-      chartRef.value.updateOptions(
-        chartOptions(props.chartColor, props.chartHeight)
-      );
-    };
+      chartRef.value.updateOptions(chartOptions(props.chartColor, props.chartHeight))
+    }
 
     watch(themeMode, () => {
-      refreshChart();
-    });
+      refreshChart()
+    })
 
     return {
       chart,
       series,
       chartRef,
       getAssetPath,
-    };
+    }
   },
-});
+})
 
-const chartOptions = (
-  color: string = "primary",
-  height: string = "auto"
-): ApexOptions => {
-  const labelColor = getCSSVariableValue("--bs-gray-800");
-  const strokeColor = getCSSVariableValue("--bs-gray-300");
-  const baseColor = getCSSVariableValue(`--bs-${color}`);
-  const lightColor = getCSSVariableValue(`--bs-${color}-light`);
+const chartOptions = (color: string = 'primary', height: string = 'auto'): ApexOptions => {
+  const labelColor = getCSSVariableValue('--bs-gray-800')
+  const strokeColor = getCSSVariableValue('--bs-gray-300')
+  const baseColor = getCSSVariableValue(`--bs-${color}`)
+  const lightColor = getCSSVariableValue(`--bs-${color}-light`)
 
   return {
     chart: {
-      fontFamily: "inherit",
-      type: "area",
+      fontFamily: 'inherit',
+      type: 'area',
       height: height,
       toolbar: {
         show: false,
@@ -247,17 +219,16 @@ const chartOptions = (
       enabled: false,
     },
     fill: {
-      type: "solid",
       opacity: 1,
     },
     stroke: {
-      curve: "smooth",
+      curve: 'smooth',
       show: true,
       width: 3,
       colors: [baseColor],
     },
     xaxis: {
-      categories: ["Feb", "Mar", "Apr", "May", "Jun", "Jul"],
+      categories: ['Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul'],
       axisBorder: {
         show: false,
       },
@@ -268,12 +239,12 @@ const chartOptions = (
         show: false,
         style: {
           colors: labelColor,
-          fontSize: "12px",
+          fontSize: '12px',
         },
       },
       crosshairs: {
         show: false,
-        position: "front",
+        position: 'front',
         stroke: {
           color: strokeColor,
           width: 1,
@@ -285,7 +256,7 @@ const chartOptions = (
         formatter: undefined,
         offsetY: 0,
         style: {
-          fontSize: "12px",
+          fontSize: '12px',
         },
       },
     },
@@ -296,38 +267,17 @@ const chartOptions = (
         show: false,
         style: {
           colors: labelColor,
-          fontSize: "12px",
-        },
-      },
-    },
-    states: {
-      normal: {
-        filter: {
-          type: "none",
-          value: 0,
-        },
-      },
-      hover: {
-        filter: {
-          type: "none",
-          value: 0,
-        },
-      },
-      active: {
-        allowMultipleDataPointsSelection: false,
-        filter: {
-          type: "none",
-          value: 0,
+          fontSize: '12px',
         },
       },
     },
     tooltip: {
       style: {
-        fontSize: "12px",
+        fontSize: '12px',
       },
       y: {
         formatter: function (val) {
-          return "$" + val + " thousands";
+          return '$' + val + ' thousands'
         },
       },
     },
@@ -337,6 +287,6 @@ const chartOptions = (
       strokeColors: [baseColor],
       strokeWidth: 3,
     },
-  };
-};
+  }
+}
 </script>

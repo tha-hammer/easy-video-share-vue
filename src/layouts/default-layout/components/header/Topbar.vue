@@ -4,15 +4,17 @@
     <!--begin::Action wrapper-->
     <div class="d-flex align-items-center">
       <!--begin::Label-->
-      <span class="fs-7 fw-bold text-gray-700 pe-4 text-nowrap d-none d-xxl-block">Sort By:</span>
+      <!--       <span class="fs-7 fw-bold text-gray-700 pe-4 text-nowrap d-none d-xxl-block">Sort By:</span>
+ -->
       <!--end::Label-->
 
       <!--begin::Select-->
-      <select class="form-select form-select-sm form-select-solid w-100px w-xxl-125px">
+      <!--  <select class="form-select form-select-sm form-select-solid w-100px w-xxl-125px">
         <option value="1" selected>Latest</option>
         <option value="2">In Progress</option>
         <option value="3">Done</option>
       </select>
+ -->
       <!--end::Select-->
     </div>
     <!--end::Action wrapper-->
@@ -56,20 +58,21 @@
     <!--begin::Action wrapper-->
     <div class="d-flex align-items-center">
       <!--begin::Label-->
-      <span class="fs-7 text-gray-700 fw-bold pe-3 d-none d-xxl-block">Quick Tools:</span>
+      <!--       <span class="fs-7 text-gray-700 fw-bold pe-3 d-none d-xxl-block">Quick Tools:</span>
+ -->
       <!--end::Label-->
 
       <!--begin::Actions-->
       <div class="d-flex">
         <!--begin::Action-->
-        <a
+        <!--         <a
           href="#"
           class="btn btn-sm btn-icon btn-icon-muted btn-active-icon-primary"
           data-bs-toggle="modal"
           data-bs-target="#kt_modal_invite_friends"
         >
           <KTIcon icon-name="delete-files" icon-class="fs-2" />
-        </a>
+        </a> -->
         <!--end::Action-->
 
         <!--begin::Notifications-->
