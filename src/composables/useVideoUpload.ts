@@ -45,15 +45,15 @@ interface InitiateUploadResponse {
 interface CompleteUploadRequest {
   s3_key: string
   job_id: string
-  cutting_options?: CuttingOptions
+  cutting_options?: Record<string, unknown>
   text_strategy?: string
-  text_input?: any
+  text_input?: unknown
   user_id?: string // Optional user ID for tracking
 }
 
 interface AnalyzeDurationRequest {
   s3_key: string
-  cutting_options: CuttingOptions
+  cutting_options: Record<string, unknown>
 }
 
 interface AnalyzeDurationResponse {
@@ -199,7 +199,10 @@ export function useVideoUpload() {
       content_type: file.type,
       file_size: file.size,
     }
-    const res = await fetch('/api/upload/initiate', {
+
+    // Use Railway backend URL from environment or fallback to localhost for development
+    const baseUrl = import.meta.env.VITE_AI_VIDEO_BACKEND_URL || 'http://localhost:8000'
+    const res = await fetch(`${baseUrl}/api/upload/initiate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(req),
@@ -213,10 +216,10 @@ export function useVideoUpload() {
   }
 
   // Utility to flatten cutting options for backend
-  function flattenCuttingOptions(options: CuttingOptions) {
-    if (!options) return options
-    const { strategy, params } = options as any
-    if (!params || typeof params !== 'object') return options
+  function flattenCuttingOptions(options: CuttingOptions): Record<string, unknown> {
+    if (!options) return {}
+    const { strategy, params } = options as { strategy: string; params: Record<string, unknown> }
+    if (!params || typeof params !== 'object') return { strategy }
     return { strategy, ...params }
   }
 
@@ -224,7 +227,7 @@ export function useVideoUpload() {
   const completeUpload = async (
     cutting_options?: CuttingOptions,
     text_strategy?: string,
-    text_input?: any,
+    text_input?: unknown,
     userId?: string,
   ): Promise<{ job_id: string }> => {
     if (!s3Key.value || !jobId.value) throw new Error('Missing s3Key or jobId')
@@ -236,7 +239,10 @@ export function useVideoUpload() {
       text_input,
       user_id: userId, // Optional user ID for tracking
     }
-    const res = await fetch('/api/upload/complete', {
+
+    // Use Railway backend URL from environment or fallback to localhost for development
+    const baseUrl = import.meta.env.VITE_AI_VIDEO_BACKEND_URL || 'http://localhost:8000'
+    const res = await fetch(`${baseUrl}/api/upload/complete`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(req),
@@ -252,7 +258,10 @@ export function useVideoUpload() {
       s3_key: s3Key.value,
       cutting_options: flattenCuttingOptions(payload || cuttingOptions.value),
     }
-    const res = await fetch('/api/video/analyze-duration', {
+
+    // Use Railway backend URL from environment or fallback to localhost for development
+    const baseUrl = import.meta.env.VITE_AI_VIDEO_BACKEND_URL || 'http://localhost:8000'
+    const res = await fetch(`${baseUrl}/api/video/analyze-duration`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(req),
