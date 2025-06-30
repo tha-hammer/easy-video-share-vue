@@ -62,7 +62,7 @@
 </template>
 
 <script lang="ts">
-import { defineComponent, ref, computed, onMounted, provide } from 'vue'
+import { defineComponent, ref, computed, provide } from 'vue'
 import { useAdminStore } from '@/stores/admin'
 import AdminUsersPanel from '@/components/admin/AdminUsersPanel.vue'
 import DeleteConfirmationModal from '@/components/admin/DeleteConfirmationModal.vue'
@@ -134,6 +134,24 @@ export default defineComponent({
         }
       }
       return 'item'
+    }
+
+    // Provide methods to child components
+    provide('openVideoModal', openVideoModal)
+
+    return {
+      showDeleteModal,
+      deleteModalType,
+      deleteModalItem,
+      showVideoModal,
+      selectedVideo,
+      isLoading,
+      refreshData,
+      handleDeleteConfirm,
+      handleDeleteCancel,
+      openVideoModal,
+      closeVideoModal,
+      getItemName,
     }
   },
 })
