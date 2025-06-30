@@ -201,13 +201,7 @@ export function useVideoUpload() {
     }
 
     // Use Railway backend URL from environment or fallback to localhost for development
-    let baseUrl = import.meta.env.VITE_AI_VIDEO_BACKEND_URL || 'http://localhost:8000'
-
-    // Fix malformed URLs that might have been set incorrectly
-    if (baseUrl.includes('/easy-video-share-vue-production.up.railway.app')) {
-      baseUrl = baseUrl.replace('/easy-video-share-vue-production.up.railway.app', '')
-    }
-
+    const baseUrl = import.meta.env.VITE_AI_VIDEO_BACKEND_URL || 'http://localhost:8000'
     const url = `${baseUrl}/api/upload/initiate`
 
     console.log('🔍 Debug: Making request to:', url)
