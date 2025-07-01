@@ -32,6 +32,11 @@ export default defineConfig({
       },
     },
   },
+  // Preview server configuration for Railway
+  preview: {
+    host: '0.0.0.0',
+    port: process.env.PORT ? parseInt(process.env.PORT) : 4173,
+  },
   // Optimize dependencies for AWS SDK
   optimizeDeps: {
     include: ['@aws-sdk/client-s3'],
