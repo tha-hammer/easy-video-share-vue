@@ -22,6 +22,7 @@ export const COGNITO_CONFIG = {
 console.log('🔧 Configuration Debug:')
 console.log('VITE_COGNITO_USER_POOL_ID:', import.meta.env.VITE_COGNITO_USER_POOL_ID)
 console.log('VITE_COGNITO_CLIENT_ID:', import.meta.env.VITE_COGNITO_CLIENT_ID)
+console.log('VITE_AI_VIDEO_BACKEND_URL:', import.meta.env.VITE_AI_VIDEO_BACKEND_URL)
 console.log('COGNITO_CONFIG:', COGNITO_CONFIG)
 
 // API Configuration
@@ -39,8 +40,8 @@ export const API_CONFIG = {
   adminVideosEndpoint:
     import.meta.env.VITE_API_ADMIN_VIDEOS_ENDPOINT ||
     'https://ip60d4qmjf.execute-api.us-east-1.amazonaws.com/dev/admin/videos',
-  // AI Video Processing Backend (FastAPI)
-  aiVideoBackend: import.meta.env.VITE_AI_VIDEO_BACKEND_URL || 'http://localhost:8000/api',
+  // AI Video Processing Backend (FastAPI) - Railway deployment
+  aiVideoBackend: import.meta.env.VITE_AI_VIDEO_BACKEND_URL || 'http://localhost:8000',
 }
 
 // File upload constraints
@@ -56,10 +57,18 @@ export const UPLOAD_CONFIG = {
   useTransferAcceleration: true,
 }
 
+// Railway-specific configuration
+export const RAILWAY_CONFIG = {
+  isRailway: import.meta.env.VITE_RAILWAY_ENVIRONMENT === 'true',
+  staticUrl: import.meta.env.VITE_RAILWAY_STATIC_URL,
+  backendUrl: import.meta.env.VITE_AI_VIDEO_BACKEND_URL,
+}
+
 // Unified config object for easier imports
 export const config = {
   aws: AWS_CONFIG,
   cognito: COGNITO_CONFIG,
   api: API_CONFIG,
   upload: UPLOAD_CONFIG,
+  railway: RAILWAY_CONFIG,
 }
