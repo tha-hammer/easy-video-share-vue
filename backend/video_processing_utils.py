@@ -251,7 +251,7 @@ def validate_video_file(video_path: str) -> bool:
 
 def get_video_duration_from_s3(s3_bucket: str, s3_key: str) -> float:
     """
-    Get video duration from S3 file using ffprobe for efficient metadata extraction
+    Get video duration from S3 file using ffprobe with direct S3 access
     
     Args:
         s3_bucket: S3 bucket name
@@ -261,31 +261,33 @@ def get_video_duration_from_s3(s3_bucket: str, s3_key: str) -> float:
         float: Video duration in seconds
         
     Raises:
-        Exception: If file cannot be downloaded, accessed, or is not a valid video
+        Exception: If file cannot be accessed or is not a valid video
     """
-    temp_dir = None
-    local_path = None
-    
     try:
-        # Create temporary directory
-        temp_dir = tempfile.mkdtemp()
-        local_path = os.path.join(temp_dir, "temp_video_for_analysis")
+        # Generate presigned URL for S3 access
+        from s3_utils import generate_presigned_url
+        s3_url = generate_presigned_url(
+            bucket_name=s3_bucket,
+            object_key=s3_key,
+            client_method='get_object',
+            content_type=None,
+            expiration=300  # 5 minutes
+        )
         
-        # Download file from S3
-        logger.info(f"Downloading video from S3 for duration analysis: {s3_key}")
-        download_file_from_s3(s3_bucket, s3_key, local_path)
+        logger.info(f"Getting video duration from S3: {s3_bucket}/{s3_key}")
         
-        # Use ffprobe to get duration efficiently
+        # Use ffprobe to get duration directly from S3 URL
         cmd = [
             'ffprobe',
             '-v', 'quiet',
             '-print_format', 'json',
             '-show_format',
             '-show_streams',
-            local_path
+            s3_url
         ]
         
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        logger.info(f"Running ffprobe command: {' '.join(cmd[:3])}... [URL hidden]")
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True, timeout=30)
         probe_data = json.loads(result.stdout)
         
         # Extract duration from format or video stream
@@ -308,8 +310,13 @@ def get_video_duration_from_s3(s3_bucket: str, s3_key: str) -> float:
         logger.info(f"Video duration extracted: {duration} seconds")
         return duration
         
+    except subprocess.TimeoutExpired:
+        logger.error("ffprobe timed out while accessing S3 file")
+        raise Exception("Timeout while analyzing video metadata")
     except subprocess.CalledProcessError as e:
         logger.error(f"ffprobe failed: {e.stderr}")
+        if "404" in e.stderr or "No such file" in e.stderr:
+            raise FileNotFoundError(f"Video file not found in S3: {s3_key}")
         raise Exception(f"Invalid video file format or corrupted: {e.stderr}")
     except json.JSONDecodeError as e:
         logger.error(f"Failed to parse ffprobe output: {e}")
@@ -317,18 +324,6 @@ def get_video_duration_from_s3(s3_bucket: str, s3_key: str) -> float:
     except Exception as e:
         logger.error(f"Error analyzing video duration: {e}")
         raise
-    finally:
-        # Cleanup temporary files
-        if local_path and os.path.exists(local_path):
-            try:
-                os.remove(local_path)
-            except Exception as e:
-                logger.warning(f"Failed to cleanup temp file {local_path}: {e}")
-        if temp_dir and os.path.exists(temp_dir):
-            try:
-                os.rmdir(temp_dir)
-            except Exception as e:
-                logger.warning(f"Failed to cleanup temp directory {temp_dir}: {e}")
 
 
 def calculate_segments(total_duration: float, cutting_options: CuttingOptions) -> Tuple[int, List[Tuple[float, float]]]:

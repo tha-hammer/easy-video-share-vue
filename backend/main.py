@@ -126,6 +126,18 @@ async def complete_upload(request: CompleteUploadRequest) -> JobCreatedResponse:
     options and text strategy.
     """
     try:
+        print(f"DEBUG: complete_upload called with request: {request}")
+        
+        # Get video duration and store it for later use
+        video_duration = None
+        try:
+            print(f"DEBUG: Getting video duration for s3_key: {request.s3_key}")
+            video_duration = get_video_duration_from_s3(settings.AWS_BUCKET_NAME, request.s3_key)
+            print(f"DEBUG: Video duration: {video_duration} seconds")
+        except Exception as duration_error:
+            print(f"DEBUG: Failed to get video duration: {duration_error}")
+            # Continue without duration - it will be calculated later if needed
+        
         # Convert Pydantic models to dicts for Celery serialization
         cutting_options_dict = None
         if request.cutting_options:
@@ -149,7 +161,7 @@ async def complete_upload(request: CompleteUploadRequest) -> JobCreatedResponse:
             request.user_id or "anonymous"  # Use provided user_id or default to "anonymous"
         )
 
-        # Immediately create DynamoDB job entry (QUEUED)
+        # Immediately create DynamoDB job entry (QUEUED) with video duration
         try:
             from datetime import datetime, timezone
             now_iso = datetime.utcnow().replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
@@ -159,7 +171,8 @@ async def complete_upload(request: CompleteUploadRequest) -> JobCreatedResponse:
                 upload_date=now_iso,
                 status="QUEUED",
                 created_at=now_iso,
-                updated_at=now_iso
+                updated_at=now_iso,
+                video_duration=video_duration  # Store the duration if available
             )
         except Exception as e:
             print(f"[DynamoDB] Failed to create job entry in /upload/complete for job_id={request.job_id}: {e}")
@@ -171,6 +184,9 @@ async def complete_upload(request: CompleteUploadRequest) -> JobCreatedResponse:
         )
 
     except Exception as e:
+        print(f"DEBUG: ERROR in complete_upload: {type(e).__name__}: {str(e)}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Failed to start processing: {str(e)}")
 
 
@@ -204,9 +220,10 @@ async def get_job_status(job_id: str) -> JobStatusResponse:
         error_message = job.get("error_message")
         created_at = job.get("created_at")
         updated_at = job.get("updated_at")
+        video_duration = job.get("video_duration")
 
         # --- DEBUGGING PRINTS START ---
-        print(f"DEBUG: Job {job_id} found. Status: '{status}', raw output_urls: {output_urls}")
+        print(f"DEBUG: Job {job_id} found. Status: '{status}', raw output_urls: {output_urls}, video_duration: {video_duration}")
         # --- DEBUGGING PRINTS END ---
 
 
@@ -269,7 +286,8 @@ async def get_job_status(job_id: str) -> JobStatusResponse:
             output_urls=presigned_urls if presigned_urls else None,
             error_message=error_message,
             created_at=created_at,
-            updated_at=updated_at
+            updated_at=updated_at,
+            video_duration=video_duration
         )
     except HTTPException:
         # Re-raise explicit HTTPExceptions (like the 404)
@@ -351,25 +369,69 @@ async def analyze_duration(request: AnalyzeDurationRequest) -> AnalyzeDurationRe
     This endpoint allows the frontend to preview how many segments will be created
     for a given video and cutting parameters before starting the actual processing job.
     """
+    print(f"DEBUG: analyze-duration called with request: {request}")
+    print(f"DEBUG: AWS_BUCKET_NAME = {settings.AWS_BUCKET_NAME}")
+    print(f"DEBUG: s3_key = {request.s3_key}")
+    
     try:
-        # Get video duration from S3
-        total_duration = get_video_duration_from_s3(settings.AWS_BUCKET_NAME, request.s3_key)
+        # Test if file exists in S3 first
+        from s3_utils import s3_client
+        try:
+            print(f"DEBUG: Testing if file exists in S3: {settings.AWS_BUCKET_NAME}/{request.s3_key}")
+            response = s3_client.head_object(Bucket=settings.AWS_BUCKET_NAME, Key=request.s3_key)
+            print(f"DEBUG: S3 file exists, size: {response.get('ContentLength', 'unknown')}")
+        except Exception as s3_error:
+            print(f"DEBUG: S3 head_object failed: {type(s3_error).__name__}: {str(s3_error)}")
+            raise HTTPException(status_code=404, detail=f"Video file not found in S3: {str(s3_error)}")
+        
+        # Try to get duration from DynamoDB first (if it was stored during upload)
+        total_duration = None
+        try:
+            # Extract job_id from s3_key: uploads/{job_id}/{filename}
+            job_id = request.s3_key.split('/')[1] if len(request.s3_key.split('/')) > 2 else None
+            if job_id:
+                print(f"DEBUG: Trying to get duration from DynamoDB for job_id: {job_id}")
+                job_data = dynamodb_service.get_job_status(job_id)
+                if job_data and job_data.get('video_duration'):
+                    total_duration = job_data['video_duration']
+                    print(f"DEBUG: Found duration in DynamoDB: {total_duration} seconds")
+        except Exception as db_error:
+            print(f"DEBUG: Failed to get duration from DynamoDB: {db_error}")
+        
+        # If not found in DynamoDB, get it from S3 using FFmpeg
+        if total_duration is None:
+            print(f"DEBUG: Duration not in DynamoDB, getting from S3 using FFmpeg")
+            total_duration = get_video_duration_from_s3(settings.AWS_BUCKET_NAME, request.s3_key)
+            print(f"DEBUG: Video duration from S3: {total_duration} seconds")
+        else:
+            print(f"DEBUG: Using cached duration: {total_duration} seconds")
 
         # Calculate segments based on cutting options
+        print(f"DEBUG: Cutting options: {request.cutting_options}")
         num_segments, segment_times = calculate_segments(total_duration, request.cutting_options)
+        print(f"DEBUG: Calculated {num_segments} segments")
 
         # Extract just the durations for the response
         segment_durations = [end - start for start, end in segment_times]
 
-        return AnalyzeDurationResponse(
+        response = AnalyzeDurationResponse(
             total_duration=total_duration,
             num_segments=num_segments,
             segment_durations=segment_durations
         )
+        print(f"DEBUG: Returning response: {response}")
+        return response
 
+    except HTTPException:
+        # Re-raise HTTPExceptions
+        raise
     except FileNotFoundError:
+        print(f"DEBUG: FileNotFoundError caught")
         raise HTTPException(status_code=404, detail="Video file not found in S3")
     except Exception as e:
+        print(f"DEBUG: Unexpected error in analyze-duration: {type(e).__name__}: {str(e)}")
+        import traceback
+        traceback.print_exc()
         error_msg = str(e)
         # Check for S3 404 errors (from ClientError wrapped in Exception)
         if "404" in error_msg and "Not Found" in error_msg:
@@ -537,6 +599,43 @@ async def debug_redis():
             "error": str(e),
             "error_type": type(e).__name__,
             "redis_url": getattr(settings, 'REDIS_URL', 'NOT SET')
+        }
+
+
+@app.get("/debug/ffmpeg")
+async def debug_ffmpeg():
+    """Debug endpoint to test FFmpeg installation"""
+    try:
+        import subprocess
+        
+        # Test if ffprobe is available
+        result = subprocess.run(['ffprobe', '-version'], capture_output=True, text=True, timeout=10)
+        
+        if result.returncode == 0:
+            version_line = result.stdout.split('\n')[0]
+            return {
+                "status": "success",
+                "ffmpeg_available": True,
+                "version": version_line,
+                "ffprobe_path": "available"
+            }
+        else:
+            return {
+                "status": "error",
+                "ffmpeg_available": False,
+                "error": result.stderr
+            }
+    except FileNotFoundError:
+        return {
+            "status": "error",
+            "ffmpeg_available": False,
+            "error": "ffprobe not found in PATH"
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "ffmpeg_available": False,
+            "error": str(e)
         }
 
 

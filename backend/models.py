@@ -85,6 +85,7 @@ class JobStatusResponse(BaseModel):
     error_message: Optional[str] = Field(None, description="Error message if job failed")
     created_at: Optional[str] = Field(None, description="Job creation timestamp")
     updated_at: Optional[str] = Field(None, description="Last update timestamp")
+    video_duration: Optional[float] = Field(None, description="Video duration in seconds (if available)")
 
 
 class AnalyzeDurationRequest(BaseModel):
@@ -111,3 +112,16 @@ class ProgressUpdate(BaseModel):
     timestamp: str
     output_urls: Optional[List[str]] = None
     error_message: Optional[str] = None
+
+
+class DynamoDBJobEntry(BaseModel):
+    """Model representing a job entry in DynamoDB"""
+    video_id: str = Field(..., description="Job identifier (same as job_id)")
+    user_id: str = Field(..., description="User identifier")
+    upload_date: str = Field(..., description="Upload timestamp")
+    status: str = Field(..., description="Current job status")
+    created_at: str = Field(..., description="Job creation timestamp")
+    updated_at: str = Field(..., description="Last update timestamp")
+    video_duration: Optional[float] = Field(None, description="Video duration in seconds")
+    output_s3_urls: Optional[List[str]] = Field(None, description="S3 URLs of processed video segments")
+    error_message: Optional[str] = Field(None, description="Error message if job failed")
