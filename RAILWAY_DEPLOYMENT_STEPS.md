@@ -69,6 +69,86 @@ curl https://your-backend-service.railway.app/debug/aws
 curl https://your-backend-service.railway.app/debug/redis
 ```
 
+## 🔄 **Step 1.5: Deploy Celery Worker**
+
+### 1.5.1 Switch to Worker Configuration
+
+**Before deploying the worker, you need to switch the Railway configuration**:
+
+```bash
+# Run this script to switch to worker configuration
+./scripts/railway-worker.sh
+```
+
+This will:
+
+- Backup the current `backend/railway.json`
+- Copy `backend/railway.worker.json` to `backend/railway.json`
+- Use the worker Dockerfile and configuration
+
+### 1.5.2 Create Worker Project
+
+1. Go to [railway.app](https://railway.app)
+2. Click "New Project"
+3. Select "Deploy from GitHub repo"
+4. Choose the **same repository**
+5. **Important**: Set **Source Directory** to: `backend`
+
+### 1.5.3 Configure Worker Environment Variables
+
+Add the **same environment variables** as the backend:
+
+```bash
+# AWS Configuration
+AWS_REGION=us-east-1
+AWS_BUCKET_NAME=your-s3-bucket-name
+AWS_ACCESS_KEY_ID=your-aws-access-key
+AWS_SECRET_ACCESS_KEY=your-aws-secret-key
+
+# DynamoDB
+DYNAMODB_TABLE_NAME=easy-video-share-video-metadata
+
+# Redis Configuration (use the same Redis as backend)
+REDIS_HOST=your-redis-host
+REDIS_PORT=your-redis-port
+REDIS_PASSWORD=your-redis-password
+
+# Or use external Redis service
+REDIS_URL=redis://your-redis-url:6379/0
+
+# Google AI (optional)
+GOOGLE_CLOUD_PROJECT=your-google-project
+GOOGLE_CLOUD_LOCATION=us-central1
+
+# Railway-specific
+RAILWAY_ENVIRONMENT=production
+PORT=8001
+```
+
+### 1.5.4 Deploy Worker
+
+1. Click "Deploy" in your worker project
+2. Wait for build to complete
+3. Note the deployment URL (e.g., `https://your-worker-service.railway.app`)
+
+### 1.5.5 Test Worker
+
+```bash
+# Test worker health
+curl https://your-worker-service.railway.app/health
+
+# Check worker logs for any errors
+# The worker should be processing video tasks
+```
+
+### 1.5.6 Switch Back to Backend Configuration (for future deployments)
+
+After deploying the worker, switch back to backend configuration for future backend deployments:
+
+```bash
+./scripts/railway-backend.sh
+```
+
 ## 🎨 **Step 2: Deploy Frontend**
 
 ### 2.1 Create Frontend Project
@@ -123,7 +203,39 @@ If the Vite preview server continues to have issues, you can use the static file
 2. This will build the app and serve static files using `serve` package
 3. Redeploy the frontend project
 
-## 🔧 **Step 3: Configure CORS (if needed)**
+## 🔧 **Step 3: Configuration Management**
+
+### 3.1 Check Current Configuration
+
+To see which Railway configuration is currently active:
+
+```bash
+./scripts/railway-status.sh
+```
+
+This will show you whether the backend or worker configuration is currently active.
+
+### 3.2 Switch Between Configurations
+
+**For Backend Deployment**:
+
+```bash
+./scripts/railway-backend.sh
+```
+
+**For Worker Deployment**:
+
+```bash
+./scripts/railway-worker.sh
+```
+
+### 3.3 Configuration Files
+
+- `backend/railway.json` - Active configuration (switched by scripts)
+- `backend/railway.json.backup` - Backup of previous configuration
+- `backend/railway.worker.json` - Worker configuration template
+
+## 🔧 **Step 4: Configure CORS (if needed)**
 
 If you encounter CORS errors, update your backend CORS settings in `backend/main.py`:
 
