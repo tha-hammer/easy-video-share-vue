@@ -4,7 +4,7 @@
     "builder": "NIXPACKS"
   },
   "deploy": {
-    "startCommand": "npm run preview",
+    "startCommand": "npm run build && npx serve -s dist -l $PORT",
     "healthcheckPath": "/health.html",
     "healthcheckTimeout": 300,
     "restartPolicyType": "ON_FAILURE",
