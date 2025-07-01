@@ -36,7 +36,7 @@ class Settings(BaseSettings):
     SEGMENT_DURATION_SECONDS: int = 30
 
     # Railway-specific settings
-    RAILWAY_ENVIRONMENT: bool = False
+    RAILWAY_ENVIRONMENT: Optional[str] = None
     RAILWAY_STATIC_URL: Optional[str] = None
 
     class Config:
@@ -59,7 +59,12 @@ class Settings(BaseSettings):
         
         # Detect Railway environment
         if os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("RAILWAY_STATIC_URL"):
-            self.RAILWAY_ENVIRONMENT = True
+            self.RAILWAY_ENVIRONMENT = os.getenv("RAILWAY_ENVIRONMENT", "false")
+
+    @property
+    def is_railway_environment(self) -> bool:
+        """Check if running in Railway environment"""
+        return self.RAILWAY_ENVIRONMENT is not None and self.RAILWAY_ENVIRONMENT.lower() in ['true', 'production', 'staging']
 
 # Create global settings instance
 settings = Settings()
