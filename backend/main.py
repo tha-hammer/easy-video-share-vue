@@ -397,32 +397,50 @@ async def job_progress_stream(job_id: str):
     SSE endpoint to stream job progress updates from Redis Pub/Sub to the frontend.
     Uses pubsub.listen() async iterator for robust message streaming.
     """
+    print(f"DEBUG: SSE endpoint called for job_id: {job_id}")
+    print(f"DEBUG: REDIS_URL = {settings.REDIS_URL}")
+    
     async def event_generator():
-        redis_conn = await get_async_redis_client_from_pool()
-        pubsub = redis_conn.pubsub()
-        channel = f"job_progress_{job_id}"
-        await pubsub.subscribe(channel)
-        print(f"DEBUG: SSE subscribed to {channel}")
         try:
-            async for message in pubsub.listen():
-                print(f"DEBUG: SSE Generator - Received message from Redis on channel {channel}: {message}")
-                if message is None:
-                    continue
-                if message["type"] == "message":
-                    print(f"DEBUG: SSE Generator - Yielding message to client: {message['data']}")
-                    yield {"event": "progress", "data": message["data"]}
-        except asyncio.CancelledError:
-            print(f"DEBUG: SSE client disconnected from {channel}")
-        except Exception as e:
-            print(f"DEBUG: ERROR in SSE event_generator for job {job_id}: {type(e).__name__}: {str(e)}")
-            yield {"event": "error", "data": json.dumps({"message": f"Server error: {e}"})}
-        finally:
+            print(f"DEBUG: Creating Redis connection for job {job_id}")
+            redis_conn = await get_async_redis_client_from_pool()
+            print(f"DEBUG: Redis connection created successfully for job {job_id}")
+            
+            pubsub = redis_conn.pubsub()
+            channel = f"job_progress_{job_id}"
+            print(f"DEBUG: Subscribing to Redis channel: {channel}")
+            await pubsub.subscribe(channel)
+            print(f"DEBUG: SSE subscribed to {channel}")
+            
+            # Send initial connection message
+            yield {"event": "connected", "data": json.dumps({"message": f"Connected to progress stream for job {job_id}"})}
+            
             try:
-                await pubsub.unsubscribe(channel)
-                await pubsub.close()
-            except Exception as cleanup_error:
-                print(f"DEBUG: Error during pubsub cleanup: {cleanup_error}")
-            print(f"DEBUG: SSE pubsub unsubscribed and connections closed for {job_id}")
+                async for message in pubsub.listen():
+                    print(f"DEBUG: SSE Generator - Received message from Redis on channel {channel}: {message}")
+                    if message is None:
+                        continue
+                    if message["type"] == "message":
+                        print(f"DEBUG: SSE Generator - Yielding message to client: {message['data']}")
+                        yield {"event": "progress", "data": message["data"]}
+            except asyncio.CancelledError:
+                print(f"DEBUG: SSE client disconnected from {channel}")
+            except Exception as e:
+                print(f"DEBUG: ERROR in SSE event_generator for job {job_id}: {type(e).__name__}: {str(e)}")
+                yield {"event": "error", "data": json.dumps({"message": f"Server error: {e}"})}
+            finally:
+                try:
+                    await pubsub.unsubscribe(channel)
+                    await pubsub.close()
+                except Exception as cleanup_error:
+                    print(f"DEBUG: Error during pubsub cleanup: {cleanup_error}")
+                print(f"DEBUG: SSE pubsub unsubscribed and connections closed for {job_id}")
+        except Exception as e:
+            print(f"DEBUG: CRITICAL ERROR in SSE setup for job {job_id}: {type(e).__name__}: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            yield {"event": "error", "data": json.dumps({"message": f"Failed to setup SSE: {str(e)}"})}
+    
     return EventSourceResponse(event_generator())
 
 
@@ -477,6 +495,48 @@ async def debug_aws_direct():
             "aws_region": getattr(settings, 'AWS_REGION', 'NOT SET'),
             "aws_bucket": getattr(settings, 'AWS_BUCKET_NAME', 'NOT SET'),
             "aws_credentials": "SET" if getattr(settings, 'AWS_ACCESS_KEY_ID', None) else "NOT SET"
+        }
+
+
+@app.get("/debug/redis")
+async def debug_redis():
+    """Debug endpoint to test Redis connection"""
+    try:
+        print(f"DEBUG: REDIS_URL = {settings.REDIS_URL}")
+        
+        # Test Redis connection
+        redis_conn = await get_async_redis_client_from_pool()
+        await redis_conn.ping()
+        
+        # Test pubsub
+        pubsub = redis_conn.pubsub()
+        test_channel = "test_channel"
+        await pubsub.subscribe(test_channel)
+        
+        # Send a test message
+        await redis_conn.publish(test_channel, "test_message")
+        
+        # Wait for message
+        message = await pubsub.get_message(timeout=1)
+        
+        await pubsub.unsubscribe(test_channel)
+        await pubsub.close()
+        
+        return {
+            "status": "success",
+            "redis_url": settings.REDIS_URL,
+            "connection": "OK",
+            "pubsub_test": "OK" if message else "FAILED"
+        }
+    except Exception as e:
+        print(f"DEBUG: Redis test failed: {type(e).__name__}: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return {
+            "status": "error",
+            "error": str(e),
+            "error_type": type(e).__name__,
+            "redis_url": getattr(settings, 'REDIS_URL', 'NOT SET')
         }
 
 
