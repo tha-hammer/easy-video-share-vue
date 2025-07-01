@@ -169,25 +169,42 @@ export function useVideoUpload() {
     progress: UploadProgress,
   ): Promise<void> => {
     return new Promise((resolve, reject) => {
+      console.log('🔍 Debug: Starting S3 upload to:', url)
+      console.log('🔍 Debug: File size:', file.size, 'File type:', file.type)
+
       const xhr = new XMLHttpRequest()
       xhr.open('PUT', url, true)
       xhr.setRequestHeader('Content-Type', file.type)
+
       xhr.upload.onprogress = (event) => {
         if (event.lengthComputable) {
           progress.uploadedSize = event.loaded
           progress.percentage = Math.round((event.loaded / event.total) * 100)
           progress.status = 'uploading'
           uploadProgress.value.set(progress.videoId, { ...progress })
+          console.log(`🔍 Debug: Upload progress: ${progress.percentage}%`)
         }
       }
+
       xhr.onload = () => {
+        console.log('🔍 Debug: S3 upload response status:', xhr.status)
+        console.log('🔍 Debug: S3 upload response headers:', xhr.getAllResponseHeaders())
+
         if (xhr.status >= 200 && xhr.status < 300) {
+          console.log('🔍 Debug: S3 upload successful')
           resolve()
         } else {
+          console.error('🔍 Debug: S3 upload failed:', xhr.status, xhr.statusText)
+          console.error('🔍 Debug: S3 upload response:', xhr.responseText)
           reject(new Error(`S3 upload failed: ${xhr.status} ${xhr.statusText}`))
         }
       }
-      xhr.onerror = () => reject(new Error('S3 upload failed'))
+
+      xhr.onerror = () => {
+        console.error('🔍 Debug: S3 upload network error')
+        reject(new Error('S3 upload failed'))
+      }
+
       xhr.send(file)
     })
   }

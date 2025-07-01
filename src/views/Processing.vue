@@ -115,7 +115,7 @@ interface ProgressUpdate {
 }
 
 export default defineComponent({
-  name: 'Processing',
+  name: 'VideoProcessing',
   setup() {
     const route = useRoute()
     const jobId = route.params.jobId as string
@@ -161,7 +161,11 @@ export default defineComponent({
 
     onMounted(() => {
       console.log('Attempting to connect to SSE for jobId:', jobId)
-      eventSource = new EventSource(`/api/job-progress/${jobId}/stream`)
+      // Use the backend URL from environment variable
+      const baseUrl = import.meta.env.VITE_AI_VIDEO_BACKEND_URL || 'http://localhost:8000'
+      const sseUrl = `${baseUrl}/api/job-progress/${jobId}/stream`
+      console.log('Connecting to SSE URL:', sseUrl)
+      eventSource = new EventSource(sseUrl)
       eventSource.onopen = () => {
         console.log('EventSource connected!')
       }
