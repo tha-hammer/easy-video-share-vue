@@ -246,7 +246,15 @@ export class VideoService {
     try {
       console.log('🤖 Initiating AI video upload:', request)
 
-      const response = await fetch(`${API_CONFIG.aiVideoBackend}/upload/initiate`, {
+      // Construct the full URL for Railway deployment
+      const baseUrl = API_CONFIG.aiVideoBackend.endsWith('/')
+        ? API_CONFIG.aiVideoBackend.slice(0, -1)
+        : API_CONFIG.aiVideoBackend
+      const uploadUrl = `${baseUrl}/api/upload/initiate`
+
+      console.log('🤖 Making request to:', uploadUrl)
+
+      const response = await fetch(uploadUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -278,7 +286,15 @@ export class VideoService {
     try {
       console.log('🤖 Completing AI video upload:', request)
 
-      const response = await fetch(`${API_CONFIG.aiVideoBackend}/upload/complete`, {
+      // Construct the full URL for Railway deployment
+      const baseUrl = API_CONFIG.aiVideoBackend.endsWith('/')
+        ? API_CONFIG.aiVideoBackend.slice(0, -1)
+        : API_CONFIG.aiVideoBackend
+      const completeUrl = `${baseUrl}/api/upload/complete`
+
+      console.log('🤖 Making request to:', completeUrl)
+
+      const response = await fetch(completeUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -310,7 +326,15 @@ export class VideoService {
     try {
       console.log('🤖 Getting AI video job status for:', jobId)
 
-      const response = await fetch(`${API_CONFIG.aiVideoBackend}/jobs/${jobId}/status`, {
+      // Construct the full URL for Railway deployment
+      const baseUrl = API_CONFIG.aiVideoBackend.endsWith('/')
+        ? API_CONFIG.aiVideoBackend.slice(0, -1)
+        : API_CONFIG.aiVideoBackend
+      const statusUrl = `${baseUrl}/api/jobs/${jobId}/status`
+
+      console.log('🤖 Making request to:', statusUrl)
+
+      const response = await fetch(statusUrl, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -369,7 +393,15 @@ export class VideoService {
    */
   static async checkBackendHealth(): Promise<{ status: string; message: string }> {
     try {
-      const response = await fetch(`${API_CONFIG.aiVideoBackend}/health`, {
+      // Construct the full URL for Railway deployment
+      const baseUrl = API_CONFIG.aiVideoBackend.endsWith('/')
+        ? API_CONFIG.aiVideoBackend.slice(0, -1)
+        : API_CONFIG.aiVideoBackend
+      const healthUrl = `${baseUrl}/health`
+
+      console.log('🤖 Checking backend health at:', healthUrl)
+
+      const response = await fetch(healthUrl, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -392,7 +424,15 @@ export class VideoService {
    */
   static async getAIVideoMetadataList(): Promise<VideoMetadata[]> {
     try {
-      const response = await fetch(`${API_CONFIG.aiVideoBackend}/videos`, {
+      // Construct the full URL for Railway deployment
+      const baseUrl = API_CONFIG.aiVideoBackend.endsWith('/')
+        ? API_CONFIG.aiVideoBackend.slice(0, -1)
+        : API_CONFIG.aiVideoBackend
+      const videosUrl = `${baseUrl}/api/videos`
+
+      console.log('🤖 Fetching AI video metadata from:', videosUrl)
+
+      const response = await fetch(videosUrl, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
