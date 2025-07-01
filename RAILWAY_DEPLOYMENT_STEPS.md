@@ -115,6 +115,14 @@ VITE_RAILWAY_STATIC_URL=https://your-frontend-service.railway.app
 2. Check browser console for any errors
 3. Try uploading a video to test the full pipeline
 
+### 2.5 Alternative: Static File Server (if preview server fails)
+
+If the Vite preview server continues to have issues, you can use the static file server approach:
+
+1. Rename `railway.static.json` to `railway.json`
+2. This will build the app and serve static files using `serve` package
+3. Redeploy the frontend project
+
 ## 🔧 **Step 3: Configure CORS (if needed)**
 
 If you encounter CORS errors, update your backend CORS settings in `backend/main.py`:
@@ -145,6 +153,7 @@ app.add_middleware(
 - **Build fails**: Check that source directory is set to `.` (root)
 - **API calls fail**: Verify `VITE_AI_VIDEO_BACKEND_URL` is correct
 - **CORS errors**: Update backend CORS settings
+- **Health check fails**: Use static file server approach (`railway.static.json`)
 
 ### General Issues
 
