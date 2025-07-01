@@ -49,7 +49,7 @@ GOOGLE_CLOUD_PROJECT=your-google-project
 GOOGLE_CLOUD_LOCATION=us-central1
 
 # Railway-specific
-RAILWAY_ENVIRONMENT=true
+RAILWAY_ENVIRONMENT=production
 PORT=8000
 ```
 
@@ -73,7 +73,7 @@ VITE_COGNITO_USER_POOL_ID=your-user-pool-id
 VITE_COGNITO_CLIENT_ID=your-client-id
 
 # Railway-specific
-VITE_RAILWAY_ENVIRONMENT=true
+VITE_RAILWAY_ENVIRONMENT=production
 VITE_RAILWAY_STATIC_URL=https://your-frontend-service.railway.app
 ```
 
