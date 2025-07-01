@@ -22,7 +22,7 @@ def iso_utc_now() -> str:
     return datetime.utcnow().replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
 
 
-def create_job_entry(job_id: str, user_id: Optional[str] = None, upload_date: Optional[str] = None, status: str = "QUEUED", created_at: Optional[str] = None, updated_at: Optional[str] = None):
+def create_job_entry(job_id: str, user_id: Optional[str] = None, upload_date: Optional[str] = None, status: str = "QUEUED", created_at: Optional[str] = None, updated_at: Optional[str] = None, video_duration: Optional[float] = None):
     """
     Create a new job entry in DynamoDB for job status tracking.
     """
@@ -35,6 +35,11 @@ def create_job_entry(job_id: str, user_id: Optional[str] = None, upload_date: Op
         "created_at": created_at or now,
         "updated_at": updated_at or now,
     }
+    
+    # Add video_duration if provided
+    if video_duration is not None:
+        item["video_duration"] = video_duration
+    
     table.put_item(Item=item)
     return item
 
