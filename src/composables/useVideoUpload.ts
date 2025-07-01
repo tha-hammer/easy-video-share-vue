@@ -261,14 +261,34 @@ export function useVideoUpload() {
     userId?: string,
   ): Promise<{ job_id: string }> => {
     if (!s3Key.value || !jobId.value) throw new Error('Missing s3Key or jobId')
+
+    // Convert frontend cutting options to backend format
+    let backendCuttingOptions: Record<string, unknown> | undefined
+    if (cutting_options) {
+      if (cutting_options.strategy === 'fixed') {
+        backendCuttingOptions = {
+          type: 'fixed',
+          duration_seconds: cutting_options.params.duration_seconds,
+        }
+      } else if (cutting_options.strategy === 'random') {
+        backendCuttingOptions = {
+          type: 'random',
+          min_duration: cutting_options.params.min_seconds,
+          max_duration: cutting_options.params.max_seconds,
+        }
+      }
+    }
+
     const req: CompleteUploadRequest = {
       s3_key: s3Key.value,
       job_id: jobId.value,
-      cutting_options: cutting_options ? flattenCuttingOptions(cutting_options) : undefined,
+      cutting_options: backendCuttingOptions,
       text_strategy,
       text_input,
       user_id: userId, // Optional user ID for tracking
     }
+
+    console.log('🔍 Debug: complete-upload request:', req)
 
     // Use Railway backend URL from environment or fallback to localhost for development
     const baseUrl = import.meta.env.VITE_AI_VIDEO_BACKEND_URL || 'http://localhost:8000'
@@ -277,17 +297,47 @@ export function useVideoUpload() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(req),
     })
-    if (!res.ok) throw new Error('Failed to complete upload')
-    return await res.json()
+
+    if (!res.ok) {
+      const errorText = await res.text()
+      console.error('🔍 Debug: complete-upload error:', res.status, errorText)
+      throw new Error(`Failed to complete upload: ${res.status} ${res.statusText}`)
+    }
+
+    const data = await res.json()
+    console.log('🔍 Debug: complete-upload response:', data)
+    return data
   }
 
   // API: Analyze duration
   const analyzeDuration = async (payload?: CuttingOptions): Promise<AnalyzeDurationResponse> => {
     if (!s3Key.value) throw new Error('Missing s3Key')
+
+    // Convert frontend cutting options to backend format
+    const options = payload || cuttingOptions.value
+    let backendCuttingOptions: Record<string, unknown>
+
+    if (options.strategy === 'fixed') {
+      backendCuttingOptions = {
+        type: 'fixed',
+        duration_seconds: options.params.duration_seconds,
+      }
+    } else if (options.strategy === 'random') {
+      backendCuttingOptions = {
+        type: 'random',
+        min_duration: options.params.min_seconds,
+        max_duration: options.params.max_seconds,
+      }
+    } else {
+      throw new Error('Invalid cutting strategy')
+    }
+
     const req: AnalyzeDurationRequest = {
       s3_key: s3Key.value,
-      cutting_options: flattenCuttingOptions(payload || cuttingOptions.value),
+      cutting_options: backendCuttingOptions,
     }
+
+    console.log('🔍 Debug: analyze-duration request:', req)
 
     // Use Railway backend URL from environment or fallback to localhost for development
     const baseUrl = import.meta.env.VITE_AI_VIDEO_BACKEND_URL || 'http://localhost:8000'
@@ -296,10 +346,17 @@ export function useVideoUpload() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(req),
     })
-    if (!res.ok) throw new Error('Failed to analyze duration')
+
+    if (!res.ok) {
+      const errorText = await res.text()
+      console.error('🔍 Debug: analyze-duration error:', res.status, errorText)
+      throw new Error(`Failed to analyze duration: ${res.status} ${res.statusText}`)
+    }
+
     const data = await res.json()
-    estimatedSegments.value = data.estimated_num_segments
-    videoDuration.value = data.duration_seconds
+    console.log('🔍 Debug: analyze-duration response:', data)
+    estimatedSegments.value = data.num_segments
+    videoDuration.value = data.total_duration
     return data
   }
 
