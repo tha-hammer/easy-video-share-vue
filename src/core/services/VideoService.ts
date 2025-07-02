@@ -15,6 +15,10 @@ interface VideoMetadata {
   duration?: number // Video duration in seconds
   created_at: string // ISO timestamp
   updated_at: string // ISO timestamp
+  // Additional fields for AI video processing
+  status?: string // Job status (QUEUED, PROCESSING, COMPLETED, FAILED)
+  output_s3_urls?: string[] // S3 keys of processed video segments
+  error_message?: string // Error message if job failed
 }
 
 // AI Video Processing interfaces
@@ -442,7 +446,12 @@ export class VideoService {
         throw new Error(`Failed to fetch AI video metadata: ${response.statusText}`)
       }
       const data = await response.json()
-      return Array.isArray(data) ? data : data.videos || []
+      console.log('🤖 Raw response from /api/videos:', data)
+
+      const videos = Array.isArray(data) ? data : data.videos || []
+      console.log('🤖 Processed videos array:', videos)
+
+      return videos
     } catch (error) {
       console.error('Error fetching AI video metadata:', error)
       throw error
