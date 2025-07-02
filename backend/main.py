@@ -240,37 +240,22 @@ async def get_job_status(job_id: str) -> JobStatusResponse:
 
             # --- DEBUGGING BLOCK START: Wrap loop in try/except ---
             try:
-                for s3_url in output_urls: # This is a likely failure point if output_urls isn't iterable
+                for s3_key in output_urls: # Now these are S3 keys, not URLs
                     # --- DEBUGGING PRINTS START ---
-                    print(f"DEBUG: Processing S3 URL for presigning: {s3_url}")
+                    print(f"DEBUG: Processing S3 key for presigning: {s3_key}")
                     # --- DEBUGGING PRINTS END ---
 
-                    # Parse bucket and key from S3 URL
-                    if s3_url.startswith("s3://"):
-                        _, bucket, *key_parts = s3_url.split("/")
-                        key = "/".join(key_parts)
-                    else:
-                        # Assume https://bucket.s3.amazonaws.com/key format
-                        parts = s3_url.split("/")
-                        # This line is brittle if the URL format isn't exactly as assumed
-                        bucket = parts[2].split(".")[0]
-                        key = "/".join(parts[3:])
-
-                    # --- DEBUGGING PRINTS START ---
-                    print(f"DEBUG: Parsed Bucket: '{bucket}', Key: '{key}' for URL: {s3_url}")
-                    # --- DEBUGGING PRINTS END ---
-
-                    # This is another likely failure point if permissions are wrong or key/bucket are bad
+                    # Generate presigned URL directly from S3 key
                     presigned = generate_presigned_url(
-                        bucket_name=bucket,
-                        object_key=key,
+                        bucket_name=settings.AWS_BUCKET_NAME,
+                        object_key=s3_key,
                         client_method='get_object',
                         content_type=None, # For GET operations, content_type is often not needed
                         expiration=3600  # 1 hour
                     )
                     presigned_urls.append(presigned)
                     # --- DEBUGGING PRINTS START ---
-                    print(f"DEBUG: Generated presigned URL for {s3_url}: {presigned[:60]}...") # Print truncated URL
+                    print(f"DEBUG: Generated presigned URL for {s3_key}: {presigned[:60]}...") # Print truncated URL
                     # --- DEBUGGING PRINTS END ---
             except Exception as inner_e:
                 # --- DEBUGGING PRINTS START ---
