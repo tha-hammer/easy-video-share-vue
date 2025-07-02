@@ -1,6 +1,7 @@
 import os
 import uuid
 from datetime import datetime, timezone
+from decimal import Decimal
 import boto3
 from boto3.dynamodb.conditions import Key
 from config import settings
@@ -36,9 +37,9 @@ def create_job_entry(job_id: str, user_id: Optional[str] = None, upload_date: Op
         "updated_at": updated_at or now,
     }
     
-    # Add video_duration if provided
+    # Add video_duration if provided (convert float to Decimal for DynamoDB)
     if video_duration is not None:
-        item["video_duration"] = video_duration
+        item["video_duration"] = Decimal(str(video_duration))
     
     table.put_item(Item=item)
     return item
