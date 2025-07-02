@@ -64,7 +64,8 @@ def split_video_with_precise_timing_and_dynamic_text(
     output_prefix: str, 
     segment_times: List[Tuple[float, float]],
     text_strategy: TextStrategy,
-    text_input: Optional[TextInput] = None
+    text_input: Optional[TextInput] = None,
+    progress_callback: Optional[callable] = None
 ) -> List[str]:
     """
     Split video with precise timing and apply dynamic text overlay based on strategy
@@ -95,6 +96,10 @@ def split_video_with_precise_timing_and_dynamic_text(
             
             logger.info(f"Processing segment {i+1}/{len(segment_times)}: {start_time:.2f}s - {end_time:.2f}s ({segment_duration:.2f}s)")
             logger.info(f"Text overlay: '{text_overlay}'")
+            
+            # Call progress callback if provided
+            if progress_callback:
+                progress_callback(i+1, len(segment_times), f"Processing segment {i+1}/{len(segment_times)}...")
             
             # Generate output path
             output_path = f"{output_prefix}_segment_{i+1:03d}.mp4"

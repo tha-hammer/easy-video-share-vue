@@ -164,25 +164,46 @@ def process_video_task(self, s3_input_key: str, job_id: str, cutting_options: di
         
         # Process all segments at once
         output_prefix = os.path.join(temp_dir, f"processed_{job_id}")
+        
+        # Define progress callback function
+        def progress_callback(current_segment, total_segments, message):
+            progress_percentage = (current_segment / total_segments) * 80 + 10  # 10-90%
+            publish_progress(job_id, ProgressUpdate(
+                job_id=job_id,
+                stage="processing_segment",
+                message=message,
+                current_segment=current_segment,
+                total_segments=total_segments,
+                progress_percentage=progress_percentage,
+                timestamp=now_iso()
+            ))
+        
         all_output_paths = split_video_with_precise_timing_and_dynamic_text(
             input_path=local_input_path,
             output_prefix=output_prefix,
             segment_times=segment_times,  # Process all segments at once
             text_strategy=text_strategy_enum,
-            text_input=text_input_obj
+            text_input=text_input_obj,
+            progress_callback=progress_callback
         )
         
         # Upload each segment to S3
+        uploaded_s3_keys = []
         for i, output_path in enumerate(all_output_paths):
             if output_path and os.path.exists(output_path):
                 segment_filename = os.path.basename(output_path)
                 s3_output_key = f"processed/{job_id}/{segment_filename}"
-                s3_url = upload_file_to_s3(
+                
+                # Upload file to S3 (don't use the returned URL)
+                upload_file_to_s3(
                     local_path=output_path,
                     bucket=settings.AWS_BUCKET_NAME,
                     key=s3_output_key
                 )
-                uploaded_urls.append(s3_url)
+                
+                # Store the S3 key instead of direct URL
+                uploaded_s3_keys.append(s3_output_key)
+                
                 publish_progress(job_id, ProgressUpdate(
                     job_id=job_id,
                     stage="segment_uploaded",
@@ -191,7 +212,7 @@ def process_video_task(self, s3_input_key: str, job_id: str, cutting_options: di
                     total_segments=num_segments,
                     progress_percentage=((i+1)/num_segments)*80+10,  # 10-90%
                     timestamp=now_iso(),
-                    output_urls=uploaded_urls.copy()
+                    output_urls=uploaded_s3_keys.copy()  # Store S3 keys instead of URLs
                 ))
             else:
                 print(f"Warning: Output file does not exist: {output_path}")
@@ -211,10 +232,10 @@ def process_video_task(self, s3_input_key: str, job_id: str, cutting_options: di
             dynamodb_service.update_job_status(
                 job_id,
                 status="COMPLETED",
-                output_s3_urls=uploaded_urls
+                output_s3_urls=uploaded_s3_keys
             )
         except Exception as e:
-            print(f"[DynamoDB] Failed to update job status to COMPLETED for job_id={job_id}: {e}")
+            print(f"[DynamOdb] Failed to update job status to COMPLETED for job_id={job_id}: {e}")
 
         # 7. Completed
         publish_progress(job_id, ProgressUpdate(
@@ -223,13 +244,13 @@ def process_video_task(self, s3_input_key: str, job_id: str, cutting_options: di
             message="Video processing completed successfully!",
             progress_percentage=100.0,
             timestamp=now_iso(),
-            output_urls=uploaded_urls.copy()
+            output_urls=uploaded_s3_keys.copy()
         ))
         return {
             "status": "completed",
             "job_id": job_id,
-            "output_urls": uploaded_urls,
-            "segments_created": len(uploaded_urls)
+            "output_urls": uploaded_s3_keys,
+            "segments_created": len(uploaded_s3_keys)
         }
     except Exception as exc:
         print(f"Video processing failed for job {job_id}: {str(exc)}")
