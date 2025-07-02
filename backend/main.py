@@ -165,6 +165,7 @@ async def complete_upload(request: CompleteUploadRequest) -> JobCreatedResponse:
         try:
             from datetime import datetime, timezone
             now_iso = datetime.utcnow().replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
+            
             dynamodb_service.create_job_entry(
                 job_id=request.job_id,
                 user_id=request.user_id,

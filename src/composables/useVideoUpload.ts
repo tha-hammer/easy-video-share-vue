@@ -27,6 +27,10 @@ interface VideoMetadata {
   duration?: number
   created_at: string
   updated_at: string
+  // Additional fields for AI video processing
+  status?: string // Job status (QUEUED, PROCESSING, COMPLETED, FAILED)
+  output_s3_urls?: string[] // S3 keys of processed video segments
+  error_message?: string // Error message if job failed
 }
 
 // New interfaces for API integration

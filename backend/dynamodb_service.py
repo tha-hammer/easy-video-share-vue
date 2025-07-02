@@ -134,13 +134,32 @@ def list_videos(user_id: Optional[str] = None) -> list:
         elif "duration" in item:
             duration = float(item["duration"]) if isinstance(item["duration"], Decimal) else item["duration"]
         
+        # Determine if this is a processed video (has output_s3_urls) or original upload
+        has_processed_segments = item.get("output_s3_urls") and len(item.get("output_s3_urls", [])) > 0
+        is_processed_video = has_processed_segments and item.get("status") in ["COMPLETED", "PROCESSING"]
+        
+        # For processed videos, try to extract metadata from the first output URL
+        filename = item.get("filename")
+        title = item.get("title")
+        
+        if is_processed_video and (not filename or filename == "unknown.mp4"):
+            # Try to extract filename from output_s3_urls
+            output_urls = item.get("output_s3_urls", [])
+            if output_urls:
+                first_url = output_urls[0]
+                # Extract job_id from URL path
+                if "/processed/" in first_url:
+                    job_id = first_url.split("/processed/")[1].split("/")[0]
+                    filename = f"processed_{job_id}_segment_001.mp4"
+                    title = f"Processed Video - {job_id[:8]}"
+        
         # Create transformed item with expected field names
         transformed_item = {
             "video_id": item.get("video_id"),
             "user_id": item.get("user_id"),
             "user_email": item.get("user_email", "unknown@example.com"),  # Default fallback
-            "title": item.get("title", item.get("filename", "Untitled Video")),  # Use filename as fallback title
-            "filename": item.get("filename", "unknown.mp4"),  # Default fallback
+            "title": title or item.get("filename", "Untitled Video"),  # Use filename as fallback title
+            "filename": filename or "unknown.mp4",  # Default fallback
             "bucket_location": item.get("bucket_location", ""),
             "upload_date": item.get("upload_date"),
             "file_size": item.get("file_size", 0),  # Default to 0 if not present
@@ -152,6 +171,7 @@ def list_videos(user_id: Optional[str] = None) -> list:
             "output_s3_urls": item.get("output_s3_urls", []),  # Processed video segments
             "error_message": item.get("error_message")  # Error if job failed
         }
+        
         transformed_items.append(transformed_item)
     
     return transformed_items
