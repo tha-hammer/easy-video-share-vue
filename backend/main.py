@@ -378,9 +378,10 @@ async def analyze_duration(request: AnalyzeDurationRequest) -> AnalyzeDurationRe
     
     try:
         # Test if file exists in S3 first
-        from s3_utils import s3_client
+        from s3_utils import get_s3_client
         try:
             print(f"DEBUG: Testing if file exists in S3: {settings.AWS_BUCKET_NAME}/{request.s3_key}")
+            s3_client = get_s3_client()
             response = s3_client.head_object(Bucket=settings.AWS_BUCKET_NAME, Key=request.s3_key)
             print(f"DEBUG: S3 file exists, size: {response.get('ContentLength', 'unknown')}")
         except Exception as s3_error:
