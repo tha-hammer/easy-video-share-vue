@@ -468,12 +468,28 @@ export default defineComponent({
         const user = authStore.user // Assuming authStore.user is correctly populated
         const userId = user?.userId || 'anonymous' // Use a fallback if user is somehow null
 
+        // Create video metadata for the complete upload request
+        const videoMetadata = {
+          video_id: videoUpload.jobId.value!,
+          user_id: user?.userId || 'anonymous',
+          user_email: user?.email || 'unknown@example.com',
+          title: videoTitle.value.trim(),
+          filename: selectedFile.value?.name || 'unknown.mp4',
+          bucket_location: videoUpload.s3Key.value!,
+          upload_date: new Date().toISOString(),
+          file_size: selectedFile.value?.size || 0,
+          content_type: selectedFile.value?.type || 'video/mp4',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }
+
         // Only pass the nested object, do NOT spread or add extra fields
         await videoUpload.completeUpload(
           cuttingOptionsPayload,
           textStrategy.value,
           text_input,
           userId,
+          videoMetadata,
         )
         setTimeout(() => {
           router.push({ name: 'TextCustomization', params: { jobId: videoUpload.jobId.value } })

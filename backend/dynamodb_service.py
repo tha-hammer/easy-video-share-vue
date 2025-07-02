@@ -23,9 +23,24 @@ def iso_utc_now() -> str:
     return datetime.utcnow().replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
 
 
-def create_job_entry(job_id: str, user_id: Optional[str] = None, upload_date: Optional[str] = None, status: str = "QUEUED", created_at: Optional[str] = None, updated_at: Optional[str] = None, video_duration: Optional[float] = None):
+def create_job_entry(
+    job_id: str, 
+    user_id: Optional[str] = None, 
+    upload_date: Optional[str] = None, 
+    status: str = "QUEUED", 
+    created_at: Optional[str] = None, 
+    updated_at: Optional[str] = None, 
+    video_duration: Optional[float] = None,
+    # Additional video metadata fields
+    filename: Optional[str] = None,
+    file_size: Optional[int] = None,
+    title: Optional[str] = None,
+    user_email: Optional[str] = None,
+    content_type: Optional[str] = None,
+    bucket_location: Optional[str] = None
+):
     """
-    Create a new job entry in DynamoDB for job status tracking.
+    Create a new job entry in DynamoDB for job status tracking with complete video metadata.
     """
     now = iso_utc_now()
     item = {
@@ -40,6 +55,20 @@ def create_job_entry(job_id: str, user_id: Optional[str] = None, upload_date: Op
     # Add video_duration if provided (convert float to Decimal for DynamoDB)
     if video_duration is not None:
         item["video_duration"] = Decimal(str(video_duration))
+    
+    # Add additional video metadata fields
+    if filename is not None:
+        item["filename"] = filename
+    if file_size is not None:
+        item["file_size"] = file_size
+    if title is not None:
+        item["title"] = title
+    if user_email is not None:
+        item["user_email"] = user_email
+    if content_type is not None:
+        item["content_type"] = content_type
+    if bucket_location is not None:
+        item["bucket_location"] = bucket_location
     
     table.put_item(Item=item)
     return item
@@ -81,7 +110,7 @@ def get_job_status(job_id: str) -> Optional[dict]:
 def list_videos(user_id: Optional[str] = None) -> list:
     """
     List all video/job entries for a user (or all users if user_id is None).
-    Returns a list of dicts matching VideoMetadata.
+    Returns a list of dicts matching VideoMetadata interface expected by frontend.
     """
     if user_id:
         # Query by user_id (assumes GSI on user_id)
@@ -89,8 +118,40 @@ def list_videos(user_id: Optional[str] = None) -> list:
             IndexName="user_id-index",  # Make sure this GSI exists
             KeyConditionExpression=Key("user_id").eq(user_id)
         )
-        return resp.get("Items", [])
+        items = resp.get("Items", [])
     else:
         # Scan all (for demo/dev; not recommended for prod with large tables)
         resp = table.scan()
-        return resp.get("Items", [])
+        items = resp.get("Items", [])
+    
+    # Transform items to match VideoMetadata interface expected by frontend
+    transformed_items = []
+    for item in items:
+        # Convert DynamoDB Decimal to float for duration
+        duration = None
+        if "video_duration" in item:
+            duration = float(item["video_duration"])
+        elif "duration" in item:
+            duration = float(item["duration"]) if isinstance(item["duration"], Decimal) else item["duration"]
+        
+        # Create transformed item with expected field names
+        transformed_item = {
+            "video_id": item.get("video_id"),
+            "user_id": item.get("user_id"),
+            "user_email": item.get("user_email", "unknown@example.com"),  # Default fallback
+            "title": item.get("title", item.get("filename", "Untitled Video")),  # Use filename as fallback title
+            "filename": item.get("filename", "unknown.mp4"),  # Default fallback
+            "bucket_location": item.get("bucket_location", ""),
+            "upload_date": item.get("upload_date"),
+            "file_size": item.get("file_size", 0),  # Default to 0 if not present
+            "content_type": item.get("content_type", "video/mp4"),  # Default fallback
+            "duration": duration,  # Converted from video_duration
+            "created_at": item.get("created_at"),
+            "updated_at": item.get("updated_at"),
+            "status": item.get("status", "UNKNOWN"),  # Job status
+            "output_s3_urls": item.get("output_s3_urls", []),  # Processed video segments
+            "error_message": item.get("error_message")  # Error if job failed
+        }
+        transformed_items.append(transformed_item)
+    
+    return transformed_items

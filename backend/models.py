@@ -66,7 +66,11 @@ class CompleteUploadRequest(BaseModel):
     text_strategy: Optional[TextStrategy] = Field(None, description="Text overlay strategy")
     text_input: Optional[TextInput] = Field(None, description="Text content and context for overlay")
     user_id: Optional[str] = Field(..., description="User identifier for tracking job ownership")
-
+    filename: Optional[str] = Field(None, description="Original filename of the video")
+    file_size: Optional[int] = Field(None, description="Size of the file in bytes")
+    title: Optional[str] = Field(None, description="Video title")
+    user_email: Optional[str] = Field(None, description="User email address")
+    content_type: Optional[str] = Field(None, description="MIME type of the video file")
 
 
 class JobCreatedResponse(BaseModel):
