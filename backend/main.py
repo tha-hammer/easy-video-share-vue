@@ -221,6 +221,9 @@ async def get_job_status(job_id: str) -> JobStatusResponse:
         created_at = job.get("created_at")
         updated_at = job.get("updated_at")
         video_duration = job.get("video_duration")
+        # Convert Decimal back to float for API response
+        if video_duration is not None and hasattr(video_duration, 'as_tuple'):
+            video_duration = float(video_duration)
 
         # --- DEBUGGING PRINTS START ---
         print(f"DEBUG: Job {job_id} found. Status: '{status}', raw output_urls: {output_urls}, video_duration: {video_duration}")
@@ -394,6 +397,9 @@ async def analyze_duration(request: AnalyzeDurationRequest) -> AnalyzeDurationRe
                 job_data = dynamodb_service.get_job_status(job_id)
                 if job_data and job_data.get('video_duration'):
                     total_duration = job_data['video_duration']
+                    # Convert Decimal back to float for calculations
+                    if total_duration is not None and hasattr(total_duration, 'as_tuple'):
+                        total_duration = float(total_duration)
                     print(f"DEBUG: Found duration in DynamoDB: {total_duration} seconds")
         except Exception as db_error:
             print(f"DEBUG: Failed to get duration from DynamoDB: {db_error}")
