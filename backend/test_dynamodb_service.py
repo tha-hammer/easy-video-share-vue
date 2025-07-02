@@ -6,7 +6,20 @@ job_id = str(uuid.uuid4())
 print(f"Generated job_id: {job_id}")
 
 # 1. Create job entry (QUEUED)
-create_job_entry(job_id=job_id, user_id="anonymous", upload_date=None, status="QUEUED", created_at=None, updated_at=None)
+create_job_entry(
+    job_id=job_id, 
+    user_id="anonymous", 
+    upload_date=None, 
+    status="QUEUED", 
+    created_at=None, 
+    updated_at=None,
+    filename="test_video.mp4",
+    file_size=1024000,
+    title="Test Video",
+    user_email="test@example.com",
+    content_type="video/mp4",
+    bucket_location="uploads/test/test_video.mp4"
+)
 print("Created job entry.")
 
 # 2. Update status to PROCESSING

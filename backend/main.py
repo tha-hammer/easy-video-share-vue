@@ -172,7 +172,14 @@ async def complete_upload(request: CompleteUploadRequest) -> JobCreatedResponse:
                 status="QUEUED",
                 created_at=now_iso,
                 updated_at=now_iso,
-                video_duration=video_duration  # Store the duration if available
+                video_duration=video_duration,  # Store the duration if available
+                # Additional video metadata fields
+                filename=request.filename,
+                file_size=request.file_size,
+                title=request.title,
+                user_email=request.user_email,
+                content_type=request.content_type,
+                bucket_location=request.s3_key
             )
         except Exception as e:
             print(f"[DynamoDB] Failed to create job entry in /upload/complete for job_id={request.job_id}: {e}")

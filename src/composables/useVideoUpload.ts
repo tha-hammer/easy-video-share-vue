@@ -49,6 +49,12 @@ interface CompleteUploadRequest {
   text_strategy?: string
   text_input?: unknown
   user_id?: string // Optional user ID for tracking
+  // Additional video metadata fields
+  filename?: string
+  file_size?: number
+  title?: string
+  user_email?: string
+  content_type?: string
 }
 
 interface AnalyzeDurationRequest {
@@ -276,6 +282,7 @@ export function useVideoUpload() {
     text_strategy?: string,
     text_input?: unknown,
     userId?: string,
+    videoMetadata?: VideoMetadata,
   ): Promise<{ job_id: string }> => {
     if (!s3Key.value || !jobId.value) throw new Error('Missing s3Key or jobId')
 
@@ -303,6 +310,11 @@ export function useVideoUpload() {
       text_strategy,
       text_input,
       user_id: userId, // Optional user ID for tracking
+      filename: videoMetadata?.filename,
+      file_size: videoMetadata?.file_size,
+      title: videoMetadata?.title,
+      user_email: videoMetadata?.user_email,
+      content_type: videoMetadata?.content_type,
     }
 
     console.log('🔍 Debug: complete-upload request:', req)

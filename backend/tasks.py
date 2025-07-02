@@ -74,19 +74,8 @@ def process_video_task(self, s3_input_key: str, job_id: str, cutting_options: di
         timestamp=now_iso()
     ))
 
-    # Create DynamoDB job entry (QUEUED)
-    try:
-        
-        dynamodb_service.create_job_entry(
-            job_id=job_id,
-            user_id=user_id,
-            upload_date=now_iso(),
-            status="QUEUED",
-            created_at=now_iso(),
-            updated_at=now_iso()
-        )
-    except Exception as e:
-        print(f"[DynamoDB] Failed to create job entry for job_id={job_id}: {e}")
+    # Note: Job entry is already created in complete_upload endpoint with complete metadata
+    # No need to create duplicate entry here
 
     try:
         # Mark job as PROCESSING
