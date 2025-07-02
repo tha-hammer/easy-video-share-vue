@@ -163,7 +163,7 @@ export default defineComponent({
     async function openVideoModal(s3Key: string) {
       isLoadingVideo.value = true
       try {
-        // Call backend API to get presigned URL for this S3 key
+        // Call backend API to get presigned URLs
         const baseUrl = import.meta.env.VITE_AI_VIDEO_BACKEND_URL || 'http://localhost:8000'
         const response = await fetch(`${baseUrl}/api/jobs/${jobId}/status`)
 
@@ -172,16 +172,28 @@ export default defineComponent({
         }
 
         const data = await response.json()
+        console.log('Job status response:', data)
 
-        // Find the presigned URL for this S3 key
-        const videoUrl = data.output_urls?.find((url: string) =>
-          url.includes(s3Key.split('/').pop() || ''),
-        )
+        if (!data.output_urls || data.output_urls.length === 0) {
+          throw new Error('No video URLs available')
+        }
+
+        // Find the index of the S3 key in the original output_urls array
+        const originalS3Keys = progressUpdate.value?.output_urls || []
+        const keyIndex = originalS3Keys.indexOf(s3Key)
+
+        if (keyIndex === -1) {
+          throw new Error('Video segment not found')
+        }
+
+        // Get the corresponding presigned URL at the same index
+        const videoUrl = data.output_urls[keyIndex]
 
         if (!videoUrl) {
           throw new Error('Video URL not found')
         }
 
+        console.log('Selected video URL:', videoUrl)
         selectedVideoUrl.value = videoUrl
         showVideoModal.value = true
       } catch (error) {
