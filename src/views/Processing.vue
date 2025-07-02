@@ -50,8 +50,17 @@
                 <div class="mb-2 text-truncate w-100" style="max-width: 100%">
                   <span class="fw-semibold">Segment {{ idx + 1 }}</span>
                 </div>
-                <button @click="openVideoModal(url)" class="btn btn-sm btn-primary mt-2 w-100">
-                  View Video
+                <button
+                  @click="openVideoModal(url)"
+                  class="btn btn-sm btn-primary mt-2 w-100"
+                  :disabled="isLoadingVideo"
+                >
+                  <span
+                    v-if="isLoadingVideo"
+                    class="spinner-border spinner-border-sm me-2"
+                    role="status"
+                  ></span>
+                  {{ isLoadingVideo ? 'Loading...' : 'View Video' }}
                 </button>
               </div>
             </div>
@@ -149,11 +158,40 @@ export default defineComponent({
 
     const showVideoModal = ref(false)
     const selectedVideoUrl = ref<string | null>(null)
+    const isLoadingVideo = ref(false)
 
-    function openVideoModal(url: string) {
-      selectedVideoUrl.value = url
-      showVideoModal.value = true
+    async function openVideoModal(s3Key: string) {
+      isLoadingVideo.value = true
+      try {
+        // Call backend API to get presigned URL for this S3 key
+        const baseUrl = import.meta.env.VITE_AI_VIDEO_BACKEND_URL || 'http://localhost:8000'
+        const response = await fetch(`${baseUrl}/api/jobs/${jobId}/status`)
+
+        if (!response.ok) {
+          throw new Error(`Failed to get video URL: ${response.statusText}`)
+        }
+
+        const data = await response.json()
+
+        // Find the presigned URL for this S3 key
+        const videoUrl = data.output_urls?.find((url: string) =>
+          url.includes(s3Key.split('/').pop() || ''),
+        )
+
+        if (!videoUrl) {
+          throw new Error('Video URL not found')
+        }
+
+        selectedVideoUrl.value = videoUrl
+        showVideoModal.value = true
+      } catch (error) {
+        console.error('Error getting video URL:', error)
+        alert('Failed to load video. Please try again.')
+      } finally {
+        isLoadingVideo.value = false
+      }
     }
+
     function closeVideoModal() {
       showVideoModal.value = false
       selectedVideoUrl.value = null
@@ -197,6 +235,7 @@ export default defineComponent({
       stageLabel,
       showVideoModal,
       selectedVideoUrl,
+      isLoadingVideo,
       openVideoModal,
       closeVideoModal,
     }
