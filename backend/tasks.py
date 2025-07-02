@@ -152,26 +152,28 @@ def process_video_task(self, s3_input_key: str, job_id: str, cutting_options: di
         ))
 
         # 5. Processing segments
-        for i, (start, end) in enumerate(segment_times):
-            publish_progress(job_id, ProgressUpdate(
-                job_id=job_id,
-                stage="processing_segment",
-                message=f"Processing segment {i+1}/{num_segments}...",
-                current_segment=i+1,
-                total_segments=num_segments,
-                progress_percentage=((i+1)/num_segments)*80+10,  # 10-90%
-                timestamp=now_iso()
-            ))
-            # Process segment
-            output_prefix = os.path.join(temp_dir, f"processed_{job_id}")
-            segment_output_paths = split_video_with_precise_timing_and_dynamic_text(
-                input_path=local_input_path,
-                output_prefix=output_prefix,
-                segment_times=[(start, end)],
-                text_strategy=text_strategy_enum,
-                text_input=text_input_obj
-            )
-            output_path = segment_output_paths[0] if segment_output_paths else None
+        publish_progress(job_id, ProgressUpdate(
+            job_id=job_id,
+            stage="processing_segment",
+            message=f"Processing {num_segments} segments...",
+            current_segment=1,
+            total_segments=num_segments,
+            progress_percentage=10.0,
+            timestamp=now_iso()
+        ))
+        
+        # Process all segments at once
+        output_prefix = os.path.join(temp_dir, f"processed_{job_id}")
+        all_output_paths = split_video_with_precise_timing_and_dynamic_text(
+            input_path=local_input_path,
+            output_prefix=output_prefix,
+            segment_times=segment_times,  # Process all segments at once
+            text_strategy=text_strategy_enum,
+            text_input=text_input_obj
+        )
+        
+        # Upload each segment to S3
+        for i, output_path in enumerate(all_output_paths):
             if output_path and os.path.exists(output_path):
                 segment_filename = os.path.basename(output_path)
                 s3_output_key = f"processed/{job_id}/{segment_filename}"
@@ -187,7 +189,7 @@ def process_video_task(self, s3_input_key: str, job_id: str, cutting_options: di
                     message=f"Segment {i+1} uploaded to S3.",
                     current_segment=i+1,
                     total_segments=num_segments,
-                    progress_percentage=((i+1)/num_segments)*90,
+                    progress_percentage=((i+1)/num_segments)*80+10,  # 10-90%
                     timestamp=now_iso(),
                     output_urls=uploaded_urls.copy()
                 ))
