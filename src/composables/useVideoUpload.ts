@@ -183,7 +183,7 @@ export function useVideoUpload() {
       console.log(`🔍 Debug: Presigned URL: ${presignedUrl.substring(0, 100)}...`)
       console.log(`🔍 Debug: User agent: ${navigator.userAgent}`)
       console.log(
-        `🔍 Debug: Connection type: ${(navigator as any).connection?.effectiveType || 'unknown'}`,
+        `🔍 Debug: Connection type: ${(navigator as Navigator & { connection?: { effectiveType?: string } }).connection?.effectiveType || 'unknown'}`,
       )
 
       const xhr = new XMLHttpRequest()
@@ -197,18 +197,28 @@ export function useVideoUpload() {
           const chunkProgress = (event.loaded / event.total) * 100
           progress.chunkProgress.set(chunk.partNumber, chunkProgress)
 
-          // Update overall progress
-          let totalChunkProgress = 0
-          progress.chunkProgress.forEach((p) => {
-            totalChunkProgress += p
+          // Calculate actual bytes uploaded across all chunks
+          let totalBytesUploaded = 0
+          progress.chunkProgress.forEach((chunkPercent, partNum) => {
+            // For multi-part uploads, each chunk has the same size except the last one
+            const chunkSize = multipartState.value?.chunkSize || chunk.data.size
+            const bytesUploadedForChunk = Math.round((chunkPercent / 100) * chunkSize)
+            totalBytesUploaded += bytesUploadedForChunk
           })
-          progress.uploadedSize = Math.round(
-            (totalChunkProgress / progress.totalChunks) * progress.totalSize,
-          )
-          progress.percentage = Math.round((progress.uploadedSize / progress.totalSize) * 100)
+
+          // Add bytes from completed chunks
+          if (multipartState.value) {
+            totalBytesUploaded += progress.completedChunks * multipartState.value.chunkSize
+          }
+
+          progress.uploadedSize = totalBytesUploaded
+          progress.percentage = Math.round((totalBytesUploaded / progress.totalSize) * 100)
 
           uploadProgress.value.set(progress.videoId, { ...progress })
           console.log(`🔍 Debug: Chunk ${chunk.partNumber} progress: ${chunkProgress.toFixed(1)}%`)
+          console.log(
+            `🔍 Debug: Total progress: ${progress.percentage}% (${totalBytesUploaded}/${progress.totalSize} bytes)`,
+          )
         }
       }
 
