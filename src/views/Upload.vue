@@ -199,6 +199,8 @@
           <div class="text-center mb-6">
             <KTIcon icon-name="cloud-upload" icon-class="fs-3x text-primary mb-5" />
             <h3 class="fs-5 fw-bold text-gray-900 mb-3">Uploading to S3...</h3>
+
+            <!-- Progress Bar -->
             <div class="progress mb-3" style="height: 6px">
               <div
                 class="progress-bar bg-primary"
@@ -206,14 +208,68 @@
                 :style="{ width: uploadProgressBar + '%' }"
               ></div>
             </div>
+
+            <!-- Progress Details -->
             <div class="d-flex justify-content-between text-muted fs-7 mb-3">
               <span>{{ uploadProgressBar.toFixed(1) }}% complete</span>
-              <span v-if="currentProgress && currentProgress.completedChunks > 0">
-                {{ currentProgress.completedChunks }}/{{ currentProgress.totalChunks }} chunks
-                uploaded
-              </span>
+              <span v-if="uploadSpeed">{{ formatFileSize(uploadSpeed) }}/s</span>
+            </div>
+
+            <!-- Time Remaining -->
+            <div v-if="estimatedTimeRemaining" class="text-muted fs-7 mb-3">
+              Estimated time remaining: {{ formatTime(estimatedTimeRemaining) }}
+            </div>
+
+            <!-- Chunk Progress -->
+            <div
+              v-if="currentProgress && currentProgress.completedChunks > 0"
+              class="text-muted fs-7 mb-3"
+            >
+              {{ currentProgress.completedChunks }}/{{ currentProgress.totalChunks }} chunks
+              uploaded
+            </div>
+
+            <!-- Network Status -->
+            <div class="text-muted fs-7 mb-3">
+              <span v-if="isOnline" class="text-success">🟢 Online</span>
+              <span v-else class="text-danger">🔴 Offline</span>
+              <span v-if="connectionType" class="ms-2">• {{ connectionType }}</span>
+            </div>
+
+            <!-- Upload Controls -->
+            <div class="d-flex justify-content-center gap-3 mb-4">
+              <button
+                v-if="!isPaused"
+                type="button"
+                class="btn btn-sm btn-light-warning"
+                @click="pauseUpload"
+                :disabled="!isUploading"
+              >
+                <KTIcon icon-name="pause" icon-class="fs-4" />
+                Pause
+              </button>
+              <button
+                v-else
+                type="button"
+                class="btn btn-sm btn-light-success"
+                @click="resumeUpload"
+                :disabled="!isUploading"
+              >
+                <KTIcon icon-name="play" icon-class="fs-4" />
+                Resume
+              </button>
+              <button
+                type="button"
+                class="btn btn-sm btn-light-danger"
+                @click="cancelUpload"
+                :disabled="!isUploading"
+              >
+                <KTIcon icon-name="cross" icon-class="fs-4" />
+                Cancel
+              </button>
             </div>
           </div>
+
           <div class="d-flex justify-content-end">
             <button class="btn btn-primary" :disabled="!uploadComplete" @click="goToCuttingOptions">
               Next: Cutting Options
@@ -434,6 +490,11 @@ export default defineComponent({
       }
     })
 
+    // Enhanced upload state
+    const isUploading = ref(false)
+    const uploadSpeed = ref(0)
+    const estimatedTimeRemaining = ref(0)
+
     // Cutting options (sync with composable)
     type CuttingOptionsPayload =
       | { strategy: 'fixed'; params: { duration_seconds: number } }
@@ -538,6 +599,10 @@ export default defineComponent({
       // Set initial status
       uploadStatus.value = 'starting'
       uploadStatusMessage.value = 'Starting upload process...'
+      isUploading.value = true
+      isPaused.value = false
+      uploadSpeed.value = 0
+      estimatedTimeRemaining.value = 0
 
       // Add immediate visual feedback
       const uploadButton = document.querySelector('button[type="submit"]') as HTMLButtonElement
@@ -637,6 +702,7 @@ export default defineComponent({
         // Update status to complete
         uploadStatus.value = 'complete'
         uploadStatusMessage.value = 'Upload completed successfully!'
+        isUploading.value = false
 
         // Update button text to show completion
         if (uploadButton) {
@@ -656,6 +722,7 @@ export default defineComponent({
         // Update status to error
         uploadStatus.value = 'error'
         uploadStatusMessage.value = `Upload failed: ${(e as Error).message}`
+        isUploading.value = false
 
         // Reset button on error
         if (uploadButton) {
@@ -848,6 +915,30 @@ export default defineComponent({
       }
     }
 
+    // Upload control methods
+    const pauseUpload = async () => {
+      isPaused.value = true
+      console.log('⏸️ Upload paused')
+      // TODO: Implement actual pause functionality in useVideoUpload
+    }
+
+    const resumeUpload = async () => {
+      isPaused.value = false
+      console.log('▶️ Upload resumed')
+      // TODO: Implement actual resume functionality in useVideoUpload
+    }
+
+    const cancelUpload = async () => {
+      if (confirm('Are you sure you want to cancel the upload?')) {
+        console.log('❌ Upload cancelled')
+        isUploading.value = false
+        isPaused.value = false
+        uploadStatus.value = null
+        uploadStatusMessage.value = ''
+        // TODO: Implement actual cancel functionality in useVideoUpload
+      }
+    }
+
     return {
       steps,
       currentStep,
@@ -876,6 +967,9 @@ export default defineComponent({
       uploadStatus,
       uploadStatusMessage,
       uploadStatusClass,
+      isUploading,
+      uploadSpeed,
+      estimatedTimeRemaining,
       handleFileSelect,
       handleDrop,
       triggerFileSelect,
@@ -884,6 +978,9 @@ export default defineComponent({
       startProcessing,
       clearConsole,
       copyDebugInfo,
+      pauseUpload,
+      resumeUpload,
+      cancelUpload,
       formatFileSize,
       formatTime,
     }
