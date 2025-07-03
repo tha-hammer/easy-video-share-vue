@@ -1,39 +1,60 @@
 import { ref, computed } from 'vue'
+import type { VideoMetadata } from '@/core/services/VideoService'
 
-interface UploadProgress {
-  videoId: string
-  filename: string
-  totalSize: number
-  uploadedSize: number
-  percentage: number
-  status: 'pending' | 'uploading' | 'completed' | 'error' | 'paused'
-  estimatedTimeRemaining?: number
-  uploadSpeed?: number
-  chunkProgress: Map<number, number>
-  completedChunks: number
-  totalChunks: number
+// Types for multi-part upload
+interface MultipartUploadState {
+  uploadId: string
+  s3Key: string
+  jobId: string
+  chunkSize: number
+  maxConcurrentUploads: number
+  parts: Array<{
+    partNumber: number
+    etag: string
+    uploaded: boolean
+  }>
+  totalParts: number
 }
 
-interface VideoMetadata {
-  video_id: string
-  user_id: string
-  user_email: string
-  title: string
-  filename: string
-  bucket_location: string
-  upload_date: string
+interface UploadChunk {
+  partNumber: number
+  start: number
+  end: number
+  data: Blob
+}
+
+interface InitiateMultipartUploadResponse {
+  upload_id: string
+  s3_key: string
+  job_id: string
+  chunk_size: number
+  max_concurrent_uploads: number
+}
+
+interface UploadPartResponse {
+  presigned_url: string
+  part_number: number
+}
+
+interface CompleteMultipartUploadRequest {
+  upload_id: string
+  s3_key: string
+  job_id: string
+  parts: Array<{
+    PartNumber: number
+    ETag: string
+  }>
+  cutting_options?: any
+  text_strategy?: string
+  text_input?: any
+  user_id?: string
+  filename?: string
   file_size?: number
+  title?: string
+  user_email?: string
   content_type?: string
-  duration?: number
-  created_at: string
-  updated_at: string
-  // Additional fields for AI video processing
-  status?: string // Job status (QUEUED, PROCESSING, COMPLETED, FAILED)
-  output_s3_urls?: string[] // S3 keys of processed video segments
-  error_message?: string // Error message if job failed
 }
 
-// New interfaces for API integration
 interface InitiateUploadRequest {
   filename: string
   content_type: string
@@ -46,41 +67,26 @@ interface InitiateUploadResponse {
   job_id: string
 }
 
-interface CompleteUploadRequest {
-  s3_key: string
-  job_id: string
-  cutting_options?: Record<string, unknown>
-  text_strategy?: string
-  text_input?: unknown
-  user_id?: string // Optional user ID for tracking
-  // Additional video metadata fields
-  filename?: string
-  file_size?: number
-  title?: string
-  user_email?: string
-  content_type?: string
+interface UploadProgress {
+  videoId: string
+  filename: string
+  totalSize: number
+  uploadedSize: number
+  percentage: number
+  status: 'pending' | 'uploading' | 'completed' | 'error'
+  chunkProgress: Map<number, number>
+  completedChunks: number
+  totalChunks: number
 }
 
-interface AnalyzeDurationRequest {
-  s3_key: string
-  cutting_options: Record<string, unknown>
+interface CuttingOptions {
+  strategy: 'fixed' | 'random'
+  params: {
+    duration_seconds?: number
+    min_duration?: number
+    max_duration?: number
+  }
 }
-
-interface AnalyzeDurationResponse {
-  estimated_num_segments: number
-  duration_seconds: number
-}
-
-// --- Replace CuttingOptions interface with backend-aligned structure ---
-interface CuttingOptionsFixed {
-  strategy: 'fixed'
-  params: { duration_seconds: number }
-}
-interface CuttingOptionsRandom {
-  strategy: 'random'
-  params: { min_seconds: number; max_seconds: number }
-}
-type CuttingOptions = CuttingOptionsFixed | CuttingOptionsRandom
 
 export function useVideoUpload() {
   // Reactive state
@@ -98,6 +104,9 @@ export function useVideoUpload() {
     strategy: 'fixed',
     params: { duration_seconds: 30 },
   })
+
+  // Multi-part upload state
+  const multipartState = ref<MultipartUploadState | null>(null)
 
   // Upload configuration (adaptive based on device/network)
   const getUploadConfig = () => {
@@ -125,19 +134,104 @@ export function useVideoUpload() {
     }
   }
 
-  // Upload state management
-  const currentMultipartUpload: {
-    uploadId: string
-    key: string
-    abortController: AbortController
-  } | null = null
-  const uploadedParts: { ETag: string; PartNumber: number }[] = []
-  const uploadStartTime: number = 0
-  const lastProgressTime: number = 0
-  const lastProgressBytes: number = 0
+  // Determine if we should use multi-part upload
+  const shouldUseMultipart = (fileSize: number): boolean => {
+    const MB = 1024 * 1024
+    const isMobile = /Android|iPhone|iPad|iPod|IEMobile|Opera Mini/i.test(navigator.userAgent)
 
-  // Main upload function using pre-signed URL
+    // Use multi-part for files larger than 100MB on mobile or 200MB on desktop
+    if (isMobile) {
+      return fileSize > 100 * MB
+    } else {
+      return fileSize > 200 * MB
+    }
+  }
+
+  // Split file into chunks for multi-part upload
+  const splitFileIntoChunks = (file: File, chunkSize: number): UploadChunk[] => {
+    const chunks: UploadChunk[] = []
+    let partNumber = 1
+    let start = 0
+
+    while (start < file.size) {
+      const end = Math.min(start + chunkSize, file.size)
+      const data = file.slice(start, end)
+
+      chunks.push({
+        partNumber,
+        start,
+        end,
+        data,
+      })
+
+      start = end
+      partNumber++
+    }
+
+    return chunks
+  }
+
+  // Upload a single chunk
+  const uploadChunk = async (
+    chunk: UploadChunk,
+    presignedUrl: string,
+    progress: UploadProgress,
+  ): Promise<{ ETag: string; PartNumber: number }> => {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest()
+      xhr.open('PUT', presignedUrl, true)
+
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable) {
+          const chunkProgress = (event.loaded / event.total) * 100
+          progress.chunkProgress.set(chunk.partNumber, chunkProgress)
+
+          // Update overall progress
+          let totalChunkProgress = 0
+          progress.chunkProgress.forEach((p) => {
+            totalChunkProgress += p
+          })
+          progress.uploadedSize = Math.round(
+            (totalChunkProgress / progress.totalChunks) * progress.totalSize,
+          )
+          progress.percentage = Math.round((progress.uploadedSize / progress.totalSize) * 100)
+
+          uploadProgress.value.set(progress.videoId, { ...progress })
+        }
+      }
+
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          const etag = xhr.getResponseHeader('ETag')?.replace(/"/g, '') || ''
+          progress.completedChunks++
+          uploadProgress.value.set(progress.videoId, { ...progress })
+          resolve({ ETag: etag, PartNumber: chunk.partNumber })
+        } else {
+          reject(new Error(`Chunk upload failed: ${xhr.status} ${xhr.statusText}`))
+        }
+      }
+
+      xhr.onerror = () => {
+        reject(new Error('Chunk upload network error'))
+      }
+
+      xhr.send(chunk.data)
+    })
+  }
+
+  // Main upload function with multi-part support
   const uploadVideo = async (file: File, metadata: VideoMetadata): Promise<void> => {
+    const videoId = metadata.video_id
+
+    if (shouldUseMultipart(file.size)) {
+      await uploadVideoMultipart(file, metadata)
+    } else {
+      await uploadVideoSingle(file, metadata)
+    }
+  }
+
+  // Single-part upload (existing logic)
+  const uploadVideoSingle = async (file: File, metadata: VideoMetadata): Promise<void> => {
     const videoId = metadata.video_id
     const progress: UploadProgress = {
       videoId,
@@ -153,6 +247,7 @@ export function useVideoUpload() {
     uploadProgress.value.set(videoId, progress)
     isUploading.value = true
     currentUpload.value = videoId
+
     try {
       // Use pre-signed URL for upload
       if (!presignedUrl.value) throw new Error('No pre-signed URL available')
@@ -165,6 +260,83 @@ export function useVideoUpload() {
       console.error(`❌ Upload failed for ${videoId}:`, error)
       progress.status = 'error'
       uploadProgress.value.set(videoId, { ...progress })
+      throw error
+    } finally {
+      isUploading.value = false
+      currentUpload.value = null
+    }
+  }
+
+  // Multi-part upload
+  const uploadVideoMultipart = async (file: File, metadata: VideoMetadata): Promise<void> => {
+    const videoId = metadata.video_id
+
+    if (!multipartState.value) {
+      throw new Error('Multi-part upload not initiated')
+    }
+
+    const progress: UploadProgress = {
+      videoId,
+      filename: file.name,
+      totalSize: file.size,
+      uploadedSize: 0,
+      percentage: 0,
+      status: 'pending',
+      chunkProgress: new Map(),
+      completedChunks: 0,
+      totalChunks: multipartState.value.totalParts,
+    }
+    uploadProgress.value.set(videoId, progress)
+    isUploading.value = true
+    currentUpload.value = videoId
+
+    try {
+      // Split file into chunks
+      const chunks = splitFileIntoChunks(file, multipartState.value.chunkSize)
+      console.log(`📦 Split file into ${chunks.length} chunks`)
+
+      // Upload chunks in parallel with concurrency limit
+      const uploadedParts: Array<{ ETag: string; PartNumber: number }> = []
+      const concurrencyLimit = multipartState.value.maxConcurrentUploads
+
+      for (let i = 0; i < chunks.length; i += concurrencyLimit) {
+        const batch = chunks.slice(i, i + concurrencyLimit)
+        const batchPromises = batch.map(async (chunk) => {
+          // Get presigned URL for this part
+          const partResponse = await getUploadPartUrl(chunk.partNumber)
+
+          // Upload the chunk
+          const result = await uploadChunk(chunk, partResponse.presigned_url, progress)
+          return result
+        })
+
+        const batchResults = await Promise.all(batchPromises)
+        uploadedParts.push(...batchResults)
+
+        console.log(
+          `✅ Uploaded batch ${Math.floor(i / concurrencyLimit) + 1}/${Math.ceil(chunks.length / concurrencyLimit)}`,
+        )
+      }
+
+      // Complete the multi-part upload
+      await completeMultipartUpload(uploadedParts, metadata)
+
+      progress.status = 'completed'
+      progress.percentage = 100
+      uploadProgress.value.set(videoId, { ...progress })
+      console.log(`✅ Multi-part upload completed for ${videoId}`)
+    } catch (error) {
+      console.error(`❌ Multi-part upload failed for ${videoId}:`, error)
+      progress.status = 'error'
+      uploadProgress.value.set(videoId, { ...progress })
+
+      // Try to abort the upload
+      try {
+        await abortMultipartUpload()
+      } catch (abortError) {
+        console.error('Failed to abort multi-part upload:', abortError)
+      }
+
       throw error
     } finally {
       isUploading.value = false
@@ -219,7 +391,7 @@ export function useVideoUpload() {
     })
   }
 
-  // API: Initiate upload
+  // API: Initiate upload (single-part)
   const initiateUpload = async (file: File): Promise<InitiateUploadResponse> => {
     const req: InitiateUploadRequest = {
       filename: file.name,
@@ -272,125 +444,265 @@ export function useVideoUpload() {
     }
   }
 
-  // Utility to flatten cutting options for backend
-  function flattenCuttingOptions(options: CuttingOptions): Record<string, unknown> {
-    if (!options) return {}
-    const { strategy, params } = options as { strategy: string; params: Record<string, unknown> }
-    if (!params || typeof params !== 'object') return { strategy }
-    return { strategy, ...params }
+  // API: Initiate multi-part upload
+  const initiateMultipartUpload = async (file: File): Promise<InitiateMultipartUploadResponse> => {
+    const req: InitiateUploadRequest = {
+      filename: file.name,
+      content_type: file.type,
+      file_size: file.size,
+    }
+
+    const baseUrl = import.meta.env.VITE_AI_VIDEO_BACKEND_URL || 'http://localhost:8000'
+    const url = `${baseUrl}/api/upload/initiate-multipart`
+
+    console.log('🔍 Debug: Initiating multi-part upload to:', url)
+    console.log('🔍 Debug: Request body:', req)
+
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(req),
+      })
+
+      if (!res.ok) {
+        const errorText = await res.text()
+        throw new Error(
+          `Failed to initiate multipart upload: ${res.status} ${res.statusText} - ${errorText}`,
+        )
+      }
+
+      const data: InitiateMultipartUploadResponse = await res.json()
+      console.log('🔍 Debug: Multi-part upload initiated:', data)
+
+      // Calculate total parts
+      const totalParts = Math.ceil(file.size / data.chunk_size)
+
+      // Initialize multi-part state
+      multipartState.value = {
+        uploadId: data.upload_id,
+        s3Key: data.s3_key,
+        jobId: data.job_id,
+        chunkSize: data.chunk_size,
+        maxConcurrentUploads: data.max_concurrent_uploads,
+        parts: [],
+        totalParts,
+      }
+
+      s3Key.value = data.s3_key
+      jobId.value = data.job_id
+
+      return data
+    } catch (error) {
+      console.error('🔍 Debug: Multi-part upload initiation error:', error)
+      throw error
+    }
   }
 
-  // API: Complete upload
-  const completeUpload = async (
-    cutting_options?: CuttingOptions,
-    text_strategy?: string,
-    text_input?: unknown,
-    userId?: string,
-    videoMetadata?: VideoMetadata,
-  ): Promise<{ job_id: string }> => {
-    if (!s3Key.value || !jobId.value) throw new Error('Missing s3Key or jobId')
-
-    // Convert frontend cutting options to backend format
-    let backendCuttingOptions: Record<string, unknown> | undefined
-    if (cutting_options) {
-      if (cutting_options.strategy === 'fixed') {
-        backendCuttingOptions = {
-          type: 'fixed',
-          duration_seconds: cutting_options.params.duration_seconds,
-        }
-      } else if (cutting_options.strategy === 'random') {
-        backendCuttingOptions = {
-          type: 'random',
-          min_duration: cutting_options.params.min_seconds,
-          max_duration: cutting_options.params.max_seconds,
-        }
-      }
+  // API: Get presigned URL for uploading a part
+  const getUploadPartUrl = async (partNumber: number): Promise<UploadPartResponse> => {
+    if (!multipartState.value) {
+      throw new Error('Multi-part upload not initiated')
     }
 
-    const req: CompleteUploadRequest = {
+    const req = {
+      upload_id: multipartState.value.uploadId,
+      s3_key: multipartState.value.s3Key,
+      part_number: partNumber,
+      content_type: 'video/mp4', // We'll use a generic content type for parts
+    }
+
+    const baseUrl = import.meta.env.VITE_AI_VIDEO_BACKEND_URL || 'http://localhost:8000'
+    const url = `${baseUrl}/api/upload/part`
+
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(req),
+      })
+
+      if (!res.ok) {
+        const errorText = await res.text()
+        throw new Error(
+          `Failed to get upload part URL: ${res.status} ${res.statusText} - ${errorText}`,
+        )
+      }
+
+      const data: UploadPartResponse = await res.json()
+      return data
+    } catch (error) {
+      console.error('🔍 Debug: Get upload part URL error:', error)
+      throw error
+    }
+  }
+
+  // API: Complete multi-part upload
+  const completeMultipartUpload = async (
+    parts: Array<{ ETag: string; PartNumber: number }>,
+    metadata: VideoMetadata,
+  ): Promise<void> => {
+    if (!multipartState.value) {
+      throw new Error('Multi-part upload not initiated')
+    }
+
+    const req: CompleteMultipartUploadRequest = {
+      upload_id: multipartState.value.uploadId,
+      s3_key: multipartState.value.s3Key,
+      job_id: multipartState.value.jobId,
+      parts: parts.map((p) => ({ PartNumber: p.PartNumber, ETag: p.ETag })),
+      user_id: metadata.user_id,
+      filename: metadata.filename,
+      file_size: metadata.file_size,
+      title: metadata.title,
+      user_email: metadata.user_email,
+      content_type: metadata.content_type,
+    }
+
+    const baseUrl = import.meta.env.VITE_AI_VIDEO_BACKEND_URL || 'http://localhost:8000'
+    const url = `${baseUrl}/api/upload/complete-multipart`
+
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(req),
+      })
+
+      if (!res.ok) {
+        const errorText = await res.text()
+        throw new Error(
+          `Failed to complete multipart upload: ${res.status} ${res.statusText} - ${errorText}`,
+        )
+      }
+
+      const data = await res.json()
+      console.log('🔍 Debug: Multi-part upload completed:', data)
+    } catch (error) {
+      console.error('🔍 Debug: Complete multipart upload error:', error)
+      throw error
+    }
+  }
+
+  // API: Abort multi-part upload
+  const abortMultipartUpload = async (): Promise<void> => {
+    if (!multipartState.value) {
+      return
+    }
+
+    const req = {
+      upload_id: multipartState.value.uploadId,
+      s3_key: multipartState.value.s3Key,
+    }
+
+    const baseUrl = import.meta.env.VITE_AI_VIDEO_BACKEND_URL || 'http://localhost:8000'
+    const url = `${baseUrl}/api/upload/abort-multipart`
+
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(req),
+      })
+
+      if (res.ok) {
+        console.log('🔍 Debug: Multi-part upload aborted successfully')
+      }
+    } catch (error) {
+      console.error('🔍 Debug: Abort multipart upload error:', error)
+    }
+  }
+
+  // API: Complete upload (single-part)
+  const completeUpload = async (
+    cuttingOptions: any,
+    textStrategy: string,
+    textInput: any,
+    userId: string,
+    videoMetadata: VideoMetadata,
+  ): Promise<void> => {
+    const req = {
       s3_key: s3Key.value,
       job_id: jobId.value,
-      cutting_options: backendCuttingOptions,
-      text_strategy,
-      text_input,
-      user_id: userId, // Optional user ID for tracking
-      filename: videoMetadata?.filename,
-      file_size: videoMetadata?.file_size,
-      title: videoMetadata?.title,
-      user_email: videoMetadata?.user_email,
-      content_type: videoMetadata?.content_type,
+      cutting_options: cuttingOptions,
+      text_strategy: textStrategy,
+      text_input: textInput,
+      user_id: userId,
+      filename: videoMetadata.filename,
+      file_size: videoMetadata.file_size,
+      title: videoMetadata.title,
+      user_email: videoMetadata.user_email,
+      content_type: videoMetadata.content_type,
     }
-
-    console.log('🔍 Debug: complete-upload request:', req)
 
     // Use Railway backend URL from environment or fallback to localhost for development
     const baseUrl = import.meta.env.VITE_AI_VIDEO_BACKEND_URL || 'http://localhost:8000'
-    const res = await fetch(`${baseUrl}/api/upload/complete`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(req),
-    })
+    const url = `${baseUrl}/api/upload/complete`
 
-    if (!res.ok) {
-      const errorText = await res.text()
-      console.error('🔍 Debug: complete-upload error:', res.status, errorText)
-      throw new Error(`Failed to complete upload: ${res.status} ${res.statusText}`)
+    console.log('🔍 Debug: Making complete request to:', url)
+    console.log('🔍 Debug: Request body:', req)
+
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(req),
+      })
+
+      console.log('🔍 Debug: Complete response status:', res.status)
+
+      if (!res.ok) {
+        const errorText = await res.text()
+        console.error('🔍 Debug: Complete error response:', errorText)
+        throw new Error(`Failed to complete upload: ${res.status} ${res.statusText} - ${errorText}`)
+      }
+
+      const data = await res.json()
+      console.log('🔍 Debug: Complete success response:', data)
+    } catch (error) {
+      console.error('🔍 Debug: Complete fetch error:', error)
+      throw error
     }
-
-    const data = await res.json()
-    console.log('🔍 Debug: complete-upload response:', data)
-    return data
   }
 
   // API: Analyze duration
-  const analyzeDuration = async (payload?: CuttingOptions): Promise<AnalyzeDurationResponse> => {
-    if (!s3Key.value) throw new Error('Missing s3Key')
-
-    // Convert frontend cutting options to backend format
-    const options = payload || cuttingOptions.value
-    let backendCuttingOptions: Record<string, unknown>
-
-    if (options.strategy === 'fixed') {
-      backendCuttingOptions = {
-        type: 'fixed',
-        duration_seconds: options.params.duration_seconds,
-      }
-    } else if (options.strategy === 'random') {
-      backendCuttingOptions = {
-        type: 'random',
-        min_duration: options.params.min_seconds,
-        max_duration: options.params.max_seconds,
-      }
-    } else {
-      throw new Error('Invalid cutting strategy')
+  const analyzeDuration = async (s3Key: string, cuttingOptions: any): Promise<any> => {
+    const req = {
+      s3_key: s3Key,
+      cutting_options: cuttingOptions,
     }
-
-    const req: AnalyzeDurationRequest = {
-      s3_key: s3Key.value,
-      cutting_options: backendCuttingOptions,
-    }
-
-    console.log('🔍 Debug: analyze-duration request:', req)
 
     // Use Railway backend URL from environment or fallback to localhost for development
     const baseUrl = import.meta.env.VITE_AI_VIDEO_BACKEND_URL || 'http://localhost:8000'
-    const res = await fetch(`${baseUrl}/api/video/analyze-duration`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(req),
-    })
+    const url = `${baseUrl}/api/video/analyze-duration`
 
-    if (!res.ok) {
-      const errorText = await res.text()
-      console.error('🔍 Debug: analyze-duration error:', res.status, errorText)
-      throw new Error(`Failed to analyze duration: ${res.status} ${res.statusText}`)
+    console.log('🔍 Debug: Making analyze-duration request to:', url)
+    console.log('🔍 Debug: Request body:', req)
+
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(req),
+      })
+
+      console.log('🔍 Debug: analyze-duration response status:', res.status)
+
+      if (!res.ok) {
+        const errorText = await res.text()
+        console.error('🔍 Debug: analyze-duration error:', res.status, errorText)
+        throw new Error(`Failed to analyze duration: ${res.status} ${res.statusText}`)
+      }
+
+      const data = await res.json()
+      console.log('🔍 Debug: analyze-duration response:', data)
+      estimatedSegments.value = data.num_segments
+      videoDuration.value = data.total_duration
+      return data
+    } catch (error) {
+      console.error('🔍 Debug: analyze-duration fetch error:', error)
+      throw error
     }
-
-    const data = await res.json()
-    console.log('🔍 Debug: analyze-duration response:', data)
-    estimatedSegments.value = data.num_segments
-    videoDuration.value = data.total_duration
-    return data
   }
 
   // Computed properties
@@ -431,12 +743,17 @@ export function useVideoUpload() {
     estimatedSegments,
     videoDuration,
     cuttingOptions,
+    multipartState,
     initiateUpload,
+    initiateMultipartUpload,
     completeUpload,
     analyzeDuration,
 
     // Actions
     uploadVideo,
+    uploadVideoSingle,
+    uploadVideoMultipart,
+    shouldUseMultipart,
 
     // Utils
     formatFileSize,

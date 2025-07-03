@@ -55,6 +55,9 @@
 
 ### Step 1: Setup Workspace Structure
 
+aws sts get-caller-identity --profile AdministratorAccess-571960159088
+$env:AWS_PROFILE = "AdministratorAccess-571960159088"
+
 ```bash
 # Create workspaces
 terraform workspace new main-simple

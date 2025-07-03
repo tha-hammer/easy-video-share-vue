@@ -21,14 +21,17 @@ This Terraform configuration creates the AWS infrastructure for the Easy Video S
 ## Quick Start
 
 ### 1. Configure AWS CLI
+
 ```bash
 aws configure
 # Enter your Access Key ID, Secret Access Key, and region
 aws configure sso
+$env:AWS_PROFILE = "AdministratorAccess-571960159088"
 # Enter Access key, secret key, SSO URL and region
 ```
 
 ### 2. Set Up Terraform Variables
+
 ```bash
 # Copy the example file
 cp terraform.tfvars.example terraform.tfvars
@@ -38,6 +41,7 @@ cp terraform.tfvars.example terraform.tfvars
 ```
 
 ### 3. Deploy Infrastructure
+
 ```bash
 # Initialize Terraform
 terraform init
@@ -50,7 +54,9 @@ terraform apply
 ```
 
 ### 4. Save Important Outputs
+
 After deployment, Terraform will output important values:
+
 - `bucket_name`: Your S3 bucket name
 - `bucket_website_endpoint`: URL for static website hosting
 - `app_user_access_key_id`: For your frontend application
@@ -65,6 +71,7 @@ After deployment, Terraform will output important values:
 ## Bucket Structure
 
 The bucket will organize files like this:
+
 ```
 your-bucket-name/
 ├── videos/           # Video files (publicly readable)
@@ -89,8 +96,9 @@ your-bucket-name/
 ## Cleanup
 
 To destroy all infrastructure:
+
 ```bash
 terraform destroy
 ```
 
-**Warning**: This will delete your bucket and all videos! 
+**Warning**: This will delete your bucket and all videos!

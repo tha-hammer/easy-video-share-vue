@@ -34,6 +34,7 @@
 ```bash
 # Standard development workflow
 terraform workspace select main-simple
+$env:AWS_PROFILE = "AdministratorAccess-571960159088"
 terraform plan
 terraform apply
 ```
