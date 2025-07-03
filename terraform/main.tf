@@ -145,45 +145,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "video_bucket_lifecycle" {
   }
 } */
 
-# IAM user for application access
-resource "aws_iam_user" "video_app_user" {
-  name = "${var.project_name}-app-user"
-
-  tags = {
-    Environment = var.environment
-    Project     = var.project_name
-  }
-}
-
-# IAM policy for application user
-resource "aws_iam_user_policy" "video_app_user_policy" {
-  name = "${var.project_name}-app-policy"
-  user = aws_iam_user.video_app_user.name
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "s3:PutObject",
-          "s3:PutObjectAcl",
-          "s3:GetObject",
-          "s3:ListBucket"
-        ]
-        Resource = [
-          aws_s3_bucket.video_bucket.arn,
-          "${aws_s3_bucket.video_bucket.arn}/*"
-        ]
-      }
-    ]
-  })
-}
-
-# Access keys for the application user
-resource "aws_iam_access_key" "video_app_user_key" {
-  user = aws_iam_user.video_app_user.name
-}
+# IAM user and permissions moved to s3-permissions.tf
 
 # DynamoDB table for video metadata
 resource "aws_dynamodb_table" "video_metadata" {
@@ -294,9 +256,20 @@ resource "aws_iam_role_policy" "lambda_policy" {
       {
         Effect = "Allow"
         Action = [
-          "s3:DeleteObject"
+          "s3:PutObject",
+          "s3:PutObjectAcl",
+          "s3:GetObject",
+          "s3:DeleteObject",
+          "s3:CreateMultipartUpload",
+          "s3:UploadPart",
+          "s3:CompleteMultipartUpload",
+          "s3:AbortMultipartUpload",
+          "s3:ListMultipartUploadParts"
         ]
-        Resource = "${aws_s3_bucket.video_bucket.arn}/*"
+        Resource = [
+          aws_s3_bucket.video_bucket.arn,
+          "${aws_s3_bucket.video_bucket.arn}/*"
+        ]
       }
     ]
   })

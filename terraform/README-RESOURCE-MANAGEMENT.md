@@ -14,6 +14,7 @@
 ### 1. Use Simple Configuration (Recommended)
 
 ```bash
+$env:AWS_PROFILE = "AdministratorAccess-571960159088"
 cd terraform
 terraform workspace select main-simple
 terraform plan    # Should show no changes

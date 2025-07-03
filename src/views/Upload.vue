@@ -117,15 +117,10 @@
             </div>
             <div class="d-flex justify-content-between text-muted fs-7 mb-3">
               <span>{{ uploadProgressBar.toFixed(1) }}% complete</span>
-              <span v-if="currentProgress && currentProgress.uploadSpeed">
-                {{ formatFileSize(currentProgress.uploadSpeed) }}/s
+              <span v-if="currentProgress && currentProgress.completedChunks > 0">
+                {{ currentProgress.completedChunks }}/{{ currentProgress.totalChunks }} chunks
+                uploaded
               </span>
-            </div>
-            <div
-              v-if="currentProgress && currentProgress.estimatedTimeRemaining"
-              class="text-muted fs-7 mb-3"
-            >
-              Estimated time remaining: {{ formatTime(currentProgress.estimatedTimeRemaining) }}
             </div>
           </div>
           <div class="d-flex justify-content-end">
@@ -396,8 +391,19 @@ export default defineComponent({
     const goToUploadStep = async () => {
       if (!validateTitle() || !selectedFile.value) return
       try {
-        // Initiate upload (get presigned URL, s3_key, job_id)
-        await videoUpload.initiateUpload(selectedFile.value)
+        // Check if we should use multi-part upload
+        const shouldUseMultipart = videoUpload.shouldUseMultipart(selectedFile.value.size)
+
+        if (shouldUseMultipart) {
+          console.log('📦 Using multi-part upload for large file')
+          // Initiate multi-part upload
+          await videoUpload.initiateMultipartUpload(selectedFile.value)
+        } else {
+          console.log('📤 Using single-part upload for smaller file')
+          // Initiate single-part upload
+          await videoUpload.initiateUpload(selectedFile.value)
+        }
+
         // Start S3 upload using composable (uses presignedUrl, s3Key)
         // Compose minimal metadata for S3 upload
         const user = authStore.user
@@ -542,7 +548,7 @@ export default defineComponent({
               videoUpload.videoDuration.value = 0
               return
             }
-            const result = await videoUpload.analyzeDuration(payload)
+            const result = await videoUpload.analyzeDuration(videoUpload.s3Key.value!, payload)
             videoUpload.estimatedSegments.value = result.estimated_num_segments
             videoUpload.videoDuration.value = result.duration_seconds
             // Sync uniqueTexts array for UNIQUE_FOR_ALL

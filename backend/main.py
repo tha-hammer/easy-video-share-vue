@@ -11,9 +11,23 @@ from models import (
     AnalyzeDurationRequest,
     AnalyzeDurationResponse,
     CuttingOptions,
-    ProgressUpdate
+    ProgressUpdate,
+    InitiateMultipartUploadRequest,
+    InitiateMultipartUploadResponse,
+    UploadPartRequest,
+    UploadPartResponse,
+    CompleteMultipartUploadRequest,
+    AbortMultipartUploadRequest
 )
-from s3_utils import generate_presigned_url, generate_s3_key
+from s3_utils import (
+    generate_presigned_url, 
+    generate_s3_key, 
+    calculate_optimal_chunk_size,
+    initiate_multipart_upload as s3_initiate_multipart_upload,
+    generate_presigned_url_for_part as s3_generate_presigned_url_for_part,
+    complete_multipart_upload as s3_complete_multipart_upload,
+    abort_multipart_upload as s3_abort_multipart_upload
+)
 import dynamodb_service
 from tasks import process_video_task, celery_app
 from video_processing_utils import get_video_duration_from_s3, calculate_segments
@@ -113,6 +127,213 @@ async def initiate_upload(request: InitiateUploadRequest) -> InitiateUploadRespo
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Failed to initiate upload: {str(e)}")
+
+
+# === MULTI-PART UPLOAD ENDPOINTS ===
+
+@router.post("/upload/initiate-multipart", response_model=InitiateMultipartUploadResponse)
+async def initiate_multipart_upload(request: InitiateMultipartUploadRequest) -> InitiateMultipartUploadResponse:
+    """
+    Initiate multi-part video upload for large files
+    
+    This endpoint initiates a multi-part upload to S3, which is more efficient
+    for large video files (especially on mobile devices) as it allows parallel
+    upload of chunks and better error recovery.
+    """
+    try:
+        print(f"DEBUG: initiate_multipart_upload called with request: {request}")
+        
+        # Generate unique job ID
+        job_id = str(uuid.uuid4())
+        print(f"DEBUG: Generated job_id = {job_id}")
+
+        # Generate S3 key for the upload
+        s3_key = generate_s3_key(request.filename, job_id)
+        print(f"DEBUG: Generated s3_key = {s3_key}")
+
+        # Calculate optimal chunk size and concurrent uploads
+        # For now, assume mobile if file is large (>100MB)
+        is_mobile = request.file_size > 100 * 1024 * 1024  # 100MB threshold
+        chunk_size, max_concurrent = calculate_optimal_chunk_size(request.file_size, is_mobile)
+        
+        print(f"DEBUG: File size: {request.file_size}, Mobile: {is_mobile}")
+        print(f"DEBUG: Chunk size: {chunk_size}, Max concurrent: {max_concurrent}")
+
+        # Initiate multi-part upload
+        upload_id = s3_initiate_multipart_upload(
+            bucket_name=settings.AWS_BUCKET_NAME,
+            object_key=s3_key,
+            content_type=request.content_type
+        )
+        print(f"DEBUG: Generated upload_id = {upload_id}")
+
+        response = InitiateMultipartUploadResponse(
+            upload_id=upload_id,
+            s3_key=s3_key,
+            job_id=job_id,
+            chunk_size=chunk_size,
+            max_concurrent_uploads=max_concurrent
+        )
+        print(f"DEBUG: Returning response: {response}")
+        return response
+
+    except Exception as e:
+        print(f"DEBUG: ERROR in initiate_multipart_upload: {type(e).__name__}: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to initiate multipart upload: {str(e)}")
+
+
+@router.post("/upload/part", response_model=UploadPartResponse)
+async def get_upload_part_url(request: UploadPartRequest) -> UploadPartResponse:
+    """
+    Get presigned URL for uploading a specific part
+    
+    This endpoint generates a presigned URL for uploading a specific chunk
+    of the multi-part upload.
+    """
+    try:
+        print(f"DEBUG: get_upload_part_url called with request: {request}")
+        
+        # Generate presigned URL for this part
+        presigned_url = s3_generate_presigned_url_for_part(
+            bucket_name=settings.AWS_BUCKET_NAME,
+            object_key=request.s3_key,
+            upload_id=request.upload_id,
+            part_number=request.part_number,
+            expiration=3600  # 1 hour
+        )
+        
+        print(f"DEBUG: Generated presigned URL for part {request.part_number}")
+
+        return UploadPartResponse(
+            presigned_url=presigned_url,
+            part_number=request.part_number
+        )
+
+    except Exception as e:
+        print(f"DEBUG: ERROR in get_upload_part_url: {type(e).__name__}: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to get upload part URL: {str(e)}")
+
+
+@router.post("/upload/complete-multipart", response_model=JobCreatedResponse)
+async def complete_multipart_upload(request: CompleteMultipartUploadRequest) -> JobCreatedResponse:
+    """
+    Complete multi-part upload and start video processing
+    
+    This endpoint completes the multi-part upload and then dispatches
+    the video processing task, similar to the single-part complete endpoint.
+    """
+    try:
+        print(f"DEBUG: complete_multipart_upload called with request: {request}")
+        
+        # Complete the multi-part upload
+        s3_url = s3_complete_multipart_upload(
+            bucket_name=settings.AWS_BUCKET_NAME,
+            object_key=request.s3_key,
+            upload_id=request.upload_id,
+            parts=request.parts
+        )
+        print(f"DEBUG: Multi-part upload completed: {s3_url}")
+        
+        # Get video duration and store it for later use
+        video_duration = None
+        try:
+            print(f"DEBUG: Getting video duration for s3_key: {request.s3_key}")
+            video_duration = get_video_duration_from_s3(settings.AWS_BUCKET_NAME, request.s3_key)
+            print(f"DEBUG: Video duration: {video_duration} seconds")
+        except Exception as duration_error:
+            print(f"DEBUG: Failed to get video duration: {duration_error}")
+            # Continue without duration - it will be calculated later if needed
+        
+        # Convert Pydantic models to dicts for Celery serialization
+        cutting_options_dict = None
+        if request.cutting_options:
+            cutting_options_dict = request.cutting_options.dict()
+
+        text_strategy_str = None
+        if request.text_strategy:
+            text_strategy_str = request.text_strategy.value
+
+        text_input_dict = None
+        if request.text_input:
+            text_input_dict = request.text_input.dict()
+
+        # Dispatch video processing task to Celery
+        task = process_video_task.delay(
+            request.s3_key,
+            request.job_id,
+            cutting_options_dict,
+            text_strategy_str,
+            text_input_dict,
+            request.user_id or "anonymous"  # Use provided user_id or default to "anonymous"
+        )
+
+        # Immediately create DynamoDB job entry (QUEUED) with video duration
+        try:
+            from datetime import datetime, timezone
+            now_iso = datetime.utcnow().replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
+            
+            dynamodb_service.create_job_entry(
+                job_id=request.job_id,
+                user_id=request.user_id,
+                upload_date=now_iso,
+                status="QUEUED",
+                created_at=now_iso,
+                updated_at=now_iso,
+                video_duration=video_duration,  # Store the duration if available
+                # Additional video metadata fields
+                filename=request.filename,
+                file_size=request.file_size,
+                title=request.title,
+                user_email=request.user_email,
+                content_type=request.content_type,
+                bucket_location=request.s3_key
+            )
+        except Exception as e:
+            print(f"[DynamoDB] Failed to create job entry in /upload/complete-multipart for job_id={request.job_id}: {e}")
+
+        return JobCreatedResponse(
+            job_id=request.job_id,
+            status="QUEUED",
+            message="Video processing job has been queued successfully"
+        )
+
+    except Exception as e:
+        print(f"DEBUG: ERROR in complete_multipart_upload: {type(e).__name__}: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to complete multipart upload: {str(e)}")
+
+
+@router.post("/upload/abort-multipart")
+async def abort_multipart_upload(request: AbortMultipartUploadRequest):
+    """
+    Abort a multi-part upload
+    
+    This endpoint aborts an in-progress multi-part upload, cleaning up
+    any uploaded parts and freeing up S3 storage.
+    """
+    try:
+        print(f"DEBUG: abort_multipart_upload called with request: {request}")
+        
+        # Abort the multi-part upload
+        s3_abort_multipart_upload(
+            bucket_name=settings.AWS_BUCKET_NAME,
+            object_key=request.s3_key,
+            upload_id=request.upload_id
+        )
+        
+        print(f"DEBUG: Multi-part upload aborted successfully")
+        return {"message": "Multi-part upload aborted successfully"}
+
+    except Exception as e:
+        print(f"DEBUG: ERROR in abort_multipart_upload: {type(e).__name__}: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to abort multipart upload: {str(e)}")
 
 
 @router.post("/upload/complete", response_model=JobCreatedResponse)

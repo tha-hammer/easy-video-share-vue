@@ -58,6 +58,62 @@ class InitiateUploadResponse(BaseModel):
     job_id: str = Field(..., description="Unique job identifier")
 
 
+# === MULTI-PART UPLOAD MODELS ===
+
+class InitiateMultipartUploadRequest(BaseModel):
+    """Request model for initiating multi-part upload to S3"""
+    filename: str = Field(..., description="Original filename of the video")
+    content_type: str = Field(..., description="MIME type of the video file")
+    file_size: int = Field(..., description="Size of the file in bytes")
+
+
+class InitiateMultipartUploadResponse(BaseModel):
+    """Response model for multi-part upload initiation"""
+    upload_id: str = Field(..., description="S3 multi-part upload ID")
+    s3_key: str = Field(..., description="S3 object key for the uploaded file")
+    job_id: str = Field(..., description="Unique job identifier")
+    chunk_size: int = Field(..., description="Recommended chunk size in bytes")
+    max_concurrent_uploads: int = Field(..., description="Maximum concurrent uploads")
+
+
+class UploadPartRequest(BaseModel):
+    """Request model for uploading a single part"""
+    upload_id: str = Field(..., description="S3 multi-part upload ID")
+    s3_key: str = Field(..., description="S3 object key")
+    part_number: int = Field(..., description="Part number (1-based)")
+    content_type: str = Field(..., description="MIME type of the part")
+
+
+class UploadPartResponse(BaseModel):
+    """Response model for part upload"""
+    presigned_url: str = Field(..., description="Presigned URL for uploading this part")
+    part_number: int = Field(..., description="Part number")
+
+
+class CompleteMultipartUploadRequest(BaseModel):
+    """Request model for completing multi-part upload"""
+    upload_id: str = Field(..., description="S3 multi-part upload ID")
+    s3_key: str = Field(..., description="S3 object key")
+    job_id: str = Field(..., description="Job identifier")
+    parts: List[dict] = Field(..., description="List of uploaded parts with ETags")
+    # Additional metadata for job creation
+    cutting_options: Optional[CuttingOptions] = Field(None, description="Video cutting parameters")
+    text_strategy: Optional[TextStrategy] = Field(None, description="Text overlay strategy")
+    text_input: Optional[TextInput] = Field(None, description="Text content and context for overlay")
+    user_id: Optional[str] = Field(..., description="User identifier for tracking job ownership")
+    filename: Optional[str] = Field(None, description="Original filename of the video")
+    file_size: Optional[int] = Field(None, description="Size of the file in bytes")
+    title: Optional[str] = Field(None, description="Video title")
+    user_email: Optional[str] = Field(None, description="User email address")
+    content_type: Optional[str] = Field(None, description="MIME type of the video file")
+
+
+class AbortMultipartUploadRequest(BaseModel):
+    """Request model for aborting multi-part upload"""
+    upload_id: str = Field(..., description="S3 multi-part upload ID")
+    s3_key: str = Field(..., description="S3 object key")
+
+
 class CompleteUploadRequest(BaseModel):
     """Request model for completing upload and starting processing"""
     s3_key: str = Field(..., description="S3 object key of the uploaded file")
