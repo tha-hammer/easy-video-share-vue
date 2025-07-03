@@ -123,7 +123,11 @@
                 <div class="card card-flush">
                   <div class="card-header">
                     <h5 class="card-title">Debug Information</h5>
-                    <button @click="showDebugPanel = false" class="btn btn-sm btn-icon btn-light">
+                    <button
+                      type="button"
+                      @click="showDebugPanel = false"
+                      class="btn btn-sm btn-icon btn-light"
+                    >
                       <KTIcon icon-name="cross" icon-class="fs-2" />
                     </button>
                   </div>
@@ -144,10 +148,14 @@
                       <strong>Last Error:</strong>
                       <div v-if="fileError" class="text-danger fs-7">{{ fileError }}</div>
                     </div>
-                    <button @click="clearConsole" class="btn btn-sm btn-secondary me-2">
+                    <button
+                      type="button"
+                      @click="clearConsole"
+                      class="btn btn-sm btn-secondary me-2"
+                    >
                       Clear Console
                     </button>
-                    <button @click="copyDebugInfo" class="btn btn-sm btn-primary">
+                    <button type="button" @click="copyDebugInfo" class="btn btn-sm btn-primary">
                       Copy Debug Info
                     </button>
                   </div>
@@ -157,6 +165,7 @@
               <!-- Debug Toggle Button -->
               <div class="mt-3">
                 <button
+                  type="button"
                   @click="showDebugPanel = !showDebugPanel"
                   class="btn btn-sm btn-light-warning"
                 >
