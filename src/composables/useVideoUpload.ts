@@ -256,8 +256,22 @@ export function useVideoUpload() {
           status: xhr.status,
           statusText: xhr.statusText,
           responseText: xhr.responseText,
+          url: presignedUrl.substring(0, 100) + '...',
+          chunkSize: chunk.data.size,
+          networkInfo: {
+            online: navigator.onLine,
+            connectionType:
+              (navigator as Navigator & { connection?: { effectiveType?: string } }).connection
+                ?.effectiveType || 'unknown',
+          },
         })
-        reject(new Error(`Chunk ${chunk.partNumber} upload network error`))
+
+        // Check if we're offline
+        if (!navigator.onLine) {
+          reject(new Error(`Chunk ${chunk.partNumber} failed: Device is offline`))
+        } else {
+          reject(new Error(`Chunk ${chunk.partNumber} upload network error - check connection`))
+        }
       }
 
       xhr.ontimeout = () => {
@@ -329,6 +343,18 @@ export function useVideoUpload() {
       throw new Error('Multi-part upload not initiated')
     }
 
+    // Check network status before starting
+    if (!navigator.onLine) {
+      throw new Error('Device is offline. Please check your internet connection and try again.')
+    }
+
+    console.log('🔍 Debug: Network status check:', {
+      online: navigator.onLine,
+      connectionType:
+        (navigator as Navigator & { connection?: { effectiveType?: string } }).connection
+          ?.effectiveType || 'unknown',
+    })
+
     const progress: UploadProgress = {
       videoId,
       filename: file.name,
@@ -361,6 +387,11 @@ export function useVideoUpload() {
 
           while (retries < maxRetries) {
             try {
+              // Check network status before each attempt
+              if (!navigator.onLine) {
+                throw new Error('Device went offline during upload')
+              }
+
               console.log(
                 `🔄 Attempting chunk ${chunk.partNumber} (attempt ${retries + 1}/${maxRetries})`,
               )

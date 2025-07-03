@@ -116,6 +116,14 @@
                   </div>
                   <small class="text-muted">{{ uploadProgressBar.toFixed(1) }}% complete</small>
                 </div>
+                <!-- Network Status -->
+                <div v-if="uploadStatus === 'uploading'" class="mt-2">
+                  <small class="text-muted">
+                    <span v-if="isOnline" class="text-success">🟢 Online</span>
+                    <span v-else class="text-danger">🔴 Offline</span>
+                    <span v-if="connectionType" class="ms-2">• {{ connectionType }}</span>
+                  </small>
+                </div>
               </div>
 
               <!-- Debug Panel for Mobile Testing -->
@@ -382,6 +390,29 @@ export default defineComponent({
 
     // Browser info for debugging
     const userAgent = ref(navigator.userAgent)
+
+    // Network status tracking
+    const isOnline = ref(navigator.onLine)
+    const connectionType = ref(
+      (navigator as Navigator & { connection?: { effectiveType?: string } }).connection
+        ?.effectiveType || 'unknown',
+    )
+
+    // Listen for online/offline events
+    const updateNetworkStatus = () => {
+      isOnline.value = navigator.onLine
+      connectionType.value =
+        (navigator as Navigator & { connection?: { effectiveType?: string } }).connection
+          ?.effectiveType || 'unknown'
+      console.log('🔍 Debug: Network status changed:', {
+        online: isOnline.value,
+        type: connectionType.value,
+      })
+    }
+
+    // Add event listeners
+    window.addEventListener('online', updateNetworkStatus)
+    window.addEventListener('offline', updateNetworkStatus)
 
     // Upload status tracking
     const uploadStatus = ref<'starting' | 'initiating' | 'uploading' | 'complete' | 'error' | null>(
@@ -840,6 +871,8 @@ export default defineComponent({
       videoDuration,
       showDebugPanel,
       userAgent,
+      isOnline,
+      connectionType,
       uploadStatus,
       uploadStatusMessage,
       uploadStatusClass,
