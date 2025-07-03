@@ -90,6 +90,53 @@
               <div class="form-text mt-2">
                 Maximum file size: 2GB. Supported formats: MP4, MOV, AVI, WebM
               </div>
+
+              <!-- Debug Panel for Mobile Testing -->
+              <div v-if="showDebugPanel" class="mt-4">
+                <div class="card card-flush">
+                  <div class="card-header">
+                    <h5 class="card-title">Debug Information</h5>
+                    <button @click="showDebugPanel = false" class="btn btn-sm btn-icon btn-light">
+                      <KTIcon icon-name="cross" icon-class="fs-2" />
+                    </button>
+                  </div>
+                  <div class="card-body">
+                    <div class="mb-3">
+                      <strong>User Agent:</strong>
+                      <div class="text-muted fs-7">{{ userAgent }}</div>
+                    </div>
+                    <div class="mb-3">
+                      <strong>File Details:</strong>
+                      <div v-if="selectedFile" class="text-muted fs-7">
+                        Name: {{ selectedFile.name }}<br />
+                        Size: {{ formatFileSize(selectedFile.size) }}<br />
+                        Type: {{ selectedFile.type }}
+                      </div>
+                    </div>
+                    <div class="mb-3">
+                      <strong>Last Error:</strong>
+                      <div v-if="fileError" class="text-danger fs-7">{{ fileError }}</div>
+                    </div>
+                    <button @click="clearConsole" class="btn btn-sm btn-secondary me-2">
+                      Clear Console
+                    </button>
+                    <button @click="copyDebugInfo" class="btn btn-sm btn-primary">
+                      Copy Debug Info
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Debug Toggle Button -->
+              <div class="mt-3">
+                <button
+                  @click="showDebugPanel = !showDebugPanel"
+                  class="btn btn-sm btn-light-warning"
+                >
+                  <KTIcon icon-name="bug" icon-class="fs-4 me-1" />
+                  {{ showDebugPanel ? 'Hide' : 'Show' }} Debug Panel
+                </button>
+              </div>
             </div>
           </div>
           <div class="row">
@@ -294,6 +341,12 @@ export default defineComponent({
     const fileError = ref('')
     const isPaused = ref(false)
 
+    // Debug panel state
+    const showDebugPanel = ref(false)
+
+    // Browser info for debugging
+    const userAgent = ref(navigator.userAgent)
+
     // Cutting options (sync with composable)
     type CuttingOptionsPayload =
       | { strategy: 'fixed'; params: { duration_seconds: number } }
@@ -391,8 +444,40 @@ export default defineComponent({
     const goToUploadStep = async () => {
       if (!validateTitle() || !selectedFile.value) return
       try {
+        console.log('🚀 Starting upload process...')
+        console.log('🔍 Debug: File details:', {
+          name: selectedFile.value.name,
+          size: selectedFile.value.size,
+          type: selectedFile.value.type,
+          lastModified: new Date(selectedFile.value.lastModified).toISOString(),
+        })
+        console.log('🔍 Debug: User agent:', navigator.userAgent)
+        console.log('🔍 Debug: Connection info:', {
+          effectiveType:
+            (
+              navigator as Navigator & {
+                connection?: { effectiveType?: string; downlink?: number; rtt?: number }
+              }
+            ).connection?.effectiveType || 'unknown',
+          downlink:
+            (
+              navigator as Navigator & {
+                connection?: { effectiveType?: string; downlink?: number; rtt?: number }
+              }
+            ).connection?.downlink || 'unknown',
+          rtt:
+            (
+              navigator as Navigator & {
+                connection?: { effectiveType?: string; downlink?: number; rtt?: number }
+              }
+            ).connection?.rtt || 'unknown',
+        })
+
         // Check if we should use multi-part upload
         const shouldUseMultipart = videoUpload.shouldUseMultipart(selectedFile.value.size)
+        console.log(
+          `🔍 Debug: Should use multipart: ${shouldUseMultipart} (file size: ${selectedFile.value.size} bytes)`,
+        )
 
         if (shouldUseMultipart) {
           console.log('📦 Using multi-part upload for large file')
@@ -421,9 +506,18 @@ export default defineComponent({
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         }
+        console.log('🔍 Debug: Upload metadata:', metadata)
+
         await videoUpload.uploadVideo(selectedFile.value, metadata)
+        console.log('✅ Upload completed successfully')
         currentStep.value = 2 // Only advance to Cutting Options, do NOT call completeUpload here
       } catch (e) {
+        console.error('❌ Upload failed with error:', e)
+        console.error('❌ Error details:', {
+          message: (e as Error).message,
+          stack: (e as Error).stack,
+          name: (e as Error).name,
+        })
         fileError.value = (e as Error).message
       }
     }
@@ -582,6 +676,35 @@ export default defineComponent({
     // Utils
     const formatFileSize = videoUpload.formatFileSize
     const formatTime = videoUpload.formatTime
+
+    // Debug methods
+    const clearConsole = () => {
+      console.clear()
+      console.log('🔍 Debug: Console cleared')
+    }
+
+    const copyDebugInfo = async () => {
+      const debugInfo = {
+        userAgent: navigator.userAgent,
+        fileDetails: selectedFile.value
+          ? {
+              name: selectedFile.value.name,
+              size: selectedFile.value.size,
+              type: selectedFile.value.type,
+            }
+          : null,
+        lastError: fileError.value,
+        timestamp: new Date().toISOString(),
+      }
+
+      try {
+        await navigator.clipboard.writeText(JSON.stringify(debugInfo, null, 2))
+        console.log('✅ Debug info copied to clipboard')
+      } catch (error) {
+        console.error('❌ Failed to copy debug info:', error)
+      }
+    }
+
     return {
       steps,
       currentStep,
@@ -603,12 +726,16 @@ export default defineComponent({
       uploadComplete,
       estimatedSegments,
       videoDuration,
+      showDebugPanel,
+      userAgent,
       handleFileSelect,
       handleDrop,
       triggerFileSelect,
       goToUploadStep,
       goToCuttingOptions,
       startProcessing,
+      clearConsole,
+      copyDebugInfo,
       formatFileSize,
       formatTime,
     }

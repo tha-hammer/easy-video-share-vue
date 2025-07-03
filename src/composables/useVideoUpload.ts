@@ -178,8 +178,19 @@ export function useVideoUpload() {
     progress: UploadProgress,
   ): Promise<{ ETag: string; PartNumber: number }> => {
     return new Promise((resolve, reject) => {
+      console.log(`🔍 Debug: Starting chunk upload for part ${chunk.partNumber}`)
+      console.log(`🔍 Debug: Chunk size: ${chunk.data.size} bytes`)
+      console.log(`🔍 Debug: Presigned URL: ${presignedUrl.substring(0, 100)}...`)
+      console.log(`🔍 Debug: User agent: ${navigator.userAgent}`)
+      console.log(
+        `🔍 Debug: Connection type: ${(navigator as any).connection?.effectiveType || 'unknown'}`,
+      )
+
       const xhr = new XMLHttpRequest()
       xhr.open('PUT', presignedUrl, true)
+
+      // Don't set Content-Type header for multi-part uploads
+      // xhr.setRequestHeader('Content-Type', 'video/mp4')
 
       xhr.upload.onprogress = (event) => {
         if (event.lengthComputable) {
@@ -197,24 +208,57 @@ export function useVideoUpload() {
           progress.percentage = Math.round((progress.uploadedSize / progress.totalSize) * 100)
 
           uploadProgress.value.set(progress.videoId, { ...progress })
+          console.log(`🔍 Debug: Chunk ${chunk.partNumber} progress: ${chunkProgress.toFixed(1)}%`)
         }
       }
 
       xhr.onload = () => {
+        console.log(`🔍 Debug: Chunk ${chunk.partNumber} upload response status:`, xhr.status)
+        console.log(
+          `🔍 Debug: Chunk ${chunk.partNumber} response headers:`,
+          xhr.getAllResponseHeaders(),
+        )
+        console.log(`🔍 Debug: Chunk ${chunk.partNumber} response text:`, xhr.responseText)
+
         if (xhr.status >= 200 && xhr.status < 300) {
           const etag = xhr.getResponseHeader('ETag')?.replace(/"/g, '') || ''
           progress.completedChunks++
           uploadProgress.value.set(progress.videoId, { ...progress })
+          console.log(`✅ Chunk ${chunk.partNumber} uploaded successfully with ETag: ${etag}`)
           resolve({ ETag: etag, PartNumber: chunk.partNumber })
         } else {
-          reject(new Error(`Chunk upload failed: ${xhr.status} ${xhr.statusText}`))
+          console.error(`❌ Chunk ${chunk.partNumber} upload failed:`, {
+            status: xhr.status,
+            statusText: xhr.statusText,
+            responseText: xhr.responseText,
+            headers: xhr.getAllResponseHeaders(),
+          })
+          reject(
+            new Error(`Chunk upload failed: ${xhr.status} ${xhr.statusText} - ${xhr.responseText}`),
+          )
         }
       }
 
-      xhr.onerror = () => {
-        reject(new Error('Chunk upload network error'))
+      xhr.onerror = (event) => {
+        console.error(`❌ Chunk ${chunk.partNumber} network error:`, event)
+        console.error(`❌ Chunk ${chunk.partNumber} XHR error details:`, {
+          readyState: xhr.readyState,
+          status: xhr.status,
+          statusText: xhr.statusText,
+          responseText: xhr.responseText,
+        })
+        reject(new Error(`Chunk ${chunk.partNumber} upload network error`))
       }
 
+      xhr.ontimeout = () => {
+        console.error(`❌ Chunk ${chunk.partNumber} upload timeout`)
+        reject(new Error(`Chunk ${chunk.partNumber} upload timeout`))
+      }
+
+      // Set timeout for mobile networks
+      xhr.timeout = 300000 // 5 minutes
+
+      console.log(`🔍 Debug: Sending chunk ${chunk.partNumber} data...`)
       xhr.send(chunk.data)
     })
   }
@@ -515,6 +559,16 @@ export function useVideoUpload() {
     const baseUrl = import.meta.env.VITE_AI_VIDEO_BACKEND_URL || 'http://localhost:8000'
     const url = `${baseUrl}/api/upload/part`
 
+    console.log(`🔍 Debug: Getting presigned URL for part ${partNumber}`)
+    console.log(`🔍 Debug: Request URL: ${url}`)
+    console.log(`🔍 Debug: Request body:`, req)
+    console.log(`🔍 Debug: Multipart state:`, {
+      uploadId: multipartState.value.uploadId,
+      s3Key: multipartState.value.s3Key,
+      chunkSize: multipartState.value.chunkSize,
+      maxConcurrent: multipartState.value.maxConcurrentUploads,
+    })
+
     try {
       const res = await fetch(url, {
         method: 'POST',
@@ -522,17 +576,35 @@ export function useVideoUpload() {
         body: JSON.stringify(req),
       })
 
+      console.log(`🔍 Debug: Part ${partNumber} URL response status:`, res.status)
+      console.log(
+        `🔍 Debug: Part ${partNumber} URL response headers:`,
+        Object.fromEntries(res.headers.entries()),
+      )
+
       if (!res.ok) {
         const errorText = await res.text()
+        console.error(`❌ Part ${partNumber} URL request failed:`, {
+          status: res.status,
+          statusText: res.statusText,
+          errorText: errorText,
+          url: url,
+          requestBody: req,
+        })
         throw new Error(
           `Failed to get upload part URL: ${res.status} ${res.statusText} - ${errorText}`,
         )
       }
 
       const data: UploadPartResponse = await res.json()
+      console.log(`✅ Part ${partNumber} presigned URL obtained:`, {
+        partNumber: data.part_number,
+        urlLength: data.presigned_url.length,
+        urlPreview: data.presigned_url.substring(0, 100) + '...',
+      })
       return data
     } catch (error) {
-      console.error('🔍 Debug: Get upload part URL error:', error)
+      console.error(`❌ Part ${partNumber} URL request error:`, error)
       throw error
     }
   }
