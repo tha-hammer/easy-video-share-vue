@@ -91,6 +91,33 @@
                 Maximum file size: 2GB. Supported formats: MP4, MOV, AVI, WebM
               </div>
 
+              <!-- Upload Status Indicator -->
+              <div v-if="uploadStatus" class="alert mt-3" :class="uploadStatusClass">
+                <div class="d-flex align-items-center">
+                  <span
+                    v-if="uploadStatus === 'starting'"
+                    class="spinner-border spinner-border-sm me-2"
+                  ></span>
+                  <span
+                    v-else-if="uploadStatus === 'initiating'"
+                    class="spinner-border spinner-border-sm me-2"
+                  ></span>
+                  <span
+                    v-else-if="uploadStatus === 'uploading'"
+                    class="spinner-border spinner-border-sm me-2"
+                  ></span>
+                  <span v-else-if="uploadStatus === 'complete'" class="text-success me-2">✅</span>
+                  <span v-else-if="uploadStatus === 'error'" class="text-danger me-2">❌</span>
+                  <strong>{{ uploadStatusMessage }}</strong>
+                </div>
+                <div v-if="uploadStatus === 'uploading' && currentProgress" class="mt-2">
+                  <div class="progress" style="height: 4px">
+                    <div class="progress-bar" :style="{ width: uploadProgressBar + '%' }"></div>
+                  </div>
+                  <small class="text-muted">{{ uploadProgressBar.toFixed(1) }}% complete</small>
+                </div>
+              </div>
+
               <!-- Debug Panel for Mobile Testing -->
               <div v-if="showDebugPanel" class="mt-4">
                 <div class="card card-flush">
@@ -347,6 +374,26 @@ export default defineComponent({
     // Browser info for debugging
     const userAgent = ref(navigator.userAgent)
 
+    // Upload status tracking
+    const uploadStatus = ref<'starting' | 'initiating' | 'uploading' | 'complete' | 'error' | null>(
+      null,
+    )
+    const uploadStatusMessage = ref('')
+    const uploadStatusClass = computed(() => {
+      switch (uploadStatus.value) {
+        case 'starting':
+        case 'initiating':
+        case 'uploading':
+          return 'alert-info'
+        case 'complete':
+          return 'alert-success'
+        case 'error':
+          return 'alert-danger'
+        default:
+          return 'alert-info'
+      }
+    })
+
     // Cutting options (sync with composable)
     type CuttingOptionsPayload =
       | { strategy: 'fixed'; params: { duration_seconds: number } }
@@ -443,8 +490,24 @@ export default defineComponent({
     // Step 1 -> Step 2
     const goToUploadStep = async () => {
       if (!validateTitle() || !selectedFile.value) return
+
+      // Immediately show we're starting
+      console.log('🚀 Starting upload process...')
+      fileError.value = '' // Clear any previous errors
+
+      // Set initial status
+      uploadStatus.value = 'starting'
+      uploadStatusMessage.value = 'Starting upload process...'
+
+      // Add immediate visual feedback
+      const uploadButton = document.querySelector('button[type="submit"]') as HTMLButtonElement
+      if (uploadButton) {
+        uploadButton.disabled = true
+        uploadButton.innerHTML =
+          '<span class="spinner-border spinner-border-sm me-2"></span>Starting Upload...'
+      }
+
       try {
-        console.log('🚀 Starting upload process...')
         console.log('🔍 Debug: File details:', {
           name: selectedFile.value.name,
           size: selectedFile.value.size,
@@ -479,6 +542,16 @@ export default defineComponent({
           `🔍 Debug: Should use multipart: ${shouldUseMultipart} (file size: ${selectedFile.value.size} bytes)`,
         )
 
+        // Update status to initiating
+        uploadStatus.value = 'initiating'
+        uploadStatusMessage.value = 'Initiating upload...'
+
+        // Update button text to show current step
+        if (uploadButton) {
+          uploadButton.innerHTML =
+            '<span class="spinner-border spinner-border-sm me-2"></span>Initiating Upload...'
+        }
+
         if (shouldUseMultipart) {
           console.log('📦 Using multi-part upload for large file')
           // Initiate multi-part upload
@@ -487,6 +560,16 @@ export default defineComponent({
           console.log('📤 Using single-part upload for smaller file')
           // Initiate single-part upload
           await videoUpload.initiateUpload(selectedFile.value)
+        }
+
+        // Update status to uploading
+        uploadStatus.value = 'uploading'
+        uploadStatusMessage.value = 'Uploading to S3...'
+
+        // Update button text to show upload progress
+        if (uploadButton) {
+          uploadButton.innerHTML =
+            '<span class="spinner-border spinner-border-sm me-2"></span>Uploading to S3...'
         }
 
         // Start S3 upload using composable (uses presignedUrl, s3Key)
@@ -510,6 +593,16 @@ export default defineComponent({
 
         await videoUpload.uploadVideo(selectedFile.value, metadata)
         console.log('✅ Upload completed successfully')
+
+        // Update status to complete
+        uploadStatus.value = 'complete'
+        uploadStatusMessage.value = 'Upload completed successfully!'
+
+        // Update button text to show completion
+        if (uploadButton) {
+          uploadButton.innerHTML = '<span class="text-success me-2">✅</span>Upload Complete!'
+        }
+
         currentStep.value = 2 // Only advance to Cutting Options, do NOT call completeUpload here
       } catch (e) {
         console.error('❌ Upload failed with error:', e)
@@ -519,6 +612,16 @@ export default defineComponent({
           name: (e as Error).name,
         })
         fileError.value = (e as Error).message
+
+        // Update status to error
+        uploadStatus.value = 'error'
+        uploadStatusMessage.value = `Upload failed: ${(e as Error).message}`
+
+        // Reset button on error
+        if (uploadButton) {
+          uploadButton.disabled = false
+          uploadButton.innerHTML = 'Next: Upload Video'
+        }
       }
     }
     // Step 2 -> Step 3
@@ -728,6 +831,9 @@ export default defineComponent({
       videoDuration,
       showDebugPanel,
       userAgent,
+      uploadStatus,
+      uploadStatusMessage,
+      uploadStatusClass,
       handleFileSelect,
       handleDrop,
       triggerFileSelect,
