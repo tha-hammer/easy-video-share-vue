@@ -346,20 +346,57 @@ export function useVideoUpload() {
       for (let i = 0; i < chunks.length; i += concurrencyLimit) {
         const batch = chunks.slice(i, i + concurrencyLimit)
         const batchPromises = batch.map(async (chunk) => {
-          // Get presigned URL for this part
-          const partResponse = await getUploadPartUrl(chunk.partNumber)
+          let retries = 0
+          const maxRetries = 3
 
-          // Upload the chunk
-          const result = await uploadChunk(chunk, partResponse.presigned_url, progress)
-          return result
+          while (retries < maxRetries) {
+            try {
+              console.log(
+                `🔄 Attempting chunk ${chunk.partNumber} (attempt ${retries + 1}/${maxRetries})`,
+              )
+
+              // Get presigned URL for this part
+              const partResponse = await getUploadPartUrl(chunk.partNumber)
+
+              // Upload the chunk
+              const result = await uploadChunk(chunk, partResponse.presigned_url, progress)
+              console.log(`✅ Chunk ${chunk.partNumber} uploaded successfully`)
+              return result
+            } catch (error) {
+              retries++
+              console.error(
+                `❌ Chunk ${chunk.partNumber} failed (attempt ${retries}/${maxRetries}):`,
+                error,
+              )
+
+              if (retries >= maxRetries) {
+                throw new Error(
+                  `Chunk ${chunk.partNumber} failed after ${maxRetries} attempts: ${(error as Error).message}`,
+                )
+              }
+
+              // Wait before retry (exponential backoff)
+              const delay = Math.min(1000 * Math.pow(2, retries - 1), 5000) // 1s, 2s, 4s, 5s max
+              console.log(`⏳ Waiting ${delay}ms before retry...`)
+              await new Promise((resolve) => setTimeout(resolve, delay))
+            }
+          }
+
+          // This should never be reached due to the throw in the while loop
+          throw new Error(`Chunk ${chunk.partNumber} failed after ${maxRetries} attempts`)
         })
 
-        const batchResults = await Promise.all(batchPromises)
-        uploadedParts.push(...batchResults)
+        try {
+          const batchResults = await Promise.all(batchPromises)
+          uploadedParts.push(...batchResults)
 
-        console.log(
-          `✅ Uploaded batch ${Math.floor(i / concurrencyLimit) + 1}/${Math.ceil(chunks.length / concurrencyLimit)}`,
-        )
+          console.log(
+            `✅ Uploaded batch ${Math.floor(i / concurrencyLimit) + 1}/${Math.ceil(chunks.length / concurrencyLimit)}`,
+          )
+        } catch (error) {
+          console.error(`❌ Batch failed:`, error)
+          throw error // Re-throw to trigger abort
+        }
       }
 
       // Complete the multi-part upload
