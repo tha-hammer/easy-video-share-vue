@@ -85,12 +85,10 @@ interface UploadProgress {
 }
 
 interface CuttingOptions {
-  strategy: 'fixed' | 'random'
-  params: {
-    duration_seconds?: number
-    min_duration?: number
-    max_duration?: number
-  }
+  type: 'fixed' | 'random'
+  duration_seconds?: number
+  min_duration?: number
+  max_duration?: number
 }
 
 export function useVideoUpload() {
@@ -106,8 +104,8 @@ export function useVideoUpload() {
   const estimatedSegments = ref<number | null>(null)
   const videoDuration = ref<number | null>(null)
   const cuttingOptions = ref<CuttingOptions>({
-    strategy: 'fixed',
-    params: { duration_seconds: 30 },
+    type: 'fixed',
+    duration_seconds: 30,
   })
 
   // Multi-part upload state
