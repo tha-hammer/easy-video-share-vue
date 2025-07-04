@@ -319,7 +319,7 @@
               <input
                 type="number"
                 class="form-control mb-2"
-                v-model.number="cuttingOptions.params.min_seconds"
+                v-model.number="cuttingOptions.params.min_duration"
                 min="5"
                 max="600"
                 required
@@ -328,7 +328,7 @@
               <input
                 type="number"
                 class="form-control"
-                v-model.number="cuttingOptions.params.max_seconds"
+                v-model.number="cuttingOptions.params.max_duration"
                 min="5"
                 max="600"
                 required
@@ -611,7 +611,7 @@ export default defineComponent({
     // Cutting options (sync with composable)
     type CuttingOptionsPayload =
       | { strategy: 'fixed'; params: { duration_seconds: number } }
-      | { strategy: 'random'; params: { min_seconds: number; max_seconds: number } }
+      | { strategy: 'random'; params: { min_duration: number; max_duration: number } }
     const cuttingOptions = ref<CuttingOptionsPayload>({
       strategy: 'fixed',
       params: { duration_seconds: 30 },
@@ -877,30 +877,30 @@ export default defineComponent({
         const cuttingOptionsPayload = cuttingOptions.value
         type TextInput = {
           strategy: 'one_for_all' | 'base_vary' | 'unique_for_all'
-          base_text: string | null
-          context: string | null
-          unique_texts: string[] | null
+          base_text: string | undefined
+          context: string | undefined
+          unique_texts: string[] | undefined
         }
         let text_input: TextInput
         if (textStrategy.value === 'one_for_all') {
           text_input = {
             strategy: 'one_for_all',
             base_text: baseText.value,
-            context: null,
-            unique_texts: null,
+            context: undefined,
+            unique_texts: undefined,
           }
         } else if (textStrategy.value === 'base_vary') {
           text_input = {
             strategy: 'base_vary',
             base_text: baseText.value,
             context: context.value,
-            unique_texts: null,
+            unique_texts: undefined,
           }
         } else {
           text_input = {
             strategy: 'unique_for_all',
-            base_text: null,
-            context: null,
+            base_text: undefined,
+            context: undefined,
             unique_texts: uniqueTexts.value,
           }
         }
@@ -947,10 +947,10 @@ export default defineComponent({
           ? cuttingOptions.value.params.duration_seconds
           : undefined,
         cuttingOptions.value.strategy === 'random'
-          ? cuttingOptions.value.params.min_seconds
+          ? cuttingOptions.value.params.min_duration
           : undefined,
         cuttingOptions.value.strategy === 'random'
-          ? cuttingOptions.value.params.max_seconds
+          ? cuttingOptions.value.params.max_duration
           : undefined,
       ],
       async ([step]) => {
@@ -967,14 +967,14 @@ export default defineComponent({
               }
             } else if (
               cuttingOptions.value.strategy === 'random' &&
-              cuttingOptions.value.params.min_seconds != null &&
-              cuttingOptions.value.params.max_seconds != null
+              cuttingOptions.value.params.min_duration != null &&
+              cuttingOptions.value.params.max_duration != null
             ) {
               payload = {
                 strategy: 'random',
                 params: {
-                  min_seconds: cuttingOptions.value.params.min_seconds,
-                  max_seconds: cuttingOptions.value.params.max_seconds,
+                  min_duration: cuttingOptions.value.params.min_duration,
+                  max_duration: cuttingOptions.value.params.max_duration,
                 },
               }
             } else {
@@ -983,11 +983,11 @@ export default defineComponent({
               return
             }
             const result = await videoUpload.analyzeDuration(videoUpload.s3Key.value!, payload)
-            videoUpload.estimatedSegments.value = result.estimated_num_segments
-            videoUpload.videoDuration.value = result.duration_seconds
+            videoUpload.estimatedSegments.value = result.num_segments
+            videoUpload.videoDuration.value = result.total_duration
             // Sync uniqueTexts array for UNIQUE_FOR_ALL
             if (textStrategy.value === 'unique_for_all') {
-              const n = result.estimated_num_segments || 0
+              const n = result.num_segments || 0
               if (uniqueTexts.value.length !== n) {
                 uniqueTexts.value = Array.from({ length: n }, (_, i) => uniqueTexts.value[i] || '')
               }
@@ -1008,7 +1008,7 @@ export default defineComponent({
         if (newStrategy === 'fixed') {
           cuttingOptions.value.params = { duration_seconds: 30 }
         } else if (newStrategy === 'random') {
-          cuttingOptions.value.params = { min_seconds: 28, max_seconds: 56 }
+          cuttingOptions.value.params = { min_duration: 28, max_duration: 56 }
         }
       },
       { immediate: true },
