@@ -218,6 +218,39 @@ async def get_upload_part_url(request: UploadPartRequest) -> UploadPartResponse:
         raise HTTPException(status_code=500, detail=f"Failed to get upload part URL: {str(e)}")
 
 
+@router.post("/upload/finalize-multipart")
+async def finalize_multipart_upload(request: CompleteMultipartUploadRequest):
+    """
+    Finalize multi-part upload (S3 only, no processing)
+    
+    This endpoint only completes the S3 multi-part upload without
+    starting any video processing. It's called when the upload finishes.
+    """
+    try:
+        print(f"DEBUG: finalize_multipart_upload called with request: {request}")
+        
+        # Validate that we have parts to complete the upload
+        if not request.parts or len(request.parts) == 0:
+            raise HTTPException(status_code=400, detail="No parts provided to complete multipart upload")
+        
+        # Complete the multi-part upload
+        s3_url = s3_complete_multipart_upload(
+            bucket_name=settings.AWS_BUCKET_NAME,
+            object_key=request.s3_key,
+            upload_id=request.upload_id,
+            parts=request.parts
+        )
+        print(f"DEBUG: Multi-part upload finalized: {s3_url}")
+        
+        return {"message": "Multi-part upload finalized successfully", "s3_url": s3_url}
+
+    except Exception as e:
+        print(f"DEBUG: ERROR in finalize_multipart_upload: {type(e).__name__}: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to finalize multipart upload: {str(e)}")
+
+
 @router.post("/upload/complete-multipart", response_model=JobCreatedResponse)
 async def complete_multipart_upload(request: CompleteMultipartUploadRequest) -> JobCreatedResponse:
     """
@@ -228,6 +261,10 @@ async def complete_multipart_upload(request: CompleteMultipartUploadRequest) -> 
     """
     try:
         print(f"DEBUG: complete_multipart_upload called with request: {request}")
+        
+        # Validate that we have parts to complete the upload
+        if not request.parts or len(request.parts) == 0:
+            raise HTTPException(status_code=400, detail="No parts provided to complete multipart upload")
         
         # Complete the multi-part upload
         s3_url = s3_complete_multipart_upload(
