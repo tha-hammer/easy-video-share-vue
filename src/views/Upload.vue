@@ -287,7 +287,7 @@
                   type="radio"
                   id="fixed"
                   value="fixed"
-                  v-model="cuttingOptions.strategy"
+                  v-model="cuttingOptions.type"
                 />
                 <label class="form-check-label" for="fixed">Fixed Duration</label>
               </div>
@@ -297,17 +297,17 @@
                   type="radio"
                   id="random"
                   value="random"
-                  v-model="cuttingOptions.strategy"
+                  v-model="cuttingOptions.type"
                 />
                 <label class="form-check-label" for="random">Random Duration</label>
               </div>
             </div>
-            <div v-if="cuttingOptions.strategy === 'fixed'" class="mb-6">
+            <div v-if="cuttingOptions.type === 'fixed'" class="mb-6">
               <label class="form-label">Segment Duration (seconds)</label>
               <input
                 type="number"
                 class="form-control"
-                v-model.number="cuttingOptions.params.duration_seconds"
+                v-model.number="cuttingOptions.duration_seconds"
                 min="5"
                 max="600"
                 required
@@ -319,7 +319,7 @@
               <input
                 type="number"
                 class="form-control mb-2"
-                v-model.number="cuttingOptions.params.min_duration"
+                v-model.number="cuttingOptions.min_duration"
                 min="5"
                 max="600"
                 required
@@ -328,7 +328,7 @@
               <input
                 type="number"
                 class="form-control"
-                v-model.number="cuttingOptions.params.max_duration"
+                v-model.number="cuttingOptions.max_duration"
                 min="5"
                 max="600"
                 required
@@ -610,11 +610,11 @@ export default defineComponent({
 
     // Cutting options (sync with composable)
     type CuttingOptionsPayload =
-      | { strategy: 'fixed'; params: { duration_seconds: number } }
-      | { strategy: 'random'; params: { min_duration: number; max_duration: number } }
+      | { type: 'fixed'; duration_seconds: number }
+      | { type: 'random'; min_duration: number; max_duration: number }
     const cuttingOptions = ref<CuttingOptionsPayload>({
-      strategy: 'fixed',
-      params: { duration_seconds: 30 },
+      type: 'fixed',
+      duration_seconds: 30,
     })
 
     // Text customization state
@@ -655,11 +655,44 @@ export default defineComponent({
         fileError.value = 'File size exceeds 2GB limit'
         return false
       }
-      const allowedTypes = ['video/mp4', 'video/mov', 'video/avi', 'video/webm']
-      if (!allowedTypes.includes(file.type)) {
-        fileError.value = 'Unsupported file format. Please use MP4, MOV, AVI, or WebM'
+
+      // More comprehensive list of video MIME types including iPhone variants
+      const allowedTypes = [
+        'video/mp4',
+        'video/mov',
+        'video/avi',
+        'video/webm',
+        'video/quicktime', // iPhone MOV files
+        'video/x-msvideo', // Alternative AVI MIME type
+        'video/x-ms-wmv', // Windows Media Video
+        'video/3gpp', // Mobile video format
+        'video/3gpp2', // Mobile video format
+        'application/octet-stream', // Sometimes iPhone sends this for videos
+      ]
+
+      // Check if it's a video file by MIME type
+      const isVideoByMimeType = allowedTypes.includes(file.type)
+
+      // Also check by file extension as fallback
+      const fileName = file.name.toLowerCase()
+      const videoExtensions = ['.mp4', '.mov', '.avi', '.webm', '.m4v', '.3gp', '.3g2']
+      const hasVideoExtension = videoExtensions.some((ext) => fileName.endsWith(ext))
+
+      // Debug logging
+      console.log('🔍 Debug: File validation:', {
+        fileName: file.name,
+        fileType: file.type,
+        fileSize: file.size,
+        isVideoByMimeType,
+        hasVideoExtension,
+        allowedTypes,
+      })
+
+      if (!isVideoByMimeType && !hasVideoExtension) {
+        fileError.value = `Unsupported file format. File type: ${file.type || 'unknown'}. Please use MP4, MOV, AVI, or WebM`
         return false
       }
+
       return true
     }
     const validateTitle = (): boolean => {
@@ -942,40 +975,32 @@ export default defineComponent({
     watch(
       () => [
         currentStep.value,
-        cuttingOptions.value.strategy,
-        cuttingOptions.value.strategy === 'fixed'
-          ? cuttingOptions.value.params.duration_seconds
-          : undefined,
-        cuttingOptions.value.strategy === 'random'
-          ? cuttingOptions.value.params.min_duration
-          : undefined,
-        cuttingOptions.value.strategy === 'random'
-          ? cuttingOptions.value.params.max_duration
-          : undefined,
+        cuttingOptions.value.type,
+        cuttingOptions.value.type === 'fixed' ? cuttingOptions.value.duration_seconds : undefined,
+        cuttingOptions.value.type === 'random' ? cuttingOptions.value.min_duration : undefined,
+        cuttingOptions.value.type === 'random' ? cuttingOptions.value.max_duration : undefined,
       ],
       async ([step]) => {
         if (step === 2) {
           try {
             let payload: CuttingOptionsPayload
             if (
-              cuttingOptions.value.strategy === 'fixed' &&
-              cuttingOptions.value.params.duration_seconds != null
+              cuttingOptions.value.type === 'fixed' &&
+              cuttingOptions.value.duration_seconds != null
             ) {
               payload = {
-                strategy: 'fixed',
-                params: { duration_seconds: cuttingOptions.value.params.duration_seconds },
+                type: 'fixed',
+                duration_seconds: cuttingOptions.value.duration_seconds,
               }
             } else if (
-              cuttingOptions.value.strategy === 'random' &&
-              cuttingOptions.value.params.min_duration != null &&
-              cuttingOptions.value.params.max_duration != null
+              cuttingOptions.value.type === 'random' &&
+              cuttingOptions.value.min_duration != null &&
+              cuttingOptions.value.max_duration != null
             ) {
               payload = {
-                strategy: 'random',
-                params: {
-                  min_duration: cuttingOptions.value.params.min_duration,
-                  max_duration: cuttingOptions.value.params.max_duration,
-                },
+                type: 'random',
+                min_duration: cuttingOptions.value.min_duration,
+                max_duration: cuttingOptions.value.max_duration,
               }
             } else {
               videoUpload.estimatedSegments.value = 0
@@ -1003,12 +1028,12 @@ export default defineComponent({
     )
     // Watch strategy to reset params when switching
     watch(
-      () => cuttingOptions.value.strategy,
-      (newStrategy) => {
-        if (newStrategy === 'fixed') {
-          cuttingOptions.value.params = { duration_seconds: 30 }
-        } else if (newStrategy === 'random') {
-          cuttingOptions.value.params = { min_duration: 28, max_duration: 56 }
+      () => cuttingOptions.value.type,
+      (newType) => {
+        if (newType === 'fixed') {
+          cuttingOptions.value = { type: 'fixed', duration_seconds: 30 }
+        } else if (newType === 'random') {
+          cuttingOptions.value = { type: 'random', min_duration: 28, max_duration: 56 }
         }
       },
       { immediate: true },
