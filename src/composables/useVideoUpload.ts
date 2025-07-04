@@ -443,8 +443,17 @@ export function useVideoUpload() {
         }
       }
 
-      // Complete the multi-part upload
-      await completeMultipartUpload(uploadedParts, metadata)
+      // Store the uploaded parts in multipart state for later use
+      if (multipartState.value) {
+        multipartState.value.parts = uploadedParts.map((p) => ({
+          partNumber: p.PartNumber,
+          etag: p.ETag,
+          uploaded: true,
+        }))
+      }
+
+      // Finalize the multi-part upload (S3 only, no processing)
+      await finalizeMultipartUpload(uploadedParts, metadata)
 
       progress.status = 'completed'
       progress.percentage = 100
@@ -690,8 +699,8 @@ export function useVideoUpload() {
     }
   }
 
-  // API: Complete multi-part upload
-  const completeMultipartUpload = async (
+  // API: Finalize multi-part upload (S3 only, no processing)
+  const finalizeMultipartUpload = async (
     parts: Array<{ ETag: string; PartNumber: number }>,
     metadata: VideoMetadata,
   ): Promise<void> => {
@@ -713,7 +722,7 @@ export function useVideoUpload() {
     }
 
     const baseUrl = import.meta.env.VITE_AI_VIDEO_BACKEND_URL || 'http://localhost:8000'
-    const url = `${baseUrl}/api/upload/complete-multipart`
+    const url = `${baseUrl}/api/upload/finalize-multipart`
 
     try {
       const res = await fetch(url, {
@@ -725,14 +734,14 @@ export function useVideoUpload() {
       if (!res.ok) {
         const errorText = await res.text()
         throw new Error(
-          `Failed to complete multipart upload: ${res.status} ${res.statusText} - ${errorText}`,
+          `Failed to finalize multipart upload: ${res.status} ${res.statusText} - ${errorText}`,
         )
       }
 
       const data = await res.json()
-      console.log('🔍 Debug: Multi-part upload completed:', data)
+      console.log('🔍 Debug: Multi-part upload finalized:', data)
     } catch (error) {
-      console.error('🔍 Debug: Complete multipart upload error:', error)
+      console.error('🔍 Debug: Finalize multipart upload error:', error)
       throw error
     }
   }
@@ -969,6 +978,7 @@ export function useVideoUpload() {
     multipartState,
     initiateUpload,
     initiateMultipartUpload,
+    finalizeMultipartUpload,
     completeUpload,
     analyzeDuration,
 
