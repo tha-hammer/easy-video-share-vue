@@ -650,7 +650,7 @@ export default defineComponent({
     // File validation
     const validateFile = (file: File): boolean => {
       fileError.value = ''
-      const maxSize = 2 * 1024 * 1024 * 1024 // 2GB
+      const maxSize = 5 * 1024 * 1024 * 1024 // 2GB
       if (file.size > maxSize) {
         fileError.value = 'File size exceeds 2GB limit'
         return false
