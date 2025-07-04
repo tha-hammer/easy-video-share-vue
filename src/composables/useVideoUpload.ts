@@ -44,9 +44,14 @@ interface CompleteMultipartUploadRequest {
     PartNumber: number
     ETag: string
   }>
-  cutting_options?: any
+  cutting_options?: CuttingOptions
   text_strategy?: string
-  text_input?: any
+  text_input?: {
+    strategy: string
+    base_text?: string
+    context?: string
+    unique_texts?: string[]
+  }
   user_id?: string
   filename?: string
   file_size?: number
@@ -763,60 +768,130 @@ export function useVideoUpload() {
     }
   }
 
-  // API: Complete upload (single-part)
+  // API: Complete upload (handles both single-part and multi-part)
   const completeUpload = async (
-    cuttingOptions: any,
+    cuttingOptions: CuttingOptions,
     textStrategy: string,
-    textInput: any,
+    textInput: {
+      strategy: string
+      base_text?: string
+      context?: string
+      unique_texts?: string[]
+    },
     userId: string,
     videoMetadata: VideoMetadata,
   ): Promise<void> => {
-    const req = {
-      s3_key: s3Key.value,
-      job_id: jobId.value,
-      cutting_options: cuttingOptions,
-      text_strategy: textStrategy,
-      text_input: textInput,
-      user_id: userId,
-      filename: videoMetadata.filename,
-      file_size: videoMetadata.file_size,
-      title: videoMetadata.title,
-      user_email: videoMetadata.user_email,
-      content_type: videoMetadata.content_type,
-    }
-
-    // Use Railway backend URL from environment or fallback to localhost for development
+    // Determine which endpoint to use based on whether multi-part upload was used
+    const isMultipart = multipartState.value !== null
     const baseUrl = import.meta.env.VITE_AI_VIDEO_BACKEND_URL || 'http://localhost:8000'
-    const url = `${baseUrl}/api/upload/complete`
 
-    console.log('🔍 Debug: Making complete request to:', url)
-    console.log('🔍 Debug: Request body:', req)
-
-    try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(req),
-      })
-
-      console.log('🔍 Debug: Complete response status:', res.status)
-
-      if (!res.ok) {
-        const errorText = await res.text()
-        console.error('🔍 Debug: Complete error response:', errorText)
-        throw new Error(`Failed to complete upload: ${res.status} ${res.statusText} - ${errorText}`)
+    if (isMultipart) {
+      // Use multi-part completion endpoint
+      if (!multipartState.value) {
+        throw new Error('Multi-part upload state not found')
       }
 
-      const data = await res.json()
-      console.log('🔍 Debug: Complete success response:', data)
-    } catch (error) {
-      console.error('🔍 Debug: Complete fetch error:', error)
-      throw error
+      const req = {
+        upload_id: multipartState.value.uploadId,
+        s3_key: s3Key.value,
+        job_id: jobId.value,
+        parts: multipartState.value.parts.map((p) => ({
+          PartNumber: p.partNumber,
+          ETag: p.etag,
+        })),
+        cutting_options: cuttingOptions,
+        text_strategy: textStrategy,
+        text_input: textInput,
+        user_id: userId,
+        filename: videoMetadata.filename,
+        file_size: videoMetadata.file_size,
+        title: videoMetadata.title,
+        user_email: videoMetadata.user_email,
+        content_type: videoMetadata.content_type,
+      }
+
+      const url = `${baseUrl}/api/upload/complete-multipart`
+      console.log('🔍 Debug: Making multi-part complete request to:', url)
+      console.log('🔍 Debug: Request body:', req)
+
+      try {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(req),
+        })
+
+        console.log('🔍 Debug: Multi-part complete response status:', res.status)
+
+        if (!res.ok) {
+          const errorText = await res.text()
+          console.error('🔍 Debug: Multi-part complete error response:', errorText)
+          throw new Error(
+            `Failed to complete multi-part upload: ${res.status} ${res.statusText} - ${errorText}`,
+          )
+        }
+
+        const data = await res.json()
+        console.log('🔍 Debug: Multi-part complete success response:', data)
+      } catch (error) {
+        console.error('🔍 Debug: Multi-part complete fetch error:', error)
+        throw error
+      }
+    } else {
+      // Use single-part completion endpoint
+      const req = {
+        s3_key: s3Key.value,
+        job_id: jobId.value,
+        cutting_options: cuttingOptions,
+        text_strategy: textStrategy,
+        text_input: textInput,
+        user_id: userId,
+        filename: videoMetadata.filename,
+        file_size: videoMetadata.file_size,
+        title: videoMetadata.title,
+        user_email: videoMetadata.user_email,
+        content_type: videoMetadata.content_type,
+      }
+
+      const url = `${baseUrl}/api/upload/complete`
+      console.log('🔍 Debug: Making single-part complete request to:', url)
+      console.log('🔍 Debug: Request body:', req)
+
+      try {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(req),
+        })
+
+        console.log('🔍 Debug: Single-part complete response status:', res.status)
+
+        if (!res.ok) {
+          const errorText = await res.text()
+          console.error('🔍 Debug: Single-part complete error response:', errorText)
+          throw new Error(
+            `Failed to complete upload: ${res.status} ${res.statusText} - ${errorText}`,
+          )
+        }
+
+        const data = await res.json()
+        console.log('🔍 Debug: Single-part complete success response:', data)
+      } catch (error) {
+        console.error('🔍 Debug: Single-part complete fetch error:', error)
+        throw error
+      }
     }
   }
 
   // API: Analyze duration
-  const analyzeDuration = async (s3Key: string, cuttingOptions: any): Promise<any> => {
+  const analyzeDuration = async (
+    s3Key: string,
+    cuttingOptions: CuttingOptions,
+  ): Promise<{
+    total_duration: number
+    num_segments: number
+    segment_durations: number[]
+  }> => {
     const req = {
       s3_key: s3Key,
       cutting_options: cuttingOptions,

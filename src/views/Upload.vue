@@ -405,9 +405,90 @@
         <!-- Step 4: Processing Dashboard -->
         <div v-else-if="currentStep === 3">
           <div class="text-center my-10">
-            <span class="spinner-border text-primary mb-4" style="width: 3rem; height: 3rem"></span>
-            <h4 class="fw-bold mt-4">Processing your video...</h4>
-            <div class="text-muted">This may take a few moments. Please wait.</div>
+            <!-- Processing Animation -->
+            <div class="mb-6">
+              <div class="processing-animation mb-4">
+                <div class="processing-dots">
+                  <span></span>
+                  <span></span>
+                  <span></span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Processing Status -->
+            <h4 class="fw-bold mb-3">Processing your video...</h4>
+            <div class="text-muted mb-4">{{ processingStatus }}</div>
+
+            <!-- Progress Bar -->
+            <div class="progress mb-4" style="height: 8px; max-width: 400px; margin: 0 auto">
+              <div
+                class="progress-bar bg-primary"
+                role="progressbar"
+                :style="{ width: processingProgress + '%' }"
+                :aria-valuenow="processingProgress"
+                aria-valuemin="0"
+                aria-valuemax="100"
+              ></div>
+            </div>
+
+            <!-- Progress Details -->
+            <div
+              class="d-flex justify-content-between text-muted fs-7 mb-3"
+              style="max-width: 400px; margin: 0 auto"
+            >
+              <span>{{ processingProgress.toFixed(1) }}% complete</span>
+              <span v-if="processingStep">{{ processingStep }}</span>
+            </div>
+
+            <!-- Estimated Time -->
+            <div v-if="processingTimeRemaining" class="text-muted fs-7 mb-4">
+              Estimated time remaining: {{ formatTime(processingTimeRemaining) }}
+            </div>
+
+            <!-- Network Status -->
+            <div class="text-muted fs-7 mb-4">
+              <span v-if="isOnline" class="text-success">🟢 Online</span>
+              <span v-else class="text-danger">🔴 Offline</span>
+              <span v-if="connectionType" class="ms-2">• {{ connectionType }}</span>
+            </div>
+
+            <!-- Processing Steps -->
+            <div class="processing-steps mb-4">
+              <div
+                v-for="(step, index) in processingSteps"
+                :key="index"
+                class="processing-step"
+                :class="{
+                  completed: step.completed,
+                  active: step.active,
+                  pending: !step.completed && !step.active,
+                }"
+              >
+                <div class="step-icon">
+                  <span v-if="step.completed" class="text-success">✅</span>
+                  <span
+                    v-else-if="step.active"
+                    class="spinner-border spinner-border-sm text-primary"
+                  ></span>
+                  <span v-else class="text-muted">{{ index + 1 }}</span>
+                </div>
+                <div class="step-text">
+                  <div class="step-title">{{ step.title }}</div>
+                  <div v-if="step.description" class="step-description text-muted fs-7">
+                    {{ step.description }}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Cancel Button -->
+            <div class="mt-4">
+              <button type="button" class="btn btn-light-danger" @click="cancelProcessing">
+                <KTIcon icon-name="cross" icon-class="fs-4 me-2" />
+                Cancel Processing
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -494,6 +575,38 @@ export default defineComponent({
     const isUploading = ref(false)
     const uploadSpeed = ref(0)
     const estimatedTimeRemaining = ref(0)
+
+    // Processing state
+    const processingStatus = ref('Initializing processing...')
+    const processingProgress = ref(0)
+    const processingStep = ref('')
+    const processingTimeRemaining = ref(0)
+    const processingSteps = ref([
+      {
+        title: 'Analyzing Video',
+        description: 'Extracting metadata and duration',
+        completed: false,
+        active: false,
+      },
+      {
+        title: 'Segmenting Video',
+        description: 'Cutting video into segments',
+        completed: false,
+        active: false,
+      },
+      {
+        title: 'Generating B-Roll',
+        description: 'Creating AI-generated content',
+        completed: false,
+        active: false,
+      },
+      {
+        title: 'Finalizing',
+        description: 'Combining segments and metadata',
+        completed: false,
+        active: false,
+      },
+    ])
 
     // Cutting options (sync with composable)
     type CuttingOptionsPayload =
@@ -742,6 +855,23 @@ export default defineComponent({
     // Step 3 -> Step 4
     const startProcessing = async () => {
       try {
+        // Initialize processing state
+        processingStatus.value = 'Initializing processing...'
+        processingProgress.value = 0
+        processingStep.value = ''
+        processingTimeRemaining.value = 0
+
+        // Reset processing steps
+        processingSteps.value.forEach((step) => {
+          step.completed = false
+          step.active = false
+        })
+
+        // Start first step
+        if (processingSteps.value.length > 0) {
+          processingSteps.value[0].active = true
+        }
+
         currentStep.value = 3 // Show processing step
         // Only pass the nested object, do NOT spread or add extra fields
         const cuttingOptionsPayload = cuttingOptions.value
@@ -939,6 +1069,15 @@ export default defineComponent({
       }
     }
 
+    const cancelProcessing = async () => {
+      if (confirm('Are you sure you want to cancel the processing?')) {
+        console.log('❌ Processing cancelled')
+        // TODO: Implement actual cancel functionality for processing
+        // For now, just go back to previous step
+        currentStep.value = 2
+      }
+    }
+
     return {
       steps,
       currentStep,
@@ -970,6 +1109,11 @@ export default defineComponent({
       isUploading,
       uploadSpeed,
       estimatedTimeRemaining,
+      processingStatus,
+      processingProgress,
+      processingStep,
+      processingTimeRemaining,
+      processingSteps,
       handleFileSelect,
       handleDrop,
       triggerFileSelect,
@@ -981,6 +1125,7 @@ export default defineComponent({
       pauseUpload,
       resumeUpload,
       cancelUpload,
+      cancelProcessing,
       formatFileSize,
       formatTime,
     }
@@ -1015,5 +1160,99 @@ export default defineComponent({
   width: 300px;
   max-width: 100%;
   margin: 0 auto;
+}
+
+/* Processing Animation */
+.processing-animation {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.processing-dots {
+  display: flex;
+  gap: 8px;
+}
+
+.processing-dots span {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background-color: #009ef7;
+  animation: processing-bounce 1.4s ease-in-out infinite both;
+}
+
+.processing-dots span:nth-child(1) {
+  animation-delay: -0.32s;
+}
+
+.processing-dots span:nth-child(2) {
+  animation-delay: -0.16s;
+}
+
+@keyframes processing-bounce {
+  0%,
+  80%,
+  100% {
+    transform: scale(0);
+    opacity: 0.5;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* Processing Steps */
+.processing-steps {
+  max-width: 500px;
+  margin: 0 auto;
+}
+
+.processing-step {
+  display: flex;
+  align-items: flex-start;
+  margin-bottom: 1rem;
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+  transition: all 0.3s ease;
+}
+
+.processing-step.completed {
+  background-color: #f8fff8;
+  border-left: 4px solid #50cd89;
+}
+
+.processing-step.active {
+  background-color: #f8faff;
+  border-left: 4px solid #009ef7;
+}
+
+.processing-step.pending {
+  background-color: #f8f9fa;
+  border-left: 4px solid #e9ecef;
+}
+
+.step-icon {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 0.75rem;
+  flex-shrink: 0;
+}
+
+.step-text {
+  flex: 1;
+}
+
+.step-title {
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+
+.step-description {
+  line-height: 1.4;
 }
 </style>
