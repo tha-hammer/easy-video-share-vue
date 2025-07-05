@@ -18,8 +18,8 @@ class Settings(BaseSettings):
     REDIS_URL: str = "redis://localhost:6379/0"
     
     # Railway-specific Redis configuration
-    REDIS_HOST: Optional[str] = None
-    REDIS_PORT: Optional[int] = None
+    REDISHOST: Optional[str] = None
+    REDISPORT: Optional[int] = None
     REDIS_PASSWORD: Optional[str] = None
 
     # Google Cloud Vertex AI Configuration
@@ -47,13 +47,13 @@ class Settings(BaseSettings):
         super().__init__(**kwargs)
         
         # Railway-specific Redis URL construction
-        if self.REDIS_HOST:
+        if self.REDISHOST:
             redis_url_parts = [f"redis://"]
             if self.REDIS_PASSWORD:
                 redis_url_parts.append(f":{self.REDIS_PASSWORD}@")
-            redis_url_parts.append(f"{self.REDIS_HOST}")
-            if self.REDIS_PORT:
-                redis_url_parts.append(f":{self.REDIS_PORT}")
+            redis_url_parts.append(f"{self.REDISHOST}")
+            if self.REDISPORT:
+                redis_url_parts.append(f":{self.REDISPORT}")
             redis_url_parts.append("/0")
             self.REDIS_URL = "".join(redis_url_parts)
         
