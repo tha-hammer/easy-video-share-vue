@@ -114,9 +114,9 @@ def list_videos(user_id: Optional[str] = None) -> list:
     Returns a list of dicts matching VideoMetadata interface expected by frontend.
     """
     if user_id:
-        # Query by user_id (assumes GSI on user_id)
+        # Query by user_id using the correct GSI
         resp = table.query(
-            IndexName="user_id-index",  # Make sure this GSI exists
+            IndexName="user_id-created_at-index",  # Use the existing GSI
             KeyConditionExpression=Key("user_id").eq(user_id)
         )
         items = resp.get("Items", [])
@@ -194,11 +194,12 @@ def create_segment(segment_data: VideoSegment) -> VideoSegment:
         "segment_type": segment_data.segment_type.value,
         "segment_number": segment_data.segment_number,
         "s3_key": segment_data.s3_key,
-        "duration": segment_data.duration,
+        "duration": Decimal(str(segment_data.duration)),
         "file_size": segment_data.file_size,
         "content_type": segment_data.content_type,
         "created_at": segment_data.created_at or now,
         "updated_at": segment_data.updated_at or now,
+        "download_count": segment_data.download_count or 0,
     }
     
     # Add optional fields
@@ -248,21 +249,65 @@ def list_segments_by_video(video_id: str, segment_type: Optional[SegmentType] = 
     """
     List all segments for a specific video, optionally filtered by type.
     """
-    if segment_type:
-        # Query by video_id and segment_type
-        resp = table.query(
-            IndexName="video_id-segment_type-index",
-            KeyConditionExpression=Key("video_id").eq(video_id) & Key("segment_type").eq(segment_type.value)
-        )
-    else:
-        # Query by video_id only
-        resp = table.query(
-            IndexName="video_id-segment_type-index",
-            KeyConditionExpression=Key("video_id").eq(video_id)
-        )
+    print(f"[DEBUG] Querying segments for video_id: {video_id}")
+    print(f"[DEBUG] Segment type filter: {segment_type}")
     
-    items = resp.get("Items", [])
-    return [_item_to_video_segment(item) for item in items]
+    # First, get the video record to extract output_s3_urls
+    video_resp = table.get_item(Key={"video_id": video_id})
+    video_item = video_resp.get("Item")
+    
+    if not video_item:
+        print(f"[DEBUG] Video not found: {video_id}")
+        return []
+    
+    # Check if video has output_s3_urls (processed segments)
+    output_s3_urls = video_item.get("output_s3_urls", [])
+    if not output_s3_urls:
+        print(f"[DEBUG] No output_s3_urls found for video: {video_id}")
+        return []
+    
+    print(f"[DEBUG] Found {len(output_s3_urls)} output URLs for video: {video_id}")
+    
+    # Create segment objects from the output_s3_urls
+    segments = []
+    for i, s3_key in enumerate(output_s3_urls, 1):
+        try:
+            # Generate segment ID
+            segment_id = f"seg_{video_id}_{i:03d}"
+            
+            # Extract filename from s3_key
+            filename = s3_key.split("/")[-1] if s3_key else None
+            
+            # Create segment data
+            segment_data = VideoSegment(
+                segment_id=segment_id,
+                video_id=video_id,
+                user_id=video_item.get("user_id", ""),
+                segment_type=SegmentType.PROCESSED,
+                segment_number=i,
+                s3_key=s3_key,
+                duration=30.0,  # Default duration, could be enhanced to get from S3
+                file_size=0,    # Default size, could be enhanced to get from S3
+                content_type="video/mp4",
+                title=f"{video_item.get('title', 'Video')} - Part {i}",
+                description=f"Processed segment {i} of {len(output_s3_urls)}",
+                tags=video_item.get("tags", []),
+                created_at=video_item.get("created_at", ""),
+                updated_at=video_item.get("updated_at", ""),
+                filename=filename,
+                download_count=0,
+                social_media_usage=[]
+            )
+            
+            segments.append(segment_data)
+            print(f"[DEBUG] Created segment {segment_id} from s3_key: {s3_key}")
+            
+        except Exception as e:
+            print(f"[DEBUG] Failed to create segment {i}: {e}")
+            continue
+    
+    print(f"[DEBUG] Successfully created {len(segments)} segments for video {video_id}")
+    return segments
 
 
 def list_segments_by_user(user_id: str, filters: Optional[Dict[str, Any]] = None) -> List[VideoSegment]:
@@ -426,6 +471,29 @@ def get_social_media_analytics(segment_id: str) -> Optional[Dict[str, Any]]:
     }
 
 
+def increment_download_count(segment_id: str) -> Optional[VideoSegment]:
+    """
+    Increment the download count for a segment and update last_downloaded_at.
+    """
+    try:
+        now = iso_utc_now()
+        resp = table.update_item(
+            Key={"segment_id": segment_id},
+            UpdateExpression="SET download_count = download_count + :inc, last_downloaded_at = :now, updated_at = :now",
+            ExpressionAttributeValues={
+                ":inc": 1,
+                ":now": now
+            },
+            ReturnValues="ALL_NEW"
+        )
+        
+        updated_item = resp.get("Attributes")
+        return _item_to_video_segment(updated_item) if updated_item else None
+    except Exception as e:
+        print(f"Error incrementing download count for segment {segment_id}: {e}")
+        return None
+
+
 def _item_to_video_segment(item: Dict[str, Any]) -> VideoSegment:
     """
     Convert DynamoDB item to VideoSegment model.
@@ -447,6 +515,9 @@ def _item_to_video_segment(item: Dict[str, Any]) -> VideoSegment:
                 last_synced=usage_data.get("last_synced")
             ))
     
+    # Extract filename from s3_key
+    filename = item["s3_key"].split("/")[-1] if item["s3_key"] else None
+    
     return VideoSegment(
         segment_id=item["segment_id"],
         video_id=item["video_id"],
@@ -463,5 +534,8 @@ def _item_to_video_segment(item: Dict[str, Any]) -> VideoSegment:
         title=item.get("title"),
         description=item.get("description"),
         tags=item.get("tags", []),
-        social_media_usage=social_media_usage
+        social_media_usage=social_media_usage,
+        filename=filename,
+        download_count=item.get("download_count", 0),
+        last_downloaded_at=item.get("last_downloaded_at")
     )

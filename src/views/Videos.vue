@@ -213,7 +213,7 @@
 </template>
 
 <script lang="ts">
-import { defineComponent, ref, onMounted, computed } from 'vue'
+import { defineComponent, ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useVideosStore } from '@/stores/videos'
 import VideoCard from '@/components/video/VideoCard.vue'
@@ -236,6 +236,7 @@ export default defineComponent({
     const sortBy = ref<
       'newest' | 'oldest' | 'title-asc' | 'title-desc' | 'duration-asc' | 'duration-desc'
     >('newest')
+
     const sortedVideos = computed(() => {
       const videos = [...videosStore.userVideos]
       switch (sortBy.value) {
@@ -288,6 +289,11 @@ export default defineComponent({
       loadData()
     })
 
+    onUnmounted(() => {
+      // Clean up any subscriptions or timers if needed
+      // The store will be automatically cleaned up by Pinia
+    })
+
     const handlePlayVideo = (video: VideoMetadata) => {
       selectedVideo.value = video
       showVideoModal.value = true
@@ -310,6 +316,11 @@ export default defineComponent({
     }
 
     const handleViewSegments = (videoId: string) => {
+      console.log('🎬 handleViewSegments called with videoId:', videoId)
+      console.log(
+        '🎬 Video object:',
+        videosStore.userVideos.find((v) => v.video_id === videoId),
+      )
       router.push(`/videos/${videoId}/segments`)
     }
 

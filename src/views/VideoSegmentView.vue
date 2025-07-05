@@ -196,15 +196,36 @@
       <!--end::Wrapper-->
     </div>
     <!--end::Page-->
+
+    <!--begin::Video Player Modal-->
+    <UniversalVideoPlayer
+      :is-visible="showVideoModal"
+      :title="selectedSegment?.title || 'Video Player'"
+      :video-url="videoUrl"
+      :metadata="
+        selectedSegment
+          ? {
+              duration: selectedSegment.duration,
+              file_size: selectedSegment.file_size,
+              filename: selectedSegment.filename,
+            }
+          : null
+      "
+      :show-download="true"
+      @close="closeVideoModal"
+    />
+    <!--end::Video Player Modal-->
   </div>
 </template>
 
 <script lang="ts">
-import { defineComponent, computed, onMounted, onUnmounted } from 'vue'
+import { defineComponent, computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useSegmentsStore } from '@/stores/segments'
 import { useVideosStore } from '@/stores/videos'
+import { VideoService } from '@/core/services/VideoService'
 import VideoSegmentCard from '@/components/video/VideoSegmentCard.vue'
+import UniversalVideoPlayer from '@/components/video/UniversalVideoPlayer.vue'
 import SegmentFilters from '@/components/video/SegmentFilters.vue'
 import type { VideoSegment } from '@/stores/segments'
 
@@ -212,6 +233,7 @@ export default defineComponent({
   name: 'VideoSegmentView',
   components: {
     VideoSegmentCard,
+    UniversalVideoPlayer,
     SegmentFilters,
   },
   setup() {
@@ -221,6 +243,11 @@ export default defineComponent({
     const videosStore = useVideosStore()
 
     const videoId = route.params.videoId as string
+
+    // Video modal state
+    const showVideoModal = ref(false)
+    const selectedSegment = ref<VideoSegment | null>(null)
+    const videoUrl = ref<string>('')
 
     // Get video title for display
     const videoTitle = computed(() => {
@@ -243,6 +270,7 @@ export default defineComponent({
 
     // Load segments for the video
     const loadSegments = async () => {
+      console.log('🎬 VideoSegmentView loadSegments called with videoId:', videoId)
       if (videoId) {
         await segmentsStore.loadVideoSegments(videoId)
       }
@@ -259,9 +287,34 @@ export default defineComponent({
     }
 
     // Handle segment play
-    const handlePlaySegment = (segment: VideoSegment) => {
-      // TODO: Implement video player modal or redirect to video player
-      console.log('Play segment:', segment)
+    const handlePlaySegment = async (segment: VideoSegment) => {
+      try {
+        console.log('🎬 handlePlaySegment called with segment:', segment)
+        selectedSegment.value = segment
+
+        // Generate video URL first
+        const url = await generateVideoUrl(segment)
+        console.log('🎬 Generated video URL:', url)
+        videoUrl.value = url
+
+        // Then show the modal
+        showVideoModal.value = true
+      } catch (error) {
+        console.error('Failed to play segment:', error)
+        // Close modal and show error
+        showVideoModal.value = false
+        selectedSegment.value = null
+        videoUrl.value = ''
+        // TODO: Show error notification to user
+        alert(`Failed to play segment: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      }
+    }
+
+    // Close video modal
+    const closeVideoModal = () => {
+      showVideoModal.value = false
+      selectedSegment.value = null
+      videoUrl.value = ''
     }
 
     // Handle segment download
@@ -283,6 +336,17 @@ export default defineComponent({
       } catch (error) {
         console.error('Failed to download segment:', error)
         // TODO: Show error notification
+      }
+    }
+
+    // Generate video URL for playback
+    const generateVideoUrl = async (segment: VideoSegment) => {
+      try {
+        const response = await VideoService.getSegmentPlayUrl(segment.segment_id)
+        return response.play_url
+      } catch (error) {
+        console.error('Failed to generate video URL:', error)
+        throw error
       }
     }
 
@@ -325,6 +389,10 @@ export default defineComponent({
       handleDownloadSegment,
       formatDuration,
       formatFileSize,
+      showVideoModal,
+      selectedSegment,
+      closeVideoModal,
+      videoUrl,
     }
   },
 })

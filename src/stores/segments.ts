@@ -1,41 +1,41 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { VideoService } from '@/core/services/VideoService'
+import { useAuthStore } from '@/stores/auth'
 
 // Video segment interface
 export interface VideoSegment {
   segment_id: string
   video_id: string
+  user_id: string
+  segment_type: string
   segment_number: number
   s3_key: string
-  filename: string
+  s3_url?: string
   duration: number
   file_size: number
+  content_type: string
+  thumbnail_url?: string
   created_at: string
+  updated_at: string
+  title?: string
+  description?: string
+  tags?: string[]
+  social_media_usage?: {
+    platform: string
+    post_id?: string
+    post_url?: string
+    posted_at?: string
+    views: number
+    likes: number
+    shares: number
+    comments: number
+    engagement_rate?: number
+    last_synced?: string
+  }[]
+  filename?: string
   download_count: number
   last_downloaded_at?: string
-  // Social media tracking fields
-  social_media_usage?: {
-    instagram_posts?: number
-    tiktok_posts?: number
-    youtube_shorts?: number
-    facebook_posts?: number
-    twitter_posts?: number
-    last_social_post?: string
-    social_performance?: {
-      total_views?: number
-      total_likes?: number
-      total_shares?: number
-      total_comments?: number
-      best_performing_platform?: string
-    }
-  }
-  metadata?: {
-    start_time: number
-    end_time: number
-    text_content?: string
-    tags?: string[]
-  }
 }
 
 // Filter interface
@@ -81,8 +81,12 @@ export const useSegmentsStore = defineStore('segments', () => {
       const search = filters.value.search.toLowerCase()
       filtered = filtered.filter(
         (segment) =>
-          segment.filename.toLowerCase().includes(search) ||
-          segment.metadata?.text_content?.toLowerCase().includes(search),
+          segment.filename?.toLowerCase().includes(search) ||
+          false ||
+          segment.title?.toLowerCase().includes(search) ||
+          false ||
+          segment.description?.toLowerCase().includes(search) ||
+          false,
       )
     }
 
@@ -113,8 +117,8 @@ export const useSegmentsStore = defineStore('segments', () => {
         break
       case 'name':
         filtered.sort((a, b) => {
-          const nameA = a.filename.toLowerCase()
-          const nameB = b.filename.toLowerCase()
+          const nameA = (a.filename || a.title || '').toLowerCase()
+          const nameB = (b.filename || b.title || '').toLowerCase()
           return reverse ? nameB.localeCompare(nameA) : nameA.localeCompare(nameB)
         })
         break
@@ -144,6 +148,13 @@ export const useSegmentsStore = defineStore('segments', () => {
     error.value = null
 
     try {
+      const authStore = useAuthStore()
+      const userId = authStore.user?.userId
+
+      if (!userId) {
+        throw new Error('User not authenticated')
+      }
+
       const response = await VideoService.getVideoSegments(videoId)
       segments.value = response
       pagination.value.total_count = response.length
@@ -161,7 +172,15 @@ export const useSegmentsStore = defineStore('segments', () => {
     error.value = null
 
     try {
+      const authStore = useAuthStore()
+      const userId = authStore.user?.userId
+
+      if (!userId) {
+        throw new Error('User not authenticated')
+      }
+
       const params = {
+        user_id: userId,
         video_id: videoId,
         sort_by: filters.value.sort_by,
         order: filters.value.order,
@@ -175,7 +194,8 @@ export const useSegmentsStore = defineStore('segments', () => {
       const response = await VideoService.getAllSegments(params)
       segments.value = response.segments
       pagination.value.total_count = response.total_count
-      pagination.value.has_more = response.has_more
+      pagination.value.has_more =
+        response.page_size > 0 && segments.value.length < response.total_count
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'Failed to load segments'
       console.error('Error loading all segments:', err)
@@ -228,56 +248,24 @@ export const useSegmentsStore = defineStore('segments', () => {
       if (segment) {
         // Initialize social media usage if it doesn't exist
         if (!segment.social_media_usage) {
-          segment.social_media_usage = {
-            instagram_posts: 0,
-            tiktok_posts: 0,
-            youtube_shorts: 0,
-            facebook_posts: 0,
-            twitter_posts: 0,
-            social_performance: {
-              total_views: 0,
-              total_likes: 0,
-              total_shares: 0,
-              total_comments: 0,
-            },
-          }
+          segment.social_media_usage = []
         }
 
-        // Update platform-specific count
-        switch (platform) {
-          case 'instagram':
-            segment.social_media_usage.instagram_posts =
-              (segment.social_media_usage.instagram_posts || 0) + 1
-            break
-          case 'tiktok':
-            segment.social_media_usage.tiktok_posts =
-              (segment.social_media_usage.tiktok_posts || 0) + 1
-            break
-          case 'youtube':
-            segment.social_media_usage.youtube_shorts =
-              (segment.social_media_usage.youtube_shorts || 0) + 1
-            break
-          case 'facebook':
-            segment.social_media_usage.facebook_posts =
-              (segment.social_media_usage.facebook_posts || 0) + 1
-            break
-          case 'twitter':
-            segment.social_media_usage.twitter_posts =
-              (segment.social_media_usage.twitter_posts || 0) + 1
-            break
+        // Add new social media usage entry
+        const newUsage = {
+          platform: platform,
+          post_id: postData?.post_id,
+          post_url: undefined,
+          posted_at: postData?.posted_at || new Date().toISOString(),
+          views: postData?.views || 0,
+          likes: postData?.likes || 0,
+          shares: postData?.shares || 0,
+          comments: postData?.comments || 0,
+          engagement_rate: undefined,
+          last_synced: new Date().toISOString(),
         }
 
-        // Update last social post timestamp
-        segment.social_media_usage.last_social_post = new Date().toISOString()
-
-        // Update performance metrics if provided
-        if (postData && segment.social_media_usage.social_performance) {
-          const perf = segment.social_media_usage.social_performance
-          perf.total_views = (perf.total_views || 0) + (postData.views || 0)
-          perf.total_likes = (perf.total_likes || 0) + (postData.likes || 0)
-          perf.total_shares = (perf.total_shares || 0) + (postData.shares || 0)
-          perf.total_comments = (perf.total_comments || 0) + (postData.comments || 0)
-        }
+        segment.social_media_usage.push(newUsage)
 
         // TODO: Call backend API to persist this data
         // await VideoService.trackSocialMediaUsage(segmentId, platform, postData)
@@ -296,13 +284,7 @@ export const useSegmentsStore = defineStore('segments', () => {
    */
   const getSocialMediaSegments = computed(() => {
     return segments.value.filter(
-      (segment) =>
-        segment.social_media_usage &&
-        (segment.social_media_usage.instagram_posts ||
-          segment.social_media_usage.tiktok_posts ||
-          segment.social_media_usage.youtube_shorts ||
-          segment.social_media_usage.facebook_posts ||
-          segment.social_media_usage.twitter_posts),
+      (segment) => segment.social_media_usage && segment.social_media_usage.length > 0,
     )
   })
 
@@ -312,13 +294,7 @@ export const useSegmentsStore = defineStore('segments', () => {
    */
   const getUnusedSegments = computed(() => {
     return segments.value.filter(
-      (segment) =>
-        !segment.social_media_usage ||
-        (!segment.social_media_usage.instagram_posts &&
-          !segment.social_media_usage.tiktok_posts &&
-          !segment.social_media_usage.youtube_shorts &&
-          !segment.social_media_usage.facebook_posts &&
-          !segment.social_media_usage.twitter_posts),
+      (segment) => !segment.social_media_usage || segment.social_media_usage.length === 0,
     )
   })
 

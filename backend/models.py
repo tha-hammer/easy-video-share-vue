@@ -255,6 +255,9 @@ class VideoSegment(BaseModel):
     description: Optional[str] = Field(None, description="Segment description")
     tags: Optional[List[str]] = Field(default=[], description="Tags for the segment")
     social_media_usage: Optional[List[SocialMediaUsage]] = Field(default=[], description="Social media usage tracking")
+    filename: Optional[str] = Field(None, description="Filename derived from s3_key")
+    download_count: int = Field(default=0, description="Number of times segment has been downloaded")
+    last_downloaded_at: Optional[str] = Field(None, description="Last download timestamp")
     
     class Config:
         json_schema_extra = {

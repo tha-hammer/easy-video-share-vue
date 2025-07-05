@@ -7,15 +7,18 @@
       <div class="position-relative mb-5">
         <div
           class="bg-light-primary rounded d-flex align-items-center justify-content-center"
-          style="height: 180px"
+          style="height: 180px; overflow: hidden"
         >
-          <KTIcon icon-name="video" icon-class="fs-1 text-primary" />
+          <!-- Video Preview Placeholder -->
+          <div class="d-flex align-items-center justify-content-center w-100 h-100">
+            <KTIcon icon-name="video" icon-class="fs-1 text-primary" />
+          </div>
         </div>
 
         <!--begin::Play Button Overlay-->
         <div
           class="position-absolute top-50 start-50 translate-middle cursor-pointer"
-          @click="$emit('play', segment)"
+          @click="handlePlay"
         >
           <div class="btn btn-icon btn-light-primary btn-lg shadow">
             <KTIcon icon-name="play" icon-class="fs-2x" />
@@ -44,29 +47,37 @@
           class="fw-bold text-gray-900 mb-2 cursor-pointer text-hover-primary"
           @click="$emit('play', segment)"
         >
-          {{ segment.filename }}
+          {{ segment.title || segment.filename || `Segment ${segment.segment_number}` }}
         </h6>
         <!--end::Title-->
 
-        <!--begin::Metadata-->
-        <div v-if="segment.metadata?.text_content" class="mb-3">
+        <!--begin::Description-->
+        <div v-if="segment.description" class="mb-3">
           <p class="text-muted fs-7 mb-2">
-            <strong>Content:</strong>
+            <strong>Description:</strong>
           </p>
           <p class="text-gray-700 fs-7 mb-2">
-            {{ truncateText(segment.metadata.text_content, 100) }}
+            {{ truncateText(segment.description, 100) }}
           </p>
         </div>
-        <!--end::Metadata-->
+        <!--end::Description-->
 
-        <!--begin::Timing Info-->
-        <div v-if="segment.metadata" class="mb-3">
-          <div class="d-flex justify-content-between align-items-center text-muted fs-7">
-            <span>Start: {{ formatTime(segment.metadata.start_time) }}</span>
-            <span>End: {{ formatTime(segment.metadata.end_time) }}</span>
+        <!--begin::Tags-->
+        <div v-if="segment.tags && segment.tags.length > 0" class="mb-3">
+          <div class="d-flex flex-wrap gap-1">
+            <span
+              v-for="tag in segment.tags.slice(0, 3)"
+              :key="tag"
+              class="badge badge-light-primary fs-8"
+            >
+              {{ tag }}
+            </span>
+            <span v-if="segment.tags.length > 3" class="badge badge-light fs-8">
+              +{{ segment.tags.length - 3 }}
+            </span>
           </div>
         </div>
-        <!--end::Timing Info-->
+        <!--end::Tags-->
 
         <!--begin::Details-->
         <div class="d-flex justify-content-between align-items-center text-muted fs-7 mb-3">
@@ -137,6 +148,12 @@ export default defineComponent({
   emits: ['play', 'download', 'track-social-media'],
   setup(props, { emit }) {
     const downloading = ref(false)
+    const isPlaying = ref(false)
+
+    const handlePlay = () => {
+      isPlaying.value = true
+      emit('play', props.segment)
+    }
 
     const formatFileSize = (bytes: number): string => {
       if (bytes === 0) return '0 Bytes'
@@ -191,6 +208,7 @@ export default defineComponent({
 
     return {
       downloading,
+      isPlaying,
       formatFileSize,
       formatDuration,
       formatTime,
@@ -198,6 +216,7 @@ export default defineComponent({
       truncateText,
       handleDownload,
       copyShareLink,
+      handlePlay,
     }
   },
 })

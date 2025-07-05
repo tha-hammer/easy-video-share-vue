@@ -233,7 +233,7 @@ def process_segment_with_ffmpeg(
         # This ensures text is readable but not overwhelming
         font_size = min(width, height) // 20  # Much smaller divisor for very small text
         font_size = max(font_size, 16)  # Minimum font size for readability
-        font_size = min(font_size, 18)  # Maximum font size to prevent huge text
+        font_size = min(font_size, 56)  # Maximum font size to prevent huge text
         
         logger.info(f"Video dimensions: {width}x{height}, calculated font size: {font_size}")
         print(f"DEBUG: Video dimensions: {width}x{height}, calculated font size: {font_size}")

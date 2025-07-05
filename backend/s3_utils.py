@@ -17,18 +17,19 @@ def get_s3_client():
 
 print(f"DEBUG: AWS_REGION = {settings.AWS_REGION}")
 
-def generate_presigned_url(bucket_name: str, object_key: str, client_method: str, content_type: str, expiration: int = 3600) -> str:
+def generate_presigned_url(bucket_name: str, object_key: str, client_method: str, content_type: Optional[str] = None, expiration: int = 3600) -> str:
     """
-    Generate a presigned URL for S3 upload
+    Generate a presigned URL for S3 operations
     
     Args:
         bucket_name: S3 bucket name
         object_key: S3 object key (path)
-        content_type: MIME type of the file
+        client_method: S3 client method ('put_object', 'get_object', etc.)
+        content_type: MIME type of the file (for uploads)
         expiration: URL expiration time in seconds (default: 1 hour)
     
     Returns:
-        Presigned URL string for direct upload to S3
+        Presigned URL string for S3 operations
     """
     s3_client = get_s3_client()
      
@@ -38,13 +39,29 @@ def generate_presigned_url(bucket_name: str, object_key: str, client_method: str
             'Key': object_key
         }
 
-        # Conditionally add ContentType for 'put_object' operations only
+        # For uploads, add ContentType
         if client_method == 'put_object' and content_type is not None:
             params['ContentType'] = content_type
-        # No 'else' needed, ContentType is not added for 'get_object'
+        
+        # For downloads/playback, set content disposition to inline for video streaming
+        if client_method == 'get_object':
+            # Check if it's a video file
+            if object_key.lower().endswith(('.mp4', '.avi', '.mov', '.wmv', '.flv', '.webm', '.mkv')):
+                params['ResponseContentDisposition'] = 'inline'
+                # Also set the content type for video files
+                if object_key.lower().endswith('.mp4'):
+                    params['ResponseContentType'] = 'video/mp4'
+                elif object_key.lower().endswith('.avi'):
+                    params['ResponseContentType'] = 'video/x-msvideo'
+                elif object_key.lower().endswith('.mov'):
+                    params['ResponseContentType'] = 'video/quicktime'
+                elif object_key.lower().endswith('.webm'):
+                    params['ResponseContentType'] = 'video/webm'
+                else:
+                    params['ResponseContentType'] = 'video/mp4'  # Default
 
         presigned_url = s3_client.generate_presigned_url(
-            ClientMethod=client_method, # Use the new parameter here
+            ClientMethod=client_method,
             Params=params,
             ExpiresIn=expiration
         )
