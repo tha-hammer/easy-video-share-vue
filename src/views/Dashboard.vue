@@ -142,10 +142,14 @@ export default defineComponent({
 
     const loadData = async () => {
       try {
+        console.log('🔄 Loading Dashboard data...')
         errorMessage.value = ''
         await videosStore.loadUserVideos()
+        console.log('✅ Videos loaded:', videosStore.userVideos.length)
         await segmentsStore.loadAllSegments()
+        console.log('✅ Segments loaded:', segmentsStore.segments.length)
         calculateVideoStats()
+        console.log('✅ Video stats calculated:', videoStats.value)
       } catch (error) {
         const msg = error instanceof Error ? error.message : 'Unknown error'
 
@@ -184,8 +188,8 @@ export default defineComponent({
 
       // Calculate today's uploads
       const today = new Date().toISOString().split('T')[0]
-      videoStats.value.todayUploads = videos.filter((video) =>
-        video.upload_date.startsWith(today),
+      videoStats.value.todayUploads = videos.filter(
+        (video) => video.upload_date && video.upload_date.startsWith(today),
       ).length
     }
 

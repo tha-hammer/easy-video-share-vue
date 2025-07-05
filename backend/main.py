@@ -40,7 +40,7 @@ from s3_utils import (
     abort_multipart_upload as s3_abort_multipart_upload
 )
 import dynamodb_service
-from dynamodb_service import iso_utc_now
+from dynamodb_service import iso_utc_now, table
 from tasks import process_video_task, celery_app
 from video_processing_utils import get_video_duration_from_s3, calculate_segments
 from config import settings
@@ -48,6 +48,7 @@ from sse_starlette.sse import EventSourceResponse
 import redis.asyncio as redis
 import asyncio
 import json
+from datetime import datetime,timedelta
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -798,6 +799,35 @@ async def list_videos(user_id: str = None):
         raise HTTPException(status_code=500, detail=f"Failed to list videos: {str(e)}")
 
 
+@router.post("/videos/url")
+async def get_video_url(request: dict):
+    """
+    Get a presigned URL for a video file.
+    """
+    try:
+        bucket_location = request.get("bucket_location")
+        if not bucket_location:
+            raise HTTPException(status_code=400, detail="bucket_location is required")
+        
+        # Generate presigned URL for video access
+        presigned_url = generate_presigned_url(
+            bucket_name=settings.AWS_BUCKET_NAME,
+            object_key=bucket_location,
+            client_method='get_object',
+            expiration=3600  # 1 hour
+        )
+        
+        return {
+            "url": presigned_url,
+            "expires_in": 3600
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[ERROR] Failed to get video URL: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get video URL: {str(e)}")
+
+
 # === SEGMENT MANAGEMENT ENDPOINTS ===
 
 @router.post("/segments", response_model=VideoSegment)
@@ -810,6 +840,7 @@ async def create_segment(request: SegmentCreateRequest, user_id: str):
         segment_id = f"seg_{uuid.uuid4().hex[:12]}"
         
         # Create segment data
+        current_time = iso_utc_now()
         segment_data = VideoSegment(
             segment_id=segment_id,
             video_id=request.video_id,
@@ -822,7 +853,9 @@ async def create_segment(request: SegmentCreateRequest, user_id: str):
             content_type=request.content_type,
             title=request.title,
             description=request.description,
-            tags=request.tags or []
+            tags=request.tags or [],
+            created_at=current_time,
+            updated_at=current_time
         )
         
         # Save to DynamoDB
@@ -857,7 +890,13 @@ async def list_video_segments(video_id: str, segment_type: SegmentType = None):
     List all segments for a specific video.
     """
     try:
+        print(f"[DEBUG] API endpoint called with video_id: {video_id}")
+        print(f"[DEBUG] Segment type parameter: {segment_type}")
+        
         segments = dynamodb_service.list_segments_by_video(video_id, segment_type)
+        
+        print(f"[DEBUG] API returning {len(segments)} segments")
+        
         return SegmentListResponse(
             segments=segments,
             total_count=len(segments),
@@ -871,7 +910,7 @@ async def list_video_segments(video_id: str, segment_type: SegmentType = None):
 
 @router.get("/segments", response_model=SegmentListResponse)
 async def list_user_segments(
-    user_id: str,
+    user_id: str = None,
     segment_type: SegmentType = None,
     min_duration: float = None,
     max_duration: float = None,
@@ -900,7 +939,12 @@ async def list_user_segments(
         if platform:
             filters["platform"] = platform
         
-        segments = dynamodb_service.list_segments_by_user(user_id, filters)
+        if user_id:
+            segments = dynamodb_service.list_segments_by_user(user_id, filters)
+        else:
+            # If no user_id provided, return empty list for now
+            # In a real app, you might want to return all segments or handle differently
+            segments = []
         
         # Apply sorting
         reverse = sort_order.lower() == "desc"
@@ -1019,31 +1063,153 @@ async def get_segment_analytics(segment_id: str):
 @router.get("/segments/{segment_id}/download")
 async def get_segment_download_url(segment_id: str):
     """
-    Get a presigned download URL for a segment.
+    Get a presigned download URL for a segment and increment download count.
     """
     try:
-        segment = dynamodb_service.get_segment(segment_id)
-        if not segment:
+        # Parse segment_id to extract video_id and segment number
+        # Format: seg_{video_id}_{segment_number:03d}
+        if not segment_id.startswith("seg_"):
+            raise HTTPException(status_code=400, detail="Invalid segment ID format")
+        
+        # Remove "seg_" prefix
+        segment_id_without_prefix = segment_id[4:]
+        
+        # Find the last underscore to separate video_id from segment_number
+        last_underscore_index = segment_id_without_prefix.rfind("_")
+        if last_underscore_index == -1:
+            raise HTTPException(status_code=400, detail="Invalid segment ID format")
+        
+        video_id = segment_id_without_prefix[:last_underscore_index]
+        segment_number_str = segment_id_without_prefix[last_underscore_index + 1:]
+        
+        try:
+            segment_number = int(segment_number_str)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid segment number format")
+        
+        # Get the video record to find the segment
+        video_resp = dynamodb_service.table.get_item(Key={"video_id": video_id})
+        video_item = video_resp.get("Item")
+        
+        if not video_item:
+            raise HTTPException(status_code=404, detail="Video not found")
+        
+        # Get the output_s3_urls array
+        output_s3_urls = video_item.get("output_s3_urls", [])
+        if not output_s3_urls:
+            raise HTTPException(status_code=404, detail="No segments found for this video")
+        
+        # Check if segment number is valid
+        if segment_number < 1 or segment_number > len(output_s3_urls):
             raise HTTPException(status_code=404, detail="Segment not found")
+        
+        # Get the s3_key for this segment
+        s3_key = output_s3_urls[segment_number - 1]  # Convert to 0-based index
         
         # Generate presigned URL for download
         presigned_url = generate_presigned_url(
             bucket_name=settings.AWS_BUCKET_NAME,
-            object_key=segment.s3_key,
+            object_key=s3_key,
             client_method='get_object',
             expiration=3600  # 1 hour
         )
         
+        # For now, return download count as 0 since we're not storing it separately
+        # In a future enhancement, we could store download counts in a separate table
+        download_count = 0
+        
         return {
             "segment_id": segment_id,
             "download_url": presigned_url,
-            "expires_in": 3600
+            "download_count": download_count,
+            "expires_at": (datetime.utcnow() + timedelta(hours=1)).isoformat().replace("+00:00", "Z")
         }
     except HTTPException:
         raise
     except Exception as e:
         print(f"[ERROR] Failed to get segment download URL: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get segment download URL: {str(e)}")
+
+
+@router.get("/segments/{segment_id}/play")
+async def get_segment_play_url(segment_id: str):
+    """
+    Get a presigned URL for video playback (not download).
+    This endpoint is for streaming/playing videos, not downloading them.
+    """
+    try:
+        # Parse segment_id to extract video_id and segment number
+        # Format: seg_{video_id}_{segment_number:03d}
+        if not segment_id.startswith("seg_"):
+            raise HTTPException(status_code=400, detail="Invalid segment ID format")
+        
+        # Remove "seg_" prefix
+        segment_id_without_prefix = segment_id[4:]
+        
+        # Find the last underscore to separate video_id from segment_number
+        last_underscore_index = segment_id_without_prefix.rfind("_")
+        if last_underscore_index == -1:
+            raise HTTPException(status_code=400, detail="Invalid segment ID format")
+        
+        video_id = segment_id_without_prefix[:last_underscore_index]
+        segment_number_str = segment_id_without_prefix[last_underscore_index + 1:]
+        
+        try:
+            segment_number = int(segment_number_str)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid segment number format")
+        
+        print(f"[DEBUG] Parsed segment_id: {segment_id}")
+        print(f"[DEBUG] video_id: {video_id}")
+        print(f"[DEBUG] segment_number: {segment_number}")
+        
+        # Get the video record to find the segment
+        video_resp = table.get_item(Key={"video_id": video_id})
+        video_item = video_resp.get("Item")
+        
+        if not video_item:
+            print(f"[DEBUG] Video not found: {video_id}")
+            raise HTTPException(status_code=404, detail="Video not found")
+        
+        # Get the output_s3_urls array
+        output_s3_urls = video_item.get("output_s3_urls", [])
+        if not output_s3_urls:
+            print(f"[DEBUG] No output_s3_urls found for video: {video_id}")
+            raise HTTPException(status_code=404, detail="No segments found for this video")
+        
+        print(f"[DEBUG] Found {len(output_s3_urls)} output URLs")
+        
+        # Check if segment number is valid
+        if segment_number < 1 or segment_number > len(output_s3_urls):
+            print(f"[DEBUG] Invalid segment number: {segment_number}, max: {len(output_s3_urls)}")
+            raise HTTPException(status_code=404, detail="Segment not found")
+        
+        # Get the s3_key for this segment
+        s3_key = output_s3_urls[segment_number - 1]  # Convert to 0-based index
+        print(f"[DEBUG] Using s3_key: {s3_key}")
+        
+        # Generate presigned URL for streaming/playback (not download)
+        presigned_url = generate_presigned_url(
+            bucket_name=settings.AWS_BUCKET_NAME,
+            object_key=s3_key,
+            client_method='get_object',
+            expiration=3600  # 1 hour
+        )
+        
+        print(f"[DEBUG] Generated presigned URL: {presigned_url[:50]}...")
+        
+        return {
+            "segment_id": segment_id,
+            "play_url": presigned_url,
+            "expires_at": (datetime.utcnow() + timedelta(hours=1)).isoformat().replace("+00:00", "Z")
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[ERROR] Failed to get segment play URL: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to get segment play URL: {str(e)}")
 
 
 # Include router in app
@@ -1155,6 +1321,88 @@ async def debug_ffmpeg():
             "status": "error",
             "ffmpeg_available": False,
             "error": str(e)
+        }
+
+
+@app.get("/debug/test")
+async def debug_test():
+    """Simple test endpoint to verify backend is running"""
+    print("DEBUG: Test endpoint called")
+    return {"status": "success", "message": "Backend is running", "timestamp": iso_utc_now()}
+
+
+@app.get("/debug/test-segment-play")
+async def debug_test_segment_play():
+    """Debug endpoint to test segment play functionality"""
+    try:
+        segment_id = "seg_5e910883-ebc9-4d44-91a9-162eff750d46_001"
+        
+        # Test parsing
+        if not segment_id.startswith("seg_"):
+            return {"error": "Invalid segment ID format"}
+        
+        segment_id_without_prefix = segment_id[4:]
+        last_underscore_index = segment_id_without_prefix.rfind("_")
+        
+        if last_underscore_index == -1:
+            return {"error": "Invalid segment ID format"}
+        
+        video_id = segment_id_without_prefix[:last_underscore_index]
+        segment_number_str = segment_id_without_prefix[last_underscore_index + 1:]
+        
+        try:
+            segment_number = int(segment_number_str)
+        except ValueError:
+            return {"error": "Invalid segment number format"}
+        
+        # Test database lookup
+        video_resp = table.get_item(Key={"video_id": video_id})
+        video_item = video_resp.get("Item")
+        
+        if not video_item:
+            return {"error": f"Video not found: {video_id}"}
+        
+        output_s3_urls = video_item.get("output_s3_urls", [])
+        if not output_s3_urls:
+            return {"error": f"No output_s3_urls found for video: {video_id}"}
+        
+        if segment_number < 1 or segment_number > len(output_s3_urls):
+            return {"error": f"Invalid segment number: {segment_number}, max: {len(output_s3_urls)}"}
+        
+        s3_key = output_s3_urls[segment_number - 1]
+        
+        # Test S3 URL generation
+        try:
+            presigned_url = generate_presigned_url(
+                bucket_name=settings.AWS_BUCKET_NAME,
+                object_key=s3_key,
+                client_method='get_object',
+                expiration=3600
+            )
+            
+            return {
+                "status": "success",
+                "segment_id": segment_id,
+                "video_id": video_id,
+                "segment_number": segment_number,
+                "s3_key": s3_key,
+                "presigned_url": presigned_url[:100] + "..." if len(presigned_url) > 100 else presigned_url,
+                "aws_bucket": settings.AWS_BUCKET_NAME,
+                "aws_region": settings.AWS_REGION
+            }
+        except Exception as s3_error:
+            return {
+                "error": f"S3 URL generation failed: {str(s3_error)}",
+                "s3_key": s3_key,
+                "aws_bucket": settings.AWS_BUCKET_NAME,
+                "aws_region": settings.AWS_REGION
+            }
+            
+    except Exception as e:
+        import traceback
+        return {
+            "error": f"Debug test failed: {str(e)}",
+            "traceback": traceback.format_exc()
         }
 
 

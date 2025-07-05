@@ -301,6 +301,7 @@ def create_segments_from_video_task(self, video_id: str, user_id: str, output_s3
     import os
     from s3_utils import get_file_size_from_s3, get_video_duration_from_s3
     import dynamodb_service
+    from datetime import datetime, timezone
     
     try:
         print(f"[SEGMENT CREATION] Starting segment creation for video {video_id}")
@@ -319,6 +320,7 @@ def create_segments_from_video_task(self, video_id: str, user_id: str, output_s3
                 segment_id = f"seg_{video_id}_{i:03d}"
                 
                 # Create segment data
+                current_time = datetime.utcnow().replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
                 segment_data = VideoSegment(
                     segment_id=segment_id,
                     video_id=video_id,
@@ -331,7 +333,9 @@ def create_segments_from_video_task(self, video_id: str, user_id: str, output_s3
                     content_type="video/mp4",
                     title=f"{video_metadata.get('title', 'Video')} - Part {i}",
                     description=f"Processed segment {i} of {len(output_s3_keys)}",
-                    tags=video_metadata.get('tags', [])
+                    tags=video_metadata.get('tags', []),
+                    created_at=current_time,
+                    updated_at=current_time
                 )
                 
                 # Save to DynamoDB

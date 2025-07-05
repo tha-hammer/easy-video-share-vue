@@ -59,23 +59,39 @@ interface JobStatusResponse {
 interface VideoSegment {
   segment_id: string
   video_id: string
+  user_id: string
+  segment_type: string
   segment_number: number
   s3_key: string
-  filename: string
+  s3_url?: string
   duration: number
   file_size: number
+  content_type: string
+  thumbnail_url?: string
   created_at: string
+  updated_at: string
+  title?: string
+  description?: string
+  tags?: string[]
+  social_media_usage?: {
+    platform: string
+    post_id?: string
+    post_url?: string
+    posted_at?: string
+    views: number
+    likes: number
+    shares: number
+    comments: number
+    engagement_rate?: number
+    last_synced?: string
+  }[]
+  filename?: string
   download_count: number
   last_downloaded_at?: string
-  metadata?: {
-    start_time: number
-    end_time: number
-    text_content?: string
-    tags?: string[]
-  }
 }
 
 interface SegmentListParams {
+  user_id?: string
   video_id?: string
   sort_by?: string
   order?: string
@@ -89,7 +105,8 @@ interface SegmentListParams {
 interface SegmentListResponse {
   segments: VideoSegment[]
   total_count: number
-  has_more: boolean
+  page: number
+  page_size: number
 }
 
 interface SegmentDownloadResponse {
@@ -256,11 +273,17 @@ export class VideoService {
   // Generate presigned URL for video access (if needed)
   static async getVideoUrl(bucketLocation: string): Promise<string> {
     try {
-      const headers = await this.getAuthHeaders()
+      // Use the local FastAPI backend instead of AWS API Gateway
+      const baseUrl = API_CONFIG.aiVideoBackend.endsWith('/')
+        ? API_CONFIG.aiVideoBackend.slice(0, -1)
+        : API_CONFIG.aiVideoBackend
+      const url = `${baseUrl}/api/videos/url`
 
-      const response = await fetch(`${API_CONFIG.videosEndpoint}/url`, {
+      const response = await fetch(url, {
         method: 'POST',
-        headers,
+        headers: {
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify({ bucket_location: bucketLocation }),
       })
 
@@ -269,13 +292,6 @@ export class VideoService {
       }
 
       const data = await response.json()
-
-      // Handle API Gateway Lambda proxy response format
-      if (data.body) {
-        const body = typeof data.body === 'string' ? JSON.parse(data.body) : data.body
-        return body.url || body.signedUrl
-      }
-
       return data.url || data.signedUrl
     } catch (error) {
       console.error('Error getting video URL:', error)
@@ -528,7 +544,8 @@ export class VideoService {
       const data = await response.json()
       console.log('🎬 Video segments response:', data)
 
-      return Array.isArray(data) ? data : []
+      // Backend returns SegmentListResponse with segments property
+      return data.segments || []
     } catch (error) {
       console.error('Error fetching video segments:', error)
       throw error
@@ -598,11 +615,10 @@ export class VideoService {
       console.log('📥 Downloading segment from:', downloadUrl)
 
       const response = await fetch(downloadUrl, {
-        method: 'POST',
+        method: 'GET',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ segment_id: segmentId }),
       })
 
       if (!response.ok) {
@@ -680,6 +696,41 @@ export class VideoService {
       console.log('📊 Social media usage tracked successfully')
     } catch (error) {
       console.error('Error tracking social media usage:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Get segment play URL (presigned URL for streaming)
+   */
+  static async getSegmentPlayUrl(
+    segmentId: string,
+  ): Promise<{ play_url: string; expires_at: string }> {
+    try {
+      const baseUrl = API_CONFIG.aiVideoBackend.endsWith('/')
+        ? API_CONFIG.aiVideoBackend.slice(0, -1)
+        : API_CONFIG.aiVideoBackend
+      const playUrl = `${baseUrl}/api/segments/${segmentId}/play`
+
+      console.log('🎬 Getting segment play URL from:', playUrl)
+
+      const response = await fetch(playUrl, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      })
+
+      if (!response.ok) {
+        throw new Error(`Failed to get segment play URL: ${response.statusText}`)
+      }
+
+      const data = await response.json()
+      console.log('🎬 Segment play URL response:', data)
+
+      return data
+    } catch (error) {
+      console.error('Error getting segment play URL:', error)
       throw error
     }
   }
