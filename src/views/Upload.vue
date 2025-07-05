@@ -88,7 +88,7 @@
               />
               <div v-if="fileError" class="alert alert-danger mt-3">{{ fileError }}</div>
               <div class="form-text mt-2">
-                Maximum file size: 2GB. Supported formats: MP4, MOV, AVI, WebM
+                Maximum file size: 5GB. Supported formats: MP4, MOV, AVI, WebM
               </div>
 
               <!-- Upload Status Indicator -->

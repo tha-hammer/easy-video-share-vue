@@ -46,7 +46,7 @@ export const API_CONFIG = {
 
 // File upload constraints
 export const UPLOAD_CONFIG = {
-  maxFileSize: 2 * 1024 * 1024 * 1024, // 2GB in bytes
+  maxFileSize: 5 * 1024 * 1024 * 1024, // 2GB in bytes
   allowedTypes: ['video/mp4', 'video/mov', 'video/avi', 'video/webm', 'video/quicktime'],
   allowedExtensions: ['.mp4', '.mov', '.avi', '.webm'],
 
