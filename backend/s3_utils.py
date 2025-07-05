@@ -312,3 +312,48 @@ def get_s3_file_size(bucket: str, key: str) -> int:
         return response['ContentLength']
     except ClientError as e:
         raise Exception(f"Failed to get S3 object size: {str(e)}")
+
+
+def get_file_size_from_s3(bucket: str, key: str) -> int:
+    """
+    Get the size of an S3 object (alias for get_s3_file_size)
+    
+    Args:
+        bucket: S3 bucket name
+        key: S3 object key
+    
+    Returns:
+        File size in bytes
+    """
+    return get_s3_file_size(bucket, key)
+
+
+def get_video_duration_from_s3(bucket: str, key: str) -> float:
+    """
+    Get the duration of a video file stored in S3
+    
+    Args:
+        bucket: S3 bucket name
+        key: S3 object key
+    
+    Returns:
+        Video duration in seconds
+    """
+    import tempfile
+    import os
+    from video_processing_utils import get_video_duration_from_s3 as get_duration
+    
+    # Download file temporarily to get duration
+    temp_dir = tempfile.mkdtemp()
+    temp_path = os.path.join(temp_dir, os.path.basename(key))
+    
+    try:
+        download_file_from_s3(bucket, key, temp_path)
+        duration = get_duration(bucket, key)  # This function already exists in video_processing_utils
+        return duration
+    finally:
+        # Clean up temp file
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+        if os.path.exists(temp_dir):
+            os.rmdir(temp_dir)

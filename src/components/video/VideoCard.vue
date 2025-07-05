@@ -57,10 +57,25 @@
 
       <!--begin::Actions-->
       <div class="d-flex justify-content-between align-items-center">
-        <button class="btn btn-sm btn-light-primary" @click="$emit('play', video)">
-          <KTIcon icon-name="play" icon-class="fs-4" />
-          Play
-        </button>
+        <div class="btn-group">
+          <button class="btn btn-sm btn-light-primary" @click="$emit('play', video)">
+            <KTIcon icon-name="play" icon-class="fs-4" />
+            Play
+          </button>
+          <button
+            v-if="
+              video.output_s3_urls &&
+              video.output_s3_urls.length > 0 &&
+              video.status === 'COMPLETED'
+            "
+            class="btn btn-sm btn-light-info"
+            @click="$emit('view-segments', video.video_id)"
+            title="View segments"
+          >
+            <KTIcon icon-name="video" icon-class="fs-4" />
+            Segments
+          </button>
+        </div>
 
         <div class="btn-group">
           <button class="btn btn-sm btn-light" @click="copyShareLink" title="Copy share link">
@@ -94,7 +109,7 @@ export default defineComponent({
       required: true,
     },
   },
-  emits: ['play', 'delete'],
+  emits: ['play', 'delete', 'view-segments'],
   setup(props) {
     const formatFileSize = (bytes: number): string => {
       if (bytes === 0) return '0 Bytes'
