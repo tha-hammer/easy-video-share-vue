@@ -17,7 +17,18 @@ from models import (
     UploadPartRequest,
     UploadPartResponse,
     CompleteMultipartUploadRequest,
-    AbortMultipartUploadRequest
+    AbortMultipartUploadRequest,
+    # Segment models
+    VideoSegment,
+    SegmentCreateRequest,
+    SegmentUpdateRequest,
+    SegmentListResponse,
+    SegmentFilters,
+    SocialMediaSyncRequest,
+    SocialMediaAnalyticsResponse,
+    SegmentType,
+    SocialMediaPlatform,
+    SocialMediaUsage
 )
 from s3_utils import (
     generate_presigned_url, 
@@ -29,6 +40,7 @@ from s3_utils import (
     abort_multipart_upload as s3_abort_multipart_upload
 )
 import dynamodb_service
+from dynamodb_service import iso_utc_now
 from tasks import process_video_task, celery_app
 from video_processing_utils import get_video_duration_from_s3, calculate_segments
 from config import settings
@@ -784,6 +796,255 @@ async def list_videos(user_id: str = None):
     except Exception as e:
         print(f"[ERROR] Failed to list videos: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to list videos: {str(e)}")
+
+
+# === SEGMENT MANAGEMENT ENDPOINTS ===
+
+@router.post("/segments", response_model=VideoSegment)
+async def create_segment(request: SegmentCreateRequest, user_id: str):
+    """
+    Create a new video segment.
+    """
+    try:
+        # Generate unique segment ID
+        segment_id = f"seg_{uuid.uuid4().hex[:12]}"
+        
+        # Create segment data
+        segment_data = VideoSegment(
+            segment_id=segment_id,
+            video_id=request.video_id,
+            user_id=user_id,
+            segment_type=request.segment_type,
+            segment_number=request.segment_number,
+            s3_key=request.s3_key,
+            duration=request.duration,
+            file_size=request.file_size,
+            content_type=request.content_type,
+            title=request.title,
+            description=request.description,
+            tags=request.tags or []
+        )
+        
+        # Save to DynamoDB
+        created_segment = dynamodb_service.create_segment(segment_data)
+        return created_segment
+        
+    except Exception as e:
+        print(f"[ERROR] Failed to create segment: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to create segment: {str(e)}")
+
+
+@router.get("/segments/{segment_id}", response_model=VideoSegment)
+async def get_segment(segment_id: str):
+    """
+    Get a specific video segment by ID.
+    """
+    try:
+        segment = dynamodb_service.get_segment(segment_id)
+        if not segment:
+            raise HTTPException(status_code=404, detail="Segment not found")
+        return segment
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[ERROR] Failed to get segment: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get segment: {str(e)}")
+
+
+@router.get("/videos/{video_id}/segments", response_model=SegmentListResponse)
+async def list_video_segments(video_id: str, segment_type: SegmentType = None):
+    """
+    List all segments for a specific video.
+    """
+    try:
+        segments = dynamodb_service.list_segments_by_video(video_id, segment_type)
+        return SegmentListResponse(
+            segments=segments,
+            total_count=len(segments),
+            page=1,
+            page_size=len(segments)
+        )
+    except Exception as e:
+        print(f"[ERROR] Failed to list video segments: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to list video segments: {str(e)}")
+
+
+@router.get("/segments", response_model=SegmentListResponse)
+async def list_user_segments(
+    user_id: str,
+    segment_type: SegmentType = None,
+    min_duration: float = None,
+    max_duration: float = None,
+    tags: str = None,
+    has_social_media: bool = None,
+    platform: SocialMediaPlatform = None,
+    sort_by: str = "created_at",
+    sort_order: str = "desc"
+):
+    """
+    List all segments for a user with filtering options.
+    """
+    try:
+        # Build filters
+        filters = {}
+        if segment_type:
+            filters["segment_type"] = segment_type
+        if min_duration:
+            filters["min_duration"] = min_duration
+        if max_duration:
+            filters["max_duration"] = max_duration
+        if tags:
+            filters["tags"] = tags.split(",")
+        if has_social_media is not None:
+            filters["has_social_media"] = has_social_media
+        if platform:
+            filters["platform"] = platform
+        
+        segments = dynamodb_service.list_segments_by_user(user_id, filters)
+        
+        # Apply sorting
+        reverse = sort_order.lower() == "desc"
+        if sort_by == "created_at":
+            segments.sort(key=lambda x: x.created_at, reverse=reverse)
+        elif sort_by == "duration":
+            segments.sort(key=lambda x: x.duration, reverse=reverse)
+        elif sort_by == "file_size":
+            segments.sort(key=lambda x: x.file_size, reverse=reverse)
+        
+        return SegmentListResponse(
+            segments=segments,
+            total_count=len(segments),
+            page=1,
+            page_size=len(segments)
+        )
+    except Exception as e:
+        print(f"[ERROR] Failed to list user segments: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to list user segments: {str(e)}")
+
+
+@router.put("/segments/{segment_id}", response_model=VideoSegment)
+async def update_segment(segment_id: str, request: SegmentUpdateRequest):
+    """
+    Update a video segment.
+    """
+    try:
+        # Build update data
+        update_data = {}
+        if request.title is not None:
+            update_data["title"] = request.title
+        if request.description is not None:
+            update_data["description"] = request.description
+        if request.tags is not None:
+            update_data["tags"] = request.tags
+        
+        updated_segment = dynamodb_service.update_segment(segment_id, update_data)
+        if not updated_segment:
+            raise HTTPException(status_code=404, detail="Segment not found")
+        
+        return updated_segment
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[ERROR] Failed to update segment: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to update segment: {str(e)}")
+
+
+@router.delete("/segments/{segment_id}")
+async def delete_segment(segment_id: str):
+    """
+    Delete a video segment.
+    """
+    try:
+        success = dynamodb_service.delete_segment(segment_id)
+        if not success:
+            raise HTTPException(status_code=404, detail="Segment not found")
+        
+        return {"message": "Segment deleted successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[ERROR] Failed to delete segment: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete segment: {str(e)}")
+
+
+@router.post("/segments/{segment_id}/social-media", response_model=VideoSegment)
+async def sync_social_media(segment_id: str, request: SocialMediaSyncRequest):
+    """
+    Sync social media metrics for a segment.
+    """
+    try:
+        # Create social media usage data
+        social_media_usage = SocialMediaUsage(
+            platform=request.platform,
+            post_id=request.post_id,
+            post_url=request.post_url,
+            posted_at=iso_utc_now(),
+            views=0,
+            likes=0,
+            shares=0,
+            comments=0
+        )
+        
+        # Add to segment
+        updated_segment = dynamodb_service.add_social_media_usage(segment_id, social_media_usage)
+        if not updated_segment:
+            raise HTTPException(status_code=404, detail="Segment not found")
+        
+        return updated_segment
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[ERROR] Failed to sync social media: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to sync social media: {str(e)}")
+
+
+@router.get("/segments/{segment_id}/analytics", response_model=SocialMediaAnalyticsResponse)
+async def get_segment_analytics(segment_id: str):
+    """
+    Get social media analytics for a segment.
+    """
+    try:
+        analytics = dynamodb_service.get_social_media_analytics(segment_id)
+        if not analytics:
+            raise HTTPException(status_code=404, detail="Segment not found or no social media data")
+        
+        return SocialMediaAnalyticsResponse(**analytics)
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[ERROR] Failed to get segment analytics: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get segment analytics: {str(e)}")
+
+
+@router.get("/segments/{segment_id}/download")
+async def get_segment_download_url(segment_id: str):
+    """
+    Get a presigned download URL for a segment.
+    """
+    try:
+        segment = dynamodb_service.get_segment(segment_id)
+        if not segment:
+            raise HTTPException(status_code=404, detail="Segment not found")
+        
+        # Generate presigned URL for download
+        presigned_url = generate_presigned_url(
+            bucket_name=settings.AWS_BUCKET_NAME,
+            object_key=segment.s3_key,
+            client_method='get_object',
+            expiration=3600  # 1 hour
+        )
+        
+        return {
+            "segment_id": segment_id,
+            "download_url": presigned_url,
+            "expires_in": 3600
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[ERROR] Failed to get segment download URL: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get segment download URL: {str(e)}")
+
 
 # Include router in app
 app.include_router(router)

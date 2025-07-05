@@ -147,7 +147,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "video_bucket_lifecycle" {
 
 # IAM user and permissions moved to s3-permissions.tf
 
-# DynamoDB table for video metadata
+# DynamoDB table for video metadata and segments
 resource "aws_dynamodb_table" "video_metadata" {
   name           = "${var.project_name}-video-metadata"
   billing_mode   = "PAY_PER_REQUEST"
@@ -168,6 +168,21 @@ resource "aws_dynamodb_table" "video_metadata" {
     type = "S"
   }
 
+  attribute {
+    name = "segment_id"
+    type = "S"
+  }
+
+  attribute {
+    name = "segment_type"
+    type = "S"
+  }
+
+  attribute {
+    name = "created_at"
+    type = "S"
+  }
+
   # Global Secondary Index for user_id queries
   global_secondary_index {
     name            = "user_id-upload_date-index"
@@ -176,8 +191,39 @@ resource "aws_dynamodb_table" "video_metadata" {
     projection_type = "ALL"
   }
 
+  # Global Secondary Index for segment queries by video_id
+  global_secondary_index {
+    name            = "video_id-segment_type-index"
+    hash_key        = "video_id"
+    range_key       = "segment_type"
+    projection_type = "ALL"
+  }
+
+  # Global Secondary Index for segment queries by user_id and segment_type
+  global_secondary_index {
+    name            = "user_id-segment_type-index"
+    hash_key        = "user_id"
+    range_key       = "segment_type"
+    projection_type = "ALL"
+  }
+
+  # Global Secondary Index for segment queries by creation date
+  global_secondary_index {
+    name            = "user_id-created_at-index"
+    hash_key        = "user_id"
+    range_key       = "created_at"
+    projection_type = "ALL"
+  }
+
+  # Global Secondary Index for segment queries by segment_id
+  global_secondary_index {
+    name            = "segment_id-index"
+    hash_key        = "segment_id"
+    projection_type = "ALL"
+  }
+
   tags = {
-    Name        = "Video Metadata Table"
+    Name        = "Video Metadata and Segments Table"
     Environment = var.environment
     Project     = var.project_name
   }

@@ -51,6 +51,15 @@
         </router-link>
       </div>
 
+      <div class="menu-item">
+        <router-link to="/segments" class="menu-link" active-class="active">
+          <span class="menu-icon">
+            <KTIcon icon-name="element-4" icon-class="fs-2" />
+          </span>
+          <span class="menu-title">My Segments</span>
+        </router-link>
+      </div>
+
       <!-- Admin Section (only show for admin users) -->
       <template v-if="isAdmin">
         <div class="menu-item">

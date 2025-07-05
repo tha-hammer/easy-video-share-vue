@@ -29,6 +29,25 @@ const routes: Array<RouteRecordRaw> = [
         },
       },
       {
+        path: '/videos/:videoId/segments',
+        name: 'video-segments',
+        component: () => import('@/views/VideoSegmentView.vue'),
+        props: true,
+        meta: {
+          pageTitle: 'Video Segments',
+          breadcrumbs: ['Videos', 'Segments'],
+        },
+      },
+      {
+        path: '/segments',
+        name: 'segments',
+        component: () => import('@/views/SegmentsLibrary.vue'),
+        meta: {
+          pageTitle: 'My Segments',
+          breadcrumbs: ['Segments'],
+        },
+      },
+      {
         path: '/upload',
         name: 'upload',
         component: () => import('@/views/Upload.vue'),

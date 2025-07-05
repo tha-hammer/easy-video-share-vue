@@ -117,7 +117,12 @@
             :key="video.video_id"
             class="col-md-6 col-lg-4 col-xl-3"
           >
-            <VideoCard :video="video" @delete="handleDeleteVideo" @play="handlePlayVideo" />
+            <VideoCard
+              :video="video"
+              @delete="handleDeleteVideo"
+              @play="handlePlayVideo"
+              @view-segments="handleViewSegments"
+            />
           </div>
         </div>
         <!--end::Videos Grid-->
@@ -209,6 +214,7 @@
 
 <script lang="ts">
 import { defineComponent, ref, onMounted, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { useVideosStore } from '@/stores/videos'
 import VideoCard from '@/components/video/VideoCard.vue'
 import VideoModal from '@/components/video/VideoModal.vue'
@@ -221,6 +227,7 @@ export default defineComponent({
     VideoModal,
   },
   setup() {
+    const router = useRouter()
     const videosStore = useVideosStore()
     const viewMode = ref<'grid' | 'list'>('grid')
     const selectedVideo = ref<VideoMetadata | null>(null)
@@ -302,6 +309,10 @@ export default defineComponent({
       }
     }
 
+    const handleViewSegments = (videoId: string) => {
+      router.push(`/videos/${videoId}/segments`)
+    }
+
     const formatFileSize = (bytes: number): string => {
       if (bytes === 0) return '0 Bytes'
       const k = 1024
@@ -331,6 +342,7 @@ export default defineComponent({
       handlePlayVideo,
       closeVideoModal,
       handleDeleteVideo,
+      handleViewSegments,
       formatFileSize,
       formatDuration,
       formatDate,

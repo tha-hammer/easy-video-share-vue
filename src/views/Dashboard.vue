@@ -26,7 +26,7 @@
   </div>
 
   <div class="row g-5 g-xl-8">
-    <div class="col-xl-4">
+    <div class="col-xl-3">
       <VideoStatsWidget
         widget-classes="card-xl-stretch mb-xl-8"
         icon-name="video"
@@ -37,7 +37,18 @@
       />
     </div>
 
-    <div class="col-xl-4">
+    <div class="col-xl-3">
+      <VideoStatsWidget
+        widget-classes="card-xl-stretch mb-xl-8"
+        icon-name="element-4"
+        color="success"
+        icon-color="white"
+        title="Total Segments"
+        :description="`${videoStats.totalSegments} segments created`"
+      />
+    </div>
+
+    <div class="col-xl-3">
       <VideoStatsWidget
         widget-classes="card-xl-stretch mb-xl-8"
         icon-name="cloud-upload"
@@ -48,7 +59,7 @@
       />
     </div>
 
-    <div class="col-xl-4">
+    <div class="col-xl-3">
       <VideoStatsWidget
         widget-classes="card-xl-stretch mb-xl-8"
         icon-name="chart-line-up"
@@ -91,6 +102,7 @@
 import { defineComponent, ref, computed, onMounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useVideosStore } from '@/stores/videos'
+import { useSegmentsStore } from '@/stores/segments'
 import VideoStatsWidget from '@/components/widgets/VideoStatsWidget.vue'
 import RecentVideosWidget from '@/components/widgets/RecentVideosWidget.vue'
 import VideoUploadWidget from '@/components/widgets/VideoUploadWidget.vue'
@@ -112,9 +124,11 @@ export default defineComponent({
   setup() {
     const authStore = useAuthStore()
     const videosStore = useVideosStore()
+    const segmentsStore = useSegmentsStore()
 
     const videoStats = ref({
       totalVideos: 0,
+      totalSegments: 0,
       storageUsed: '0 MB',
       todayUploads: 0,
     })
@@ -130,6 +144,7 @@ export default defineComponent({
       try {
         errorMessage.value = ''
         await videosStore.loadUserVideos()
+        await segmentsStore.loadAllSegments()
         calculateVideoStats()
       } catch (error) {
         const msg = error instanceof Error ? error.message : 'Unknown error'
@@ -159,6 +174,9 @@ export default defineComponent({
     const calculateVideoStats = () => {
       const videos = videosStore.userVideos
       videoStats.value.totalVideos = videos.length
+
+      // Calculate total segments
+      videoStats.value.totalSegments = segmentsStore.segments.length
 
       // Calculate storage used
       const totalBytes = videos.reduce((sum, video) => sum + (video.file_size || 0), 0)

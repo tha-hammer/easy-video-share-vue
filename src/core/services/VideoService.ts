@@ -55,6 +55,50 @@ interface JobStatusResponse {
   updated_at?: string
 }
 
+// Video Segment interfaces
+interface VideoSegment {
+  segment_id: string
+  video_id: string
+  segment_number: number
+  s3_key: string
+  filename: string
+  duration: number
+  file_size: number
+  created_at: string
+  download_count: number
+  last_downloaded_at?: string
+  metadata?: {
+    start_time: number
+    end_time: number
+    text_content?: string
+    tags?: string[]
+  }
+}
+
+interface SegmentListParams {
+  video_id?: string
+  sort_by?: string
+  order?: string
+  limit?: number
+  offset?: number
+  min_duration?: number
+  max_duration?: number
+  min_downloads?: number
+}
+
+interface SegmentListResponse {
+  segments: VideoSegment[]
+  total_count: number
+  has_more: boolean
+}
+
+interface SegmentDownloadResponse {
+  segment_id: string
+  download_url: string
+  download_count: number
+  expires_at: string
+}
+
 export class VideoService {
   // Helper method to get auth headers
   private static async getAuthHeaders(): Promise<Record<string, string>> {
@@ -457,6 +501,221 @@ export class VideoService {
       throw error
     }
   }
+
+  /**
+   * Get video segments for a specific video
+   */
+  static async getVideoSegments(videoId: string): Promise<VideoSegment[]> {
+    try {
+      const baseUrl = API_CONFIG.aiVideoBackend.endsWith('/')
+        ? API_CONFIG.aiVideoBackend.slice(0, -1)
+        : API_CONFIG.aiVideoBackend
+      const segmentsUrl = `${baseUrl}/api/videos/${videoId}/segments`
+
+      console.log('🎬 Fetching video segments from:', segmentsUrl)
+
+      const response = await fetch(segmentsUrl, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      })
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch video segments: ${response.statusText}`)
+      }
+
+      const data = await response.json()
+      console.log('🎬 Video segments response:', data)
+
+      return Array.isArray(data) ? data : []
+    } catch (error) {
+      console.error('Error fetching video segments:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Get all segments with filtering and pagination
+   */
+  static async getAllSegments(params: SegmentListParams): Promise<SegmentListResponse> {
+    try {
+      const baseUrl = API_CONFIG.aiVideoBackend.endsWith('/')
+        ? API_CONFIG.aiVideoBackend.slice(0, -1)
+        : API_CONFIG.aiVideoBackend
+      const segmentsUrl = `${baseUrl}/api/segments`
+
+      // Build query parameters
+      const queryParams = new URLSearchParams()
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          queryParams.append(key, value.toString())
+        }
+      })
+
+      const url = queryParams.toString() ? `${segmentsUrl}?${queryParams.toString()}` : segmentsUrl
+      console.log('🎬 Fetching all segments from:', url)
+
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      })
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch segments: ${response.statusText}`)
+      }
+
+      const data = await response.json()
+      console.log('🎬 All segments response:', data)
+
+      return data
+    } catch (error) {
+      console.error('Error fetching all segments:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Download a segment (get presigned URL and increment download count)
+   *
+   * FUTURE ENHANCEMENT: This method will be enhanced to track social media usage
+   * When a user downloads a segment, we can assume it's for social media posting
+   * Integration with Instagram/TikTok APIs will allow automatic tracking of:
+   * - Post creation and publication
+   * - Performance metrics (views, likes, shares, comments)
+   * - Cross-platform performance comparison
+   * - Content optimization recommendations
+   */
+  static async downloadSegment(segmentId: string): Promise<SegmentDownloadResponse> {
+    try {
+      const baseUrl = API_CONFIG.aiVideoBackend.endsWith('/')
+        ? API_CONFIG.aiVideoBackend.slice(0, -1)
+        : API_CONFIG.aiVideoBackend
+      const downloadUrl = `${baseUrl}/api/segments/${segmentId}/download`
+
+      console.log('📥 Downloading segment from:', downloadUrl)
+
+      const response = await fetch(downloadUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ segment_id: segmentId }),
+      })
+
+      if (!response.ok) {
+        throw new Error(`Failed to download segment: ${response.statusText}`)
+      }
+
+      const data = await response.json()
+      console.log('📥 Download response:', data)
+
+      return data
+    } catch (error) {
+      console.error('Error downloading segment:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Track social media usage for a segment
+   * FUTURE ENHANCEMENT: This will integrate with social media APIs
+   *
+   * Instagram API Integration:
+   * - Connect user's Instagram Business account
+   * - Automatically detect when segments are posted
+   * - Track post performance metrics
+   * - Provide hashtag optimization suggestions
+   *
+   * TikTok API Integration:
+   * - Connect user's TikTok Creator account
+   * - Track video performance across TikTok
+   * - Monitor trending hashtags and sounds
+   * - Provide content optimization recommendations
+   *
+   * YouTube Shorts Integration:
+   * - Connect user's YouTube channel
+   * - Track Shorts performance metrics
+   * - Monitor audience retention and engagement
+   * - Provide thumbnail and title optimization
+   */
+  static async trackSocialMediaUsage(
+    segmentId: string,
+    platform: 'instagram' | 'tiktok' | 'youtube' | 'facebook' | 'twitter',
+    postData?: {
+      post_id?: string
+      views?: number
+      likes?: number
+      shares?: number
+      comments?: number
+      posted_at?: string
+    },
+  ): Promise<void> {
+    try {
+      const baseUrl = API_CONFIG.aiVideoBackend.endsWith('/')
+        ? API_CONFIG.aiVideoBackend.slice(0, -1)
+        : API_CONFIG.aiVideoBackend
+      const trackUrl = `${baseUrl}/api/segments/${segmentId}/social-media-usage`
+
+      console.log('📊 Tracking social media usage:', { segmentId, platform, postData })
+
+      const response = await fetch(trackUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          segment_id: segmentId,
+          platform,
+          post_data: postData,
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error(`Failed to track social media usage: ${response.statusText}`)
+      }
+
+      console.log('📊 Social media usage tracked successfully')
+    } catch (error) {
+      console.error('Error tracking social media usage:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Get segment metadata
+   */
+  static async getSegmentMetadata(segmentId: string): Promise<VideoSegment> {
+    try {
+      const baseUrl = API_CONFIG.aiVideoBackend.endsWith('/')
+        ? API_CONFIG.aiVideoBackend.slice(0, -1)
+        : API_CONFIG.aiVideoBackend
+      const metadataUrl = `${baseUrl}/api/segments/${segmentId}`
+
+      console.log('📋 Fetching segment metadata from:', metadataUrl)
+
+      const response = await fetch(metadataUrl, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      })
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch segment metadata: ${response.statusText}`)
+      }
+
+      const data = await response.json()
+      console.log('📋 Segment metadata response:', data)
+
+      return data
+    } catch (error) {
+      console.error('Error fetching segment metadata:', error)
+      throw error
+    }
+  }
 }
 
 export type {
@@ -466,4 +725,8 @@ export type {
   CompleteUploadRequest,
   JobCreatedResponse,
   JobStatusResponse,
+  VideoSegment,
+  SegmentListParams,
+  SegmentListResponse,
+  SegmentDownloadResponse,
 }
