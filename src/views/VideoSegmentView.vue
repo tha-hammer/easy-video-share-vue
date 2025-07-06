@@ -219,7 +219,7 @@
 </template>
 
 <script lang="ts">
-import { defineComponent, computed, onMounted, onUnmounted, ref } from 'vue'
+import { defineComponent, computed, onMounted, onUnmounted, ref, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useSegmentsStore } from '@/stores/segments'
 import { useVideosStore } from '@/stores/videos'
@@ -290,7 +290,11 @@ export default defineComponent({
     const handlePlaySegment = async (segment: VideoSegment) => {
       try {
         console.log('🎬 handlePlaySegment called with segment:', segment)
+        console.log('🎬 Current modal state - showVideoModal:', showVideoModal.value)
+        console.log('🎬 Current modal state - selectedSegment:', selectedSegment.value)
+
         selectedSegment.value = segment
+        console.log('🎬 Set selectedSegment to:', selectedSegment.value)
 
         // Generate video URL first
         const url = await generateVideoUrl(segment)
@@ -299,6 +303,12 @@ export default defineComponent({
 
         // Then show the modal
         showVideoModal.value = true
+        console.log('🎬 Set showVideoModal to true:', showVideoModal.value)
+
+        // Force a re-render by triggering reactivity
+        await nextTick()
+        console.log('🎬 After nextTick - showVideoModal:', showVideoModal.value)
+        console.log('🎬 After nextTick - videoUrl:', videoUrl.value)
       } catch (error) {
         console.error('Failed to play segment:', error)
         // Close modal and show error

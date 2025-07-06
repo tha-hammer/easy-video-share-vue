@@ -72,6 +72,10 @@ export const useSegmentsStore = defineStore('segments', () => {
     has_more: false,
   })
 
+  // Context state to track if we're viewing video-specific segments
+  const currentVideoId = ref<string | null>(null)
+  const isVideoSpecificView = ref(false)
+
   // Getters
   const filteredSegments = computed(() => {
     let filtered = [...segments.value]
@@ -146,6 +150,8 @@ export const useSegmentsStore = defineStore('segments', () => {
   const loadVideoSegments = async (videoId: string) => {
     loading.value = true
     error.value = null
+    currentVideoId.value = videoId
+    isVideoSpecificView.value = true
 
     try {
       const authStore = useAuthStore()
@@ -170,6 +176,8 @@ export const useSegmentsStore = defineStore('segments', () => {
   const loadAllSegments = async (videoId?: string) => {
     loading.value = true
     error.value = null
+    currentVideoId.value = videoId || null
+    isVideoSpecificView.value = false
 
     try {
       const authStore = useAuthStore()
@@ -304,7 +312,13 @@ export const useSegmentsStore = defineStore('segments', () => {
 
     if (segments.value.length > 0) {
       // If we have segments loaded, reload with new filters
-      await loadAllSegments()
+      if (isVideoSpecificView.value && currentVideoId.value) {
+        // For video-specific view, reload video segments and apply filters locally
+        await loadVideoSegments(currentVideoId.value)
+      } else {
+        // For all segments view, reload with new filters
+        await loadAllSegments()
+      }
     }
   }
 
@@ -333,6 +347,8 @@ export const useSegmentsStore = defineStore('segments', () => {
       total_count: 0,
       has_more: false,
     }
+    currentVideoId.value = null
+    isVideoSpecificView.value = false
   }
 
   return {
@@ -342,6 +358,8 @@ export const useSegmentsStore = defineStore('segments', () => {
     error,
     filters,
     pagination,
+    currentVideoId,
+    isVideoSpecificView,
 
     // Getters
     filteredSegments,

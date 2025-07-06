@@ -85,21 +85,31 @@ def extract_segment_with_ffmpeg(input_path: str, output_path: str, start_time: f
         video_info = get_video_info_simple(input_path)
         width, height = video_info['size']
         
-        # Calculate font size: much smaller for better visibility
-        font_size = min(width, height) // 40  # Smaller divisor for smaller text
-        font_size = max(font_size, 16)       # Minimum size
-        font_size = min(font_size, 60)       # Maximum size
+        # Determine if video is vertical (portrait) or horizontal (landscape)
+        is_vertical = height > width
         
-        logger.debug(f"Video resolution: {width}x{height}, calculated font size: {font_size}")
+        # Calculate font size based on video orientation and dimensions
+        if is_vertical:
+            # For vertical videos, use width as the reference dimension
+            font_size = width // 15  # Larger divisor for better visibility
+            font_size = max(font_size, 24)  # Minimum size
+            font_size = min(font_size, 72)  # Maximum size
+        else:
+            # For horizontal videos, use height as the reference dimension
+            font_size = height // 15  # Larger divisor for better visibility
+            font_size = max(font_size, 24)  # Minimum size
+            font_size = min(font_size, 72)  # Maximum size
         
-        # FFmpeg command with dynamic font size
+        logger.debug(f"Video resolution: {width}x{height} ({'vertical' if is_vertical else 'horizontal'}), calculated font size: {font_size}")
+        
+        # FFmpeg command with dynamic font size and top-left positioning
         cmd = [
             'ffmpeg',
             '-y',  # Overwrite output files
             '-i', input_path,
             '-ss', str(start_time),  # Start time
             '-t', str(duration),     # Duration
-            '-vf', f'drawtext=text=\'AI Generated Video\':fontcolor=white:fontsize={font_size}:x=(w-text_w)/2:y=h-text_h-30:box=1:boxcolor=black@0.5:boxborderw=2',
+            '-vf', f'drawtext=text=\'AI Generated Video\':fontcolor=white:fontsize={font_size}:x=30:y=30:box=1:boxcolor=black@0.6:boxborderw=5:borderw=2:bordercolor=black',
             '-c:v', 'libx264',
             '-c:a', 'aac',
             '-preset', 'medium',

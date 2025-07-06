@@ -82,10 +82,32 @@ def extract_segment_with_text_ffmpeg(input_path: str, output_path: str, start_ti
     try:
         duration = end_time - start_time
         
+        # Get video info to calculate appropriate font size
+        video_info = get_video_info_ffprobe(input_path)
+        width = video_info.get('width', 1920)
+        height = video_info.get('height', 1080)
+        
+        # Determine if video is vertical (portrait) or horizontal (landscape)
+        is_vertical = height > width
+        
+        # Calculate font size based on video orientation and dimensions
+        if is_vertical:
+            # For vertical videos, use width as the reference dimension
+            font_size = width // 15  # Larger divisor for better visibility
+            font_size = max(font_size, 24)  # Minimum size
+            font_size = min(font_size, 72)  # Maximum size
+        else:
+            # For horizontal videos, use height as the reference dimension
+            font_size = height // 15  # Larger divisor for better visibility
+            font_size = max(font_size, 24)  # Minimum size
+            font_size = min(font_size, 72)  # Maximum size
+        
+        logger.info(f"Video dimensions: {width}x{height} ({'vertical' if is_vertical else 'horizontal'}), calculated font size: {font_size}")
+        
         # Escape text for FFmpeg
         escaped_text = text.replace("'", "\\'").replace(":", "\\:")
         
-        # FFmpeg command with text overlay
+        # FFmpeg command with text overlay positioned at top-left
         cmd = [
             'ffmpeg',
             '-y',  # Overwrite output files
@@ -93,7 +115,7 @@ def extract_segment_with_text_ffmpeg(input_path: str, output_path: str, start_ti
             '-i', input_path,
             '-ss', str(start_time),  # Start time
             '-t', str(duration),     # Duration
-            '-vf', f'drawtext=text=\'{escaped_text}\':fontcolor=white:fontsize=40:x=(w-text_w)/2:y=h-text_h-20:box=1:boxcolor=black@0.7:boxborderw=5',
+            '-vf', f'drawtext=text=\'{escaped_text}\':fontcolor=white:fontsize={font_size}:x=30:y=30:box=1:boxcolor=black@0.6:boxborderw=5:borderw=2:bordercolor=black',
             '-c:v', 'libx264',
             '-c:a', 'aac',
             '-preset', 'medium',
