@@ -1893,22 +1893,20 @@ async def test_lambda_full_integration(request: dict):
             "source": "railway"
         }
 
+        # Use async invocation for long-running video processing
         response = lambda_client.invoke(
             FunctionName=f"{settings.PROJECT_NAME}-video-processor-test",
-            InvocationType='RequestResponse',
+            InvocationType='Event',  # Async
             Payload=json.dumps(payload)
         )
 
-        # Read the response payload
-        response_payload = response['Payload'].read()
-        response_data = json.loads(response_payload)
-
         return {
-            "status": "success",
-            "lambda_response": response_data,
+            "status": "processing_started",
+            "message": "Lambda processing started asynchronously",
             "status_code": response['StatusCode'],
             "function_name": f"{settings.PROJECT_NAME}-video-processor-test",
-            "test_parameters": payload
+            "test_parameters": payload,
+            "instructions": "Check DynamoDB for job progress updates"
         }
     except Exception as e:
         return {
