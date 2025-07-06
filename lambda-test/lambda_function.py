@@ -39,11 +39,34 @@ def test_full_integration(event, context=None):
     import uuid
     from datetime import datetime, timezone
     from decimal import Decimal
+    import redis
     
     # Initialize AWS clients
     s3_client = boto3.client('s3')
     dynamodb = boto3.resource('dynamodb')
     table = dynamodb.Table('easy-video-share-video-metadata')
+    
+    # Initialize Redis for progress updates (same as Railway)
+    redis_client = redis.StrictRedis.from_url('redis://redis-production-3941.railway.internal:6379', decode_responses=True)
+    
+    def publish_progress(stage, progress, additional_data=None):
+        """Publish progress updates to Redis for real-time UI updates"""
+        try:
+            progress_data = {
+                'job_id': job_id,
+                'stage': stage,
+                'progress': float(progress),
+                'timestamp': datetime.utcnow().isoformat() + 'Z'
+            }
+            if additional_data:
+                progress_data.update(additional_data)
+            
+            # Publish to the same Redis channel pattern as Railway
+            channel = f"job_progress_{job_id}"
+            redis_client.publish(channel, json.dumps(progress_data))
+        except Exception as e:
+            # Don't fail the job if Redis publishing fails
+            print(f"Warning: Redis progress publishing failed: {e}")
     
     # Get parameters from event
     bucket = event.get('s3_bucket', 'easy-video-share-silmari-dev')
@@ -76,6 +99,9 @@ def test_full_integration(event, context=None):
                 }
             })
             
+            # Publish initial progress to Redis
+            publish_progress('queued', 0.0, {'message': 'Job queued for processing'})
+            
             # === STEP 2: UPDATE TO PROCESSING ===
             table.update_item(
                 Key={'video_id': job_id},
@@ -88,6 +114,9 @@ def test_full_integration(event, context=None):
                     ':updated_at': datetime.utcnow().replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
                 }
             )
+            
+            # Publish progress to Redis
+            publish_progress('downloading_video', 5.0, {'message': 'Starting video download from S3'})
             
             # === STEP 3: DOWNLOAD VIDEO FROM S3 ===
             input_video_path = os.path.join(temp_dir, 'input_video.mov')
@@ -104,6 +133,9 @@ def test_full_integration(event, context=None):
                     ':updated_at': datetime.utcnow().replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
                 }
             )
+            
+            # Publish progress to Redis
+            publish_progress('analyzing_video', 15.0, {'message': 'Analyzing video duration and properties', 'file_size': input_file_size})
             
             # Get video duration using ffprobe (we know this works)
             ffprobe_paths = ['/opt/bin/ffprobe', '/usr/bin/ffprobe']
@@ -153,6 +185,14 @@ def test_full_integration(event, context=None):
                 }
             )
             
+            # Publish progress to Redis
+            publish_progress('processing_segments', 25.0, {
+                'message': f'Starting segment processing: {max_segments} segments of {segment_duration:.1f}s each',
+                'total_duration': total_duration,
+                'segments_planned': max_segments,
+                'segment_duration': segment_duration
+            })
+            
             # === STEP 6: PROCESS VIDEO SEGMENTS ===
             output_s3_keys = []
             
@@ -173,6 +213,14 @@ def test_full_integration(event, context=None):
                     }
                 )
                 
+                # Publish progress to Redis for each segment
+                publish_progress('processing_segments', segment_progress, {
+                    'message': f'Processing segment {i+1} of {max_segments}',
+                    'current_segment': i + 1,
+                    'total_segments': max_segments,
+                    'segment_start_time': start_time
+                })
+                
                 segment_path = os.path.join(temp_dir, f'segment_{i:03d}.mp4')
                 
                 # Cut segment with high quality for social media
@@ -192,6 +240,14 @@ def test_full_integration(event, context=None):
                     segment_s3_key = f"processed/{job_id}/segment_{i:03d}.mp4"
                     s3_client.upload_file(segment_path, bucket, segment_s3_key)
                     output_s3_keys.append(segment_s3_key)
+                    
+                    # Publish segment completion to Redis
+                    publish_progress('processing_segments', segment_progress, {
+                        'message': f'Segment {i+1} uploaded successfully',
+                        'current_segment': i + 1,
+                        'total_segments': max_segments,
+                        'segment_s3_key': segment_s3_key
+                    })
             
             # === STEP 7: COMPLETE JOB ===
             processing_end_time = datetime.utcnow()
@@ -211,6 +267,15 @@ def test_full_integration(event, context=None):
                     ':updated_at': datetime.utcnow().replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
                 }
             )
+            
+            # Publish final completion to Redis
+            publish_progress('completed', 100.0, {
+                'message': f'Video processing completed successfully! Created {len(output_s3_keys)} segments in {processing_duration:.1f}s',
+                'segments_created': len(output_s3_keys),
+                'output_s3_keys': output_s3_keys,
+                'processing_duration': processing_duration,
+                'total_duration': total_duration
+            })
             
             # === RETURN RESULTS ===
             return {
@@ -251,6 +316,12 @@ def test_full_integration(event, context=None):
                     ':updated_at': datetime.utcnow().replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
                 }
             )
+            
+            # Publish failure to Redis
+            publish_progress('failed', 0.0, {
+                'message': f'Video processing failed: {str(e)}',
+                'error': str(e)
+            })
         except:
             pass  # Don't fail on cleanup failure
         
