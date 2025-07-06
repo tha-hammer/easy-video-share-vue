@@ -180,69 +180,10 @@ def list_videos(user_id: Optional[str] = None) -> list:
 
 # === SEGMENT MANAGEMENT FUNCTIONS ===
 
-def create_segment(segment_data: VideoSegment) -> VideoSegment:
-    """
-    Create a new video segment in DynamoDB.
-    """
-    now = iso_utc_now()
-    
-    # Convert VideoSegment to DynamoDB item format
-    item = {
-        "segment_id": segment_data.segment_id,
-        "video_id": segment_data.video_id,
-        "user_id": segment_data.user_id,
-        "segment_type": segment_data.segment_type.value,
-        "segment_number": segment_data.segment_number,
-        "s3_key": segment_data.s3_key,
-        "duration": Decimal(str(segment_data.duration)),
-        "file_size": segment_data.file_size,
-        "content_type": segment_data.content_type,
-        "created_at": segment_data.created_at or now,
-        "updated_at": segment_data.updated_at or now,
-        "download_count": segment_data.download_count or 0,
-    }
-    
-    # Add optional fields
-    if segment_data.title:
-        item["title"] = segment_data.title
-    if segment_data.description:
-        item["description"] = segment_data.description
-    if segment_data.tags:
-        item["tags"] = segment_data.tags
-    if segment_data.thumbnail_url:
-        item["thumbnail_url"] = segment_data.thumbnail_url
-    if segment_data.social_media_usage:
-        item["social_media_usage"] = [
-            {
-                "platform": usage.platform.value,
-                "post_id": usage.post_id,
-                "post_url": usage.post_url,
-                "posted_at": usage.posted_at,
-                "views": usage.views,
-                "likes": usage.likes,
-                "shares": usage.shares,
-                "comments": usage.comments,
-                "engagement_rate": usage.engagement_rate,
-                "last_synced": usage.last_synced
-            }
-            for usage in segment_data.social_media_usage
-        ]
-    
-    table.put_item(Item=item)
-    return segment_data
 
 
-def get_segment(segment_id: str) -> Optional[VideoSegment]:
-    """
-    Retrieve a video segment by segment_id.
-    """
-    resp = table.get_item(Key={"segment_id": segment_id})
-    item = resp.get("Item")
-    
-    if not item:
-        return None
-    
-    return _item_to_video_segment(item)
+
+
 
 
 def list_segments_by_video(video_id: str, segment_type: Optional[SegmentType] = None) -> List[VideoSegment]:
@@ -494,48 +435,4 @@ def increment_download_count(segment_id: str) -> Optional[VideoSegment]:
         return None
 
 
-def _item_to_video_segment(item: Dict[str, Any]) -> VideoSegment:
-    """
-    Convert DynamoDB item to VideoSegment model.
-    """
-    # Convert social media usage
-    social_media_usage = []
-    if "social_media_usage" in item:
-        for usage_data in item["social_media_usage"]:
-            social_media_usage.append(SocialMediaUsage(
-                platform=SocialMediaPlatform(usage_data["platform"]),
-                post_id=usage_data.get("post_id"),
-                post_url=usage_data.get("post_url"),
-                posted_at=usage_data.get("posted_at"),
-                views=usage_data.get("views", 0),
-                likes=usage_data.get("likes", 0),
-                shares=usage_data.get("shares", 0),
-                comments=usage_data.get("comments", 0),
-                engagement_rate=usage_data.get("engagement_rate"),
-                last_synced=usage_data.get("last_synced")
-            ))
-    
-    # Extract filename from s3_key
-    filename = item["s3_key"].split("/")[-1] if item["s3_key"] else None
-    
-    return VideoSegment(
-        segment_id=item["segment_id"],
-        video_id=item["video_id"],
-        user_id=item["user_id"],
-        segment_type=SegmentType(item["segment_type"]),
-        segment_number=item["segment_number"],
-        s3_key=item["s3_key"],
-        duration=float(item["duration"]) if isinstance(item["duration"], Decimal) else item["duration"],
-        file_size=item["file_size"],
-        content_type=item.get("content_type", "video/mp4"),
-        thumbnail_url=item.get("thumbnail_url"),
-        created_at=item["created_at"],
-        updated_at=item["updated_at"],
-        title=item.get("title"),
-        description=item.get("description"),
-        tags=item.get("tags", []),
-        social_media_usage=social_media_usage,
-        filename=filename,
-        download_count=item.get("download_count", 0),
-        last_downloaded_at=item.get("last_downloaded_at")
-    )
+

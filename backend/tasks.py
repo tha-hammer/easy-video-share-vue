@@ -3,7 +3,7 @@ from config import settings
 import redis
 import json
 from datetime import datetime, timezone
-from models import ProgressUpdate, VideoSegment, SegmentType, SocialMediaUsage, SocialMediaPlatform
+from models import ProgressUpdate, TextStrategy, TextInput
 
 # Initialize Celery app
 celery_app = Celery(
@@ -127,6 +127,10 @@ def process_video_task(self, s3_input_key: str, job_id: str, cutting_options: di
 
         text_strategy_enum = TextStrategy(text_strategy) if text_strategy else TextStrategy.ONE_FOR_ALL
         text_input_obj = TextInput(**text_input) if text_input else None
+        
+        print(f"[DEBUG] Text strategy: {text_strategy} -> {text_strategy_enum}")
+        print(f"[DEBUG] Text input dict: {text_input}")
+        print(f"[DEBUG] Text input obj: {text_input_obj}")
 
         total_duration = get_video_duration_from_s3(settings.AWS_BUCKET_NAME, s3_input_key)
         num_segments, segment_times = calculate_segments(total_duration, cutting_params)
@@ -226,24 +230,8 @@ def process_video_task(self, s3_input_key: str, job_id: str, cutting_options: di
         except Exception as e:
             print(f"[DynamOdb] Failed to update job status to COMPLETED for job_id={job_id}: {e}")
 
-        # Create segment records in DynamoDB
-        try:
-            # Get video metadata for segment creation
-            video_metadata = dynamodb_service.get_job_status(job_id)
-            if video_metadata:
-                # Queue segment creation task
-                create_segments_from_video_task.delay(
-                    video_id=job_id,
-                    user_id=user_id,
-                    output_s3_keys=uploaded_s3_keys,
-                    video_metadata={
-                        "title": video_metadata.get("title", "Untitled Video"),
-                        "tags": video_metadata.get("tags", [])
-                    }
-                )
-                print(f"[SEGMENT CREATION] Queued segment creation task for video {job_id}")
-        except Exception as e:
-            print(f"[SEGMENT CREATION] Failed to queue segment creation task for job_id={job_id}: {e}")
+        # Note: Segments are stored in output_s3_urls array in the video record
+        # No individual segment records are created
 
         # 7. Completed
         publish_progress(job_id, ProgressUpdate(
@@ -290,75 +278,7 @@ def process_video_task(self, s3_input_key: str, job_id: str, cutting_options: di
                 print(f"Warning: Failed to clean up temp directory: {cleanup_error}")
 
 
-@celery_app.task(bind=True)
-def create_segments_from_video_task(self, video_id: str, user_id: str, output_s3_keys: list, video_metadata: dict):
-    """
-    Celery task for creating segment records in DynamoDB after video processing.
-    
-    This task is called after video processing is complete to create individual
-    segment records for each processed video segment.
-    """
-    import os
-    from s3_utils import get_file_size_from_s3, get_video_duration_from_s3
-    import dynamodb_service
-    from datetime import datetime, timezone
-    
-    try:
-        print(f"[SEGMENT CREATION] Starting segment creation for video {video_id}")
-        
-        created_segments = []
-        
-        for i, s3_key in enumerate(output_s3_keys, 1):
-            try:
-                # Get file size from S3
-                file_size = get_file_size_from_s3(settings.AWS_BUCKET_NAME, s3_key)
-                
-                # Get video duration from S3
-                duration = get_video_duration_from_s3(settings.AWS_BUCKET_NAME, s3_key)
-                
-                # Generate segment ID
-                segment_id = f"seg_{video_id}_{i:03d}"
-                
-                # Create segment data
-                current_time = datetime.utcnow().replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
-                segment_data = VideoSegment(
-                    segment_id=segment_id,
-                    video_id=video_id,
-                    user_id=user_id,
-                    segment_type=SegmentType.PROCESSED,
-                    segment_number=i,
-                    s3_key=s3_key,
-                    duration=duration,
-                    file_size=file_size,
-                    content_type="video/mp4",
-                    title=f"{video_metadata.get('title', 'Video')} - Part {i}",
-                    description=f"Processed segment {i} of {len(output_s3_keys)}",
-                    tags=video_metadata.get('tags', []),
-                    created_at=current_time,
-                    updated_at=current_time
-                )
-                
-                # Save to DynamoDB
-                created_segment = dynamodb_service.create_segment(segment_data)
-                created_segments.append(created_segment)
-                
-                print(f"[SEGMENT CREATION] Created segment {segment_id}")
-                
-            except Exception as e:
-                print(f"[SEGMENT CREATION] Failed to create segment {i}: {e}")
-                continue
-        
-        print(f"[SEGMENT CREATION] Successfully created {len(created_segments)} segments for video {video_id}")
-        return {
-            "status": "completed",
-            "video_id": video_id,
-            "segments_created": len(created_segments),
-            "segment_ids": [seg.segment_id for seg in created_segments]
-        }
-        
-    except Exception as exc:
-        print(f"[SEGMENT CREATION] Failed to create segments for video {video_id}: {str(exc)}")
-        raise self.retry(exc=exc, countdown=60, max_retries=3)
+
 
 
 @celery_app.task(bind=True)

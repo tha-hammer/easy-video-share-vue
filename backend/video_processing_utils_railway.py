@@ -46,13 +46,17 @@ def split_video_with_precise_timing_and_dynamic_text(
         # Prepare text overlays based on strategy
         text_overlays = prepare_text_overlays_simple(text_strategy, text_input, len(segment_times))
         
+        logger.info(f"Railway: Text strategy: {text_strategy}")
+        logger.info(f"Railway: Text input: {text_input}")
+        logger.info(f"Railway: Generated text overlays: {text_overlays}")
+        
         # Process each segment with simplified FFmpeg
         for i, (start_time, end_time) in enumerate(segment_times):
             segment_duration = end_time - start_time
             text_overlay = text_overlays[i] if i < len(text_overlays) else "AI Generated Video"
             
             logger.info(f"Railway: Processing segment {i+1}/{len(segment_times)}: {start_time:.2f}s - {end_time:.2f}s ({segment_duration:.2f}s)")
-            logger.info(f"Railway: Text overlay: '{text_overlay}'")
+            logger.info(f"Railway: Text overlay for segment {i+1}: '{text_overlay}'")
             
             # Call progress callback if provided
             if progress_callback:
@@ -178,18 +182,24 @@ def process_segment_railway_simple(
         
         logger.info(f"Railway: Video dimensions: {width}x{height}, font size: {font_size}")
         
-        # Escape text for FFmpeg (simplified)
-        escaped_text = text_overlay.replace("'", "\\'").replace(":", "\\:")
+        # Escape text for FFmpeg properly
+        escaped_text = text_overlay.replace("'", "\\'").replace(":", "\\:").replace("\\", "\\\\")
+        
+        # Build filter with proper escaping
+        filter_complex = f"drawtext=text='{escaped_text}':fontcolor=white:fontsize={font_size}:x=30:y=30:box=1:boxcolor=black@0.5"
+        
+        logger.info(f"Railway: Text overlay: '{text_overlay}' -> '{escaped_text}'")
+        logger.info(f"Railway: Filter: {filter_complex}")
         
         # Simplified FFmpeg command for Railway
         cmd = [
             'ffmpeg',
             '-y',  # Overwrite output files
-            '-loglevel', 'error',  # Reduce verbosity
+            '-loglevel', 'info',  # More verbose for debugging
             '-i', input_path,
             '-ss', str(start_time),  # Start time
             '-t', str(duration),     # Duration
-            '-vf', f'drawtext=text=\'{escaped_text}\':fontcolor=white:fontsize={font_size}:x=30:y=30:box=1:boxcolor=black@0.5',
+            '-vf', filter_complex,
             '-c:v', 'libx264',
             '-c:a', 'aac',
             '-preset', 'ultrafast',  # Faster encoding for Railway

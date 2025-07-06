@@ -948,44 +948,109 @@ async def list_user_segments(
 ):
     """
     List all segments for a user with filtering options.
+    This endpoint aggregates segments from video records using output_s3_urls.
     """
     try:
-        # Build filters
-        filters = {}
-        if segment_type:
-            filters["segment_type"] = segment_type
-        if min_duration:
-            filters["min_duration"] = min_duration
-        if max_duration:
-            filters["max_duration"] = max_duration
-        if tags:
-            filters["tags"] = tags.split(",")
-        if has_social_media is not None:
-            filters["has_social_media"] = has_social_media
-        if platform:
-            filters["platform"] = platform
+        if not user_id:
+            # If no user_id provided, return empty list
+            return SegmentListResponse(
+                segments=[],
+                total_count=0,
+                page=1,
+                page_size=0
+            )
         
-        if user_id:
-            segments = dynamodb_service.list_segments_by_user(user_id, filters)
-        else:
-            # If no user_id provided, return empty list for now
-            # In a real app, you might want to return all segments or handle differently
-            segments = []
+        # Get all videos for the user and extract segments from output_s3_urls
+        all_segments = []
+        
+        # Get user's videos
+        user_videos = dynamodb_service.list_videos(user_id)
+        
+        for video in user_videos:
+            output_s3_urls = video.get("output_s3_urls", [])
+            if not output_s3_urls:
+                continue
+                
+            # Create segment objects from output_s3_urls
+            for i, s3_key in enumerate(output_s3_urls, 1):
+                try:
+                    # Generate segment ID
+                    segment_id = f"seg_{video['video_id']}_{i:03d}"
+                    
+                    # Extract filename from s3_key
+                    filename = s3_key.split("/")[-1] if s3_key else None
+                    
+                    # Create segment data
+                    segment_data = VideoSegment(
+                        segment_id=segment_id,
+                        video_id=video["video_id"],
+                        user_id=video.get("user_id", ""),
+                        segment_type=SegmentType.PROCESSED,
+                        segment_number=i,
+                        s3_key=s3_key,
+                        duration=30.0,  # Default duration, could be enhanced to get from S3
+                        file_size=0,    # Default size, could be enhanced to get from S3
+                        content_type="video/mp4",
+                        title=f"{video.get('title', 'Video')} - Part {i}",
+                        description=f"Processed segment {i} of {len(output_s3_urls)}",
+                        tags=video.get("tags", []),
+                        created_at=video.get("created_at", ""),
+                        updated_at=video.get("updated_at", ""),
+                        filename=filename,
+                        download_count=0,
+                        social_media_usage=[]
+                    )
+                    
+                    all_segments.append(segment_data)
+                    
+                except Exception as e:
+                    print(f"[ERROR] Failed to create segment {i} for video {video['video_id']}: {e}")
+                    continue
+        
+        # Apply filters
+        filtered_segments = all_segments
+        
+        # Filter by segment type
+        if segment_type:
+            filtered_segments = [s for s in filtered_segments if s.segment_type == segment_type]
+        
+        # Filter by duration
+        if min_duration is not None:
+            filtered_segments = [s for s in filtered_segments if s.duration >= min_duration]
+        if max_duration is not None:
+            filtered_segments = [s for s in filtered_segments if s.duration <= max_duration]
+        
+        # Filter by tags
+        if tags:
+            required_tags = set(tags.split(","))
+            filtered_segments = [s for s in filtered_segments if s.tags and required_tags.issubset(set(s.tags))]
+        
+        # Filter by social media usage (not implemented for output_s3_urls approach)
+        if has_social_media is not None:
+            # For now, return all segments since social media usage is not stored in video records
+            pass
+        
+        # Filter by platform (not implemented for output_s3_urls approach)
+        if platform:
+            # For now, return all segments since social media usage is not stored in video records
+            pass
         
         # Apply sorting
         reverse = sort_order.lower() == "desc"
         if sort_by == "created_at":
-            segments.sort(key=lambda x: x.created_at, reverse=reverse)
+            filtered_segments.sort(key=lambda x: x.created_at, reverse=reverse)
         elif sort_by == "duration":
-            segments.sort(key=lambda x: x.duration, reverse=reverse)
+            filtered_segments.sort(key=lambda x: x.duration, reverse=reverse)
         elif sort_by == "file_size":
-            segments.sort(key=lambda x: x.file_size, reverse=reverse)
+            filtered_segments.sort(key=lambda x: x.file_size, reverse=reverse)
+        elif sort_by == "name":
+            filtered_segments.sort(key=lambda x: x.title or x.filename or "", reverse=reverse)
         
         return SegmentListResponse(
-            segments=segments,
-            total_count=len(segments),
+            segments=filtered_segments,
+            total_count=len(filtered_segments),
             page=1,
-            page_size=len(segments)
+            page_size=len(filtered_segments)
         )
     except Exception as e:
         print(f"[ERROR] Failed to list user segments: {e}")
