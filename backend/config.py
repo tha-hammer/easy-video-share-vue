@@ -48,14 +48,27 @@ class Settings(BaseSettings):
         
         # Railway-specific Redis URL construction
         if self.REDISHOST:
-            redis_url_parts = [f"redis://"]
+            print(f"DEBUG: Constructing Redis URL from Railway variables")
+            print(f"DEBUG: REDISHOST: {self.REDISHOST}")
+            print(f"DEBUG: REDISPORT: {self.REDISPORT}")
+            print(f"DEBUG: REDIS_PASSWORD: {'SET' if self.REDIS_PASSWORD else 'NOT SET'}")
+            
+            # Build Redis URL properly
             if self.REDIS_PASSWORD:
-                redis_url_parts.append(f":{self.REDIS_PASSWORD}@")
-            redis_url_parts.append(f"{self.REDISHOST}")
+                # With password: redis://:password@host:port/db
+                self.REDIS_URL = f"redis://:{self.REDIS_PASSWORD}@{self.REDISHOST}"
+            else:
+                # Without password: redis://host:port/db
+                self.REDIS_URL = f"redis://{self.REDISHOST}"
+            
+            # Add port if specified
             if self.REDISPORT:
-                redis_url_parts.append(f":{self.REDISPORT}")
-            redis_url_parts.append("/0")
-            self.REDIS_URL = "".join(redis_url_parts)
+                self.REDIS_URL += f":{self.REDISPORT}"
+            
+            # Add database number
+            self.REDIS_URL += "/0"
+            
+            print(f"DEBUG: Constructed Redis URL: {self.REDIS_URL}")
         
         # Detect Railway environment
         if os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("RAILWAY_STATIC_URL"):

@@ -1,14 +1,10 @@
 // Authentication module using AWS Amplify
 import { Amplify } from 'aws-amplify'
 import {
-  signUp,
   signIn,
   signOut,
   getCurrentUser,
   fetchAuthSession,
-  confirmSignUp,
-  resendSignUpCode,
-  fetchUserAttributes,
   resetPassword,
   confirmResetPassword,
 } from 'aws-amplify/auth'
@@ -101,7 +97,7 @@ class AuthManager {
   }
 
   // Helper function to decode JWT token
-  private parseJwt(token: string): Record<string, any> {
+  private parseJwt(token: string): Record<string, unknown> {
     try {
       const base64Url = token.split('.')[1]
       const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/')
@@ -154,7 +150,7 @@ class AuthManager {
 
       this.notify()
       return true
-    } catch (error) {
+    } catch (_error) {
       console.log('No authenticated user')
       this.currentUser = null
       this.isAuthenticated = false

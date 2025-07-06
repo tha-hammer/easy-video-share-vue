@@ -41,7 +41,7 @@ const routes: Array<RouteRecordRaw> = [
       {
         path: '/segments',
         name: 'segments',
-        component: () => import('@/views/SegmentsLibrary.vue'),
+        component: () => import('@/views/SegmentsLibrary.vue'), // My Segments view
         meta: {
           pageTitle: 'My Segments',
           breadcrumbs: ['Segments'],
