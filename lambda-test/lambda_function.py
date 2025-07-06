@@ -646,7 +646,8 @@ def test_full_integration(event, context=None):
             # === STEP 7: UPDATE PROGRESS - PROCESSING ===
             table.update_item(
                 Key={'video_id': job_id},
-                UpdateExpression='SET processing_stage = :stage, progress_percentage = :progress, updated_at = :updated_at, metadata.duration = :duration, metadata.segments_planned = :segments',
+                UpdateExpression='SET processing_stage = :stage, progress_percentage = :progress, updated_at = :updated_at, metadata.#dur = :duration, metadata.segments_planned = :segments',
+                ExpressionAttributeNames={'#dur': 'duration'},
                 ExpressionAttributeValues={
                     ':stage': 'processing_segments',
                     ':progress': Decimal('25.0'),
@@ -713,7 +714,7 @@ def test_full_integration(event, context=None):
             
             table.update_item(
                 Key={'video_id': job_id},
-                UpdateExpression='SET #status = :status, processing_stage = :stage, progress_percentage = :progress, output_s3_urls = :outputs, segments_created = :segments, metadata.processing_duration = :duration, updated_at = :updated_at',
+                UpdateExpression='SET #status = :status, processing_stage = :stage, progress_percentage = :progress, output_s3_urls = :outputs, segments_created = :segments, metadata.processing_duration = :proc_duration, updated_at = :updated_at',
                 ExpressionAttributeNames={'#status': 'status'},
                 ExpressionAttributeValues={
                     ':status': 'COMPLETED',
@@ -721,7 +722,7 @@ def test_full_integration(event, context=None):
                     ':progress': Decimal('100.0'),
                     ':outputs': output_s3_keys,
                     ':segments': len(output_s3_keys),
-                    ':duration': Decimal(str(processing_duration)),
+                    ':proc_duration': Decimal(str(processing_duration)),
                     ':updated_at': datetime.utcnow().replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
                 }
             )
