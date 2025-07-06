@@ -67,6 +67,18 @@ terraform/backups/*
 .output
 .generate
 
+# Python virtual environments (root level)
+.venv/
+venv/
+env/
+ENV/
+
+# Python cache files (global)
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
 # Backend Python
 backend/.venv/
 backend/__pycache__/
