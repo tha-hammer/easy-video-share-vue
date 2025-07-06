@@ -56,7 +56,8 @@
 ### Step 1: Setup Workspace Structure
 
 aws sts get-caller-identity --profile AdministratorAccess-571960159088
-$env:AWS_PROFILE = "AdministratorAccess-571960159088"
+$env:AWS_PROFILE = "AdministratorAccess-571960159088" OR for Git Bash
+export AWS_PROFILE=AdministratorAccess-571960159088
 
 ```bash
 # Create workspaces
