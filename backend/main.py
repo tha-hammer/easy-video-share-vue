@@ -1717,6 +1717,48 @@ async def test_lambda_invoke():
             "error_type": type(e).__name__
         }
 
+@router.post("/test/lambda-s3")
+async def test_lambda_s3_operations(request: dict):
+    """Test endpoint to verify Lambda S3 operations (Phase 2B)"""
+    try:
+        import boto3
+        lambda_client = boto3.client('lambda', region_name=settings.AWS_REGION)
+
+        # Get test parameters from request
+        s3_bucket = request.get('s3_bucket', settings.AWS_BUCKET_NAME)
+        s3_key = request.get('s3_key', 'uploads/test-file.txt')
+
+        payload = {
+            "test_type": "s3_operations",
+            "s3_bucket": s3_bucket,
+            "s3_key": s3_key,
+            "source": "railway"
+        }
+
+        response = lambda_client.invoke(
+            FunctionName=f"{settings.PROJECT_NAME}-video-processor-test",
+            InvocationType='RequestResponse',
+            Payload=json.dumps(payload)
+        )
+
+        # Read the response payload
+        response_payload = response['Payload'].read()
+        response_data = json.loads(response_payload)
+
+        return {
+            "status": "success",
+            "lambda_response": response_data,
+            "status_code": response['StatusCode'],
+            "function_name": f"{settings.PROJECT_NAME}-video-processor-test",
+            "test_parameters": payload
+        }
+    except Exception as e:
+        return {
+            "status": "error", 
+            "error": str(e),
+            "error_type": type(e).__name__
+        }
+
 # Include router in app (after all endpoints are defined)
 app.include_router(router)
 
