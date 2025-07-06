@@ -229,21 +229,31 @@ def process_segment_with_ffmpeg(
         width = video_info.get('width', 1920)
         height = video_info.get('height', 1080)
         
-        # Calculate font size as a percentage of the smaller dimension
-        # This ensures text is readable but not overwhelming
-        font_size = min(width, height) // 20  # Much smaller divisor for very small text
-        font_size = max(font_size, 16)  # Minimum font size for readability
-        font_size = min(font_size, 56)  # Maximum font size to prevent huge text
+        # Determine if video is vertical (portrait) or horizontal (landscape)
+        is_vertical = height > width
         
-        logger.info(f"Video dimensions: {width}x{height}, calculated font size: {font_size}")
-        print(f"DEBUG: Video dimensions: {width}x{height}, calculated font size: {font_size}")
+        # Calculate font size based on video orientation and dimensions
+        if is_vertical:
+            # For vertical videos, use width as the reference dimension
+            # This ensures text is properly sized for the narrower dimension
+            font_size = width // 15  # Larger divisor for better visibility
+            font_size = max(font_size, 24)  # Minimum font size for readability
+            font_size = min(font_size, 72)  # Maximum font size to prevent huge text
+        else:
+            # For horizontal videos, use height as the reference dimension
+            font_size = height // 15  # Larger divisor for better visibility
+            font_size = max(font_size, 24)  # Minimum font size for readability
+            font_size = min(font_size, 72)  # Maximum font size to prevent huge text
+        
+        logger.info(f"Video dimensions: {width}x{height} ({'vertical' if is_vertical else 'horizontal'}), calculated font size: {font_size}")
+        print(f"DEBUG: Video dimensions: {width}x{height} ({'vertical' if is_vertical else 'horizontal'}), calculated font size: {font_size}")
         
         # Create multi-line text filter
         max_chars_per_line = width // (font_size // 2)  # Estimate characters per line based on font size
-        max_chars_per_line = max(max_chars_per_line, 9)  # Minimum characters per line
-        max_chars_per_line = min(max_chars_per_line, 30)  # Maximum characters per line
+        max_chars_per_line = max(max_chars_per_line, 12)  # Minimum characters per line
+        max_chars_per_line = min(max_chars_per_line, 40)  # Maximum characters per line
         
-        drawtext_filter = create_multiline_drawtext_filter(text_overlay, font_size, max_chars_per_line)
+        drawtext_filter = create_multiline_drawtext_filter(text_overlay, font_size, max_chars_per_line, is_vertical)
         
         # Build FFmpeg command for precise cutting with multi-line text overlay
         cmd = [
@@ -392,7 +402,7 @@ def get_video_info_ffprobe(file_path: str) -> dict:
         raise
 
 
-def create_multiline_drawtext_filter(text: str, font_size: int, max_width: int) -> str:
+def create_multiline_drawtext_filter(text: str, font_size: int, max_width: int, is_vertical: bool) -> str:
     """
     Create FFmpeg drawtext filter string for multi-line text
     
@@ -400,6 +410,7 @@ def create_multiline_drawtext_filter(text: str, font_size: int, max_width: int) 
         text: Text to display (can contain newlines)
         font_size: Font size to use
         max_width: Maximum width for text wrapping (in characters)
+        is_vertical: True if video is vertical, False if horizontal
         
     Returns:
         FFmpeg filter string for multi-line text
@@ -427,13 +438,29 @@ def create_multiline_drawtext_filter(text: str, font_size: int, max_width: int) 
     
     # Create multiple drawtext filters
     filters = []
-    line_height = font_size + 4  # Add some padding between lines
+    line_height = font_size + 8  # Add some padding between lines
     
-    total_lines = len(wrapped_lines)
+    # Position text at top left corner
+    x_offset = 30  # Fixed x-offset from left edge
+    y_start = 30   # Fixed y-offset from top edge
+    
     for i, line in enumerate(wrapped_lines):
         escaped_line = escape_text_for_ffmpeg(line)
-        y_offset = 30 + ((total_lines - i - 1) * line_height)  # First line at top, stack downward
-        filter_str = f"drawtext=text='{escaped_line}':fontsize={font_size}:fontcolor=white:borderw=1:bordercolor=black:x=20:y=h-th-{y_offset}"
+        y_offset = y_start + (i * line_height)  # Stack lines downward from top
+        
+        # Add background box for better readability
+        filter_str = (
+            f"drawtext=text='{escaped_line}':"
+            f"fontsize={font_size}:"
+            f"fontcolor=white:"
+            f"borderw=2:"
+            f"bordercolor=black:"
+            f"box=1:"
+            f"boxcolor=black@0.6:"
+            f"boxborderw=5:"
+            f"x={x_offset}:"
+            f"y={y_offset}"
+        )
         filters.append(filter_str)
     
     # Combine filters with comma separation

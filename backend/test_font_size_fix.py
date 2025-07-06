@@ -16,25 +16,53 @@ logger = logging.getLogger(__name__)
 def test_font_size_calculation():
     """Test the font size calculation with different video resolutions"""
     
-    # Test different resolutions
+    # Test different resolutions (both horizontal and vertical)
     test_resolutions = [
-        {'width': 1920, 'height': 1080},  # 1080p
-        {'width': 1280, 'height': 720},   # 720p
-        {'width': 854, 'height': 480},    # 480p
-        {'width': 640, 'height': 360},    # 360p
-        {'width': 3840, 'height': 2160},  # 4K
+        {'width': 1920, 'height': 1080, 'name': '1080p (horizontal)'},
+        {'width': 1280, 'height': 720, 'name': '720p (horizontal)'},
+        {'width': 854, 'height': 480, 'name': '480p (horizontal)'},
+        {'width': 640, 'height': 360, 'name': '360p (horizontal)'},
+        {'width': 3840, 'height': 2160, 'name': '4K (horizontal)'},
+        {'width': 1080, 'height': 1920, 'name': '1080p (vertical)'},
+        {'width': 720, 'height': 1280, 'name': '720p (vertical)'},
+        {'width': 480, 'height': 854, 'name': '480p (vertical)'},
+        {'width': 360, 'height': 640, 'name': '360p (vertical)'},
+        {'width': 2160, 'height': 3840, 'name': '4K (vertical)'},
     ]
     
     print("Font size calculations for different resolutions:")
-    print("=" * 50)
+    print("=" * 60)
     
     for res in test_resolutions:
         width, height = res['width'], res['height']
-        font_size = min(width, height) // 40  # Updated divisor
-        font_size = max(font_size, 16)       # Updated minimum
-        font_size = min(font_size, 60)       # Updated maximum
+        name = res['name']
         
-        print(f"{width}x{height}: font_size = {font_size}")
+        # Determine if video is vertical (portrait) or horizontal (landscape)
+        is_vertical = height > width
+        
+        # Calculate font size based on video orientation and dimensions
+        if is_vertical:
+            # For vertical videos, use width as the reference dimension
+            font_size = width // 15  # Larger divisor for better visibility
+            font_size = max(font_size, 24)  # Minimum size
+            font_size = min(font_size, 72)  # Maximum size
+        else:
+            # For horizontal videos, use height as the reference dimension
+            font_size = height // 15  # Larger divisor for better visibility
+            font_size = max(font_size, 24)  # Minimum size
+            font_size = min(font_size, 72)  # Maximum size
+        
+        print(f"{name:20} {width}x{height:8} | font_size = {font_size:2d} | {'vertical' if is_vertical else 'horizontal':>9}")
+    
+    print("=" * 60)
+    print("Key improvements:")
+    print("- Vertical videos now use width as reference dimension")
+    print("- Horizontal videos use height as reference dimension")
+    print("- Font size divisor changed from 20 to 15 for better visibility")
+    print("- Minimum font size increased from 16 to 24")
+    print("- Maximum font size increased from 56 to 72")
+    print("- Text positioned at top-left corner (x=30, y=30)")
+    print("- Added background box for better readability")
     
     return True
 

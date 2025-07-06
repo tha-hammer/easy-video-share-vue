@@ -222,7 +222,9 @@ export default defineComponent({
 
     // Load all segments
     const loadSegments = async () => {
+      console.log('🎬 SegmentsLibrary loadSegments called')
       await segmentsStore.loadAllSegments()
+      console.log('🎬 SegmentsLibrary loaded segments:', segmentsStore.segments.length)
     }
 
     // Load more segments (for pagination)
@@ -236,8 +238,10 @@ export default defineComponent({
     }
 
     // Handle segment play
-    const handlePlaySegment = (segment: VideoSegment) => {
+    const handlePlaySegment = async (segment: VideoSegment) => {
+      console.log('🎬 SegmentsLibrary handlePlaySegment called with segment:', segment)
       // TODO: Implement video player modal or redirect to video player
+      // For now, just log the segment
       console.log('Play segment:', segment)
     }
 
