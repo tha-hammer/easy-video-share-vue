@@ -370,6 +370,16 @@ resource "aws_lambda_function" "admin_api" {
   }
 }
 
+# FFmpeg Lambda layer (Phase 2A)
+resource "aws_lambda_layer_version" "ffmpeg_layer" {
+  filename         = "ffmpeg-layer.zip"
+  layer_name       = "${var.project_name}-ffmpeg-layer"
+  source_code_hash = data.archive_file.ffmpeg_layer_zip.output_base64sha256
+
+  compatible_runtimes = ["python3.11", "python3.10"]
+  description         = "FFmpeg binaries for video processing"
+}
+
 # Test Lambda function for video processor (Phase 1A)
 resource "aws_lambda_function" "video_processor_test" {
   filename         = "video_processor_test.zip"
@@ -381,6 +391,34 @@ resource "aws_lambda_function" "video_processor_test" {
   memory_size     = 128
 
   source_code_hash = data.archive_file.video_processor_test_zip.output_base64sha256
+
+  environment {
+    variables = {
+      TEST_MODE = "true"
+    }
+  }
+
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+    Purpose     = "testing"
+  }
+}
+
+# FFmpeg test Lambda function (Phase 2A)
+resource "aws_lambda_function" "ffmpeg_test" {
+  filename         = "ffmpeg_test.zip"
+  function_name    = "${var.project_name}-ffmpeg-test"
+  role            = aws_iam_role.lambda_execution_role.arn
+  handler         = "ffmpeg_test.lambda_handler"
+  runtime         = "python3.11"
+  timeout         = 60
+  memory_size     = 128
+
+  # Use FFmpeg layer
+  layers = [aws_lambda_layer_version.ffmpeg_layer.arn]
+
+  source_code_hash = data.archive_file.ffmpeg_test_zip.output_base64sha256
 
   environment {
     variables = {
@@ -413,6 +451,20 @@ data "archive_file" "admin_lambda_zip" {
 data "archive_file" "video_processor_test_zip" {
   type        = "zip"
   output_path = "video_processor_test.zip"
+  source_dir  = "${path.module}/lambda-video-processor"
+}
+
+# Create FFmpeg layer deployment package
+data "archive_file" "ffmpeg_layer_zip" {
+  type        = "zip"
+  output_path = "ffmpeg-layer.zip"
+  source_dir  = "${path.module}/layers/ffmpeg"
+}
+
+# Create FFmpeg test Lambda deployment package
+data "archive_file" "ffmpeg_test_zip" {
+  type        = "zip"
+  output_path = "ffmpeg_test.zip"
   source_dir  = "${path.module}/lambda-video-processor"
 }
 
