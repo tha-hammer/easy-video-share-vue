@@ -17,7 +17,7 @@ sys.path.insert(0, backend_dir)
 # Import our backend modules
 from models import TextStrategy, TextInput, FixedCuttingParams, CompleteUploadRequest, CuttingOptions
 from llm_service_vertexai import LLMService, generate_text_variations, test_llm_connection
-from video_processing_utils_sprint4 import prepare_text_overlays
+from backend.video_processing_utils_helpers import prepare_text_overlays
 from tasks import process_video_task
 
 # Configure logging

@@ -326,6 +326,7 @@ def get_video_duration_from_s3(s3_bucket: str, s3_key: str) -> float:
         raise
 
 
+
 def calculate_segments(total_duration: float, cutting_options: CuttingOptions) -> Tuple[int, List[Tuple[float, float]]]:
     """
     Calculate video segments based on cutting options

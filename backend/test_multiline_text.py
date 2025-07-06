@@ -12,7 +12,7 @@ import logging
 backend_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, backend_dir)
 
-from video_processing_utils_sprint4 import create_multiline_drawtext_filter, process_segment_with_ffmpeg
+from backend.video_processing_utils_helpers import create_multiline_drawtext_filter, process_segment_with_ffmpeg
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
