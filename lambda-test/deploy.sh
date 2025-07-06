@@ -8,7 +8,7 @@ ROLE_ARN="arn:aws:iam::864074432175:role/lambda-execution-role"  # Update this w
 
 echo "Creating deployment package..."
 cd lambda-test
-zip -r function.zip lambda_function.py
+"C:/Program Files/7-Zip/7z.exe" a function.zip lambda_function.py
 
 echo "Checking if function exists..."
 if aws lambda get-function --function-name $FUNCTION_NAME 2>/dev/null; then
