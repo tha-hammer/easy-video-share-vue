@@ -10,6 +10,10 @@ class Settings(BaseSettings):
     AWS_BUCKET_NAME: str
     AWS_ACCESS_KEY_ID: Optional[str] = None
     AWS_SECRET_ACCESS_KEY: Optional[str] = None
+    
+    # Project Configuration
+    PROJECT_NAME: str = "easy-video-share"
+    ENVIRONMENT: str = "development"
 
     # DynamoDB
     DYNAMODB_TABLE_NAME: str = "easy-video-share-video-metadata"

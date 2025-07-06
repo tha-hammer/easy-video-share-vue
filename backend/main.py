@@ -1303,9 +1303,6 @@ async def get_segment_play_url(segment_id: str):
         raise HTTPException(status_code=500, detail=f"Failed to get segment play URL: {str(e)}")
 
 
-# Include router in app
-app.include_router(router)
-
 # Add debug endpoint directly to app (without /api prefix)
 @app.get("/debug/aws")
 async def debug_aws_direct():
@@ -1690,6 +1687,38 @@ async def debug_env():
         }
     }
 
+@router.post("/test/lambda")
+async def test_lambda_invoke():
+    """Test endpoint to verify Lambda connectivity (Phase 1B)"""
+    try:
+        import boto3
+        lambda_client = boto3.client('lambda')
+
+        response = lambda_client.invoke(
+            FunctionName=f"{settings.PROJECT_NAME}-video-processor-test",
+            InvocationType='RequestResponse',  # Synchronous for testing
+            Payload=json.dumps({"test": "data", "source": "railway"})
+        )
+
+        # Read the response payload
+        response_payload = response['Payload'].read()
+        response_data = json.loads(response_payload)
+
+        return {
+            "status": "success",
+            "lambda_response": response_data,
+            "status_code": response['StatusCode'],
+            "function_name": f"{settings.PROJECT_NAME}-video-processor-test"
+        }
+    except Exception as e:
+        return {
+            "status": "error", 
+            "error": str(e),
+            "error_type": type(e).__name__
+        }
+
+# Include router in app (after all endpoints are defined)
+app.include_router(router)
 
 if __name__ == "__main__":
     import uvicorn

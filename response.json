@@ -1,0 +1,1 @@
+{"statusCode": 200, "headers": {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"}, "body": "{\"message\": \"Hello from Lambda Video Processor Test!\", \"event\": {\"test\": \"data\"}, \"function_name\": \"easy-video-share-video-processor-test\", \"function_version\": \"$LATEST\"}"}
