@@ -498,9 +498,21 @@ def test_dynamodb_operations(event, context=None):
             'test_status': 'SUCCESS' if all([create_success, processing_update_success, completion_update_success, read_success]) else 'PARTIAL_SUCCESS'
         }
         
+        # Convert Decimal objects to float for JSON serialization
+        def decimal_to_float(obj):
+            if isinstance(obj, dict):
+                return {k: decimal_to_float(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [decimal_to_float(v) for v in obj]
+            elif isinstance(obj, Decimal):
+                return float(obj)
+            return obj
+        
+        serializable_results = decimal_to_float(test_results)
+        
         return {
             'statusCode': 200,
-            'body': json.dumps(test_results)
+            'body': json.dumps(serializable_results)
         }
         
     except Exception as e:
