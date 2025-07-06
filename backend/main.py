@@ -1873,6 +1873,50 @@ async def test_lambda_dynamodb_operations():
             "error_type": type(e).__name__
         }
 
+@router.post("/test/lambda-full-integration")
+async def test_lambda_full_integration(request: dict):
+    """Test endpoint for complete end-to-end Lambda video processing (Phase 4)"""
+    try:
+        import boto3
+        lambda_client = boto3.client('lambda', region_name=settings.AWS_REGION)
+
+        # Get test parameters from request
+        s3_bucket = request.get('s3_bucket', 'easy-video-share-silmari-dev')
+        s3_key = request.get('s3_key', 'uploads/f5657863-5078-481c-b4c5-99ffa1dd1ad5/20250706_155512_IMG_0899.mov')
+        segment_duration = request.get('segment_duration', 30)  # 30 seconds for social media
+
+        payload = {
+            "test_type": "full_integration",
+            "s3_bucket": s3_bucket,
+            "s3_key": s3_key,
+            "segment_duration": segment_duration,
+            "source": "railway"
+        }
+
+        response = lambda_client.invoke(
+            FunctionName=f"{settings.PROJECT_NAME}-video-processor-test",
+            InvocationType='RequestResponse',
+            Payload=json.dumps(payload)
+        )
+
+        # Read the response payload
+        response_payload = response['Payload'].read()
+        response_data = json.loads(response_payload)
+
+        return {
+            "status": "success",
+            "lambda_response": response_data,
+            "status_code": response['StatusCode'],
+            "function_name": f"{settings.PROJECT_NAME}-video-processor-test",
+            "test_parameters": payload
+        }
+    except Exception as e:
+        return {
+            "status": "error", 
+            "error": str(e),
+            "error_type": type(e).__name__
+        }
+
 # Include router in app (after all endpoints are defined)
 app.include_router(router)
 
