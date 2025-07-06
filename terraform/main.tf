@@ -370,6 +370,31 @@ resource "aws_lambda_function" "admin_api" {
   }
 }
 
+# Test Lambda function for video processor (Phase 1A)
+resource "aws_lambda_function" "video_processor_test" {
+  filename         = "video_processor_test.zip"
+  function_name    = "${var.project_name}-video-processor-test"
+  role            = aws_iam_role.lambda_execution_role.arn
+  handler         = "test_handler.lambda_handler"
+  runtime         = "python3.11"
+  timeout         = 60
+  memory_size     = 128
+
+  source_code_hash = data.archive_file.video_processor_test_zip.output_base64sha256
+
+  environment {
+    variables = {
+      TEST_MODE = "true"
+    }
+  }
+
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+    Purpose     = "testing"
+  }
+}
+
 # Create Lambda deployment package
 data "archive_file" "lambda_zip" {
   type        = "zip"
@@ -382,6 +407,13 @@ data "archive_file" "admin_lambda_zip" {
   type        = "zip"
   output_path = "admin_lambda_function.zip"
   source_dir  = "${path.module}/admin-lambda"
+}
+
+# Create Video Processor Test Lambda deployment package
+data "archive_file" "video_processor_test_zip" {
+  type        = "zip"
+  output_path = "video_processor_test.zip"
+  source_dir  = "${path.module}/lambda-video-processor"
 }
 
 # API Gateway REST API

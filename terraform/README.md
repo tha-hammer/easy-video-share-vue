@@ -26,7 +26,8 @@ This Terraform configuration creates the AWS infrastructure for the Easy Video S
 aws configure
 # Enter your Access Key ID, Secret Access Key, and region
 aws configure sso
-$env:AWS_PROFILE = "AdministratorAccess-571960159088"
+$env:AWS_PROFILE = "AdministratorAccess-571960159088" OR for Git Bash
+export AWS_PROFILE=AdministratorAccess-571960159088
 # Enter Access key, secret key, SSO URL and region
 ```
 
