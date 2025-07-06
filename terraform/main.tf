@@ -433,6 +433,31 @@ resource "aws_lambda_function" "ffmpeg_test" {
   }
 }
 
+# S3 test Lambda function (Phase 2B)
+resource "aws_lambda_function" "s3_test" {
+  filename         = "s3_test.zip"
+  function_name    = "${var.project_name}-s3-test"
+  role            = aws_iam_role.lambda_execution_role.arn
+  handler         = "s3_test.lambda_handler"
+  runtime         = "python3.11"
+  timeout         = 300  # 5 minutes for S3 operations
+  memory_size     = 512  # More memory for file operations
+
+  source_code_hash = data.archive_file.s3_test_zip.output_base64sha256
+
+  environment {
+    variables = {
+      TEST_MODE = "true"
+    }
+  }
+
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+    Purpose     = "testing"
+  }
+}
+
 # Create Lambda deployment package
 data "archive_file" "lambda_zip" {
   type        = "zip"
@@ -465,6 +490,13 @@ data "archive_file" "ffmpeg_layer_zip" {
 data "archive_file" "ffmpeg_test_zip" {
   type        = "zip"
   output_path = "ffmpeg_test.zip"
+  source_dir  = "${path.module}/lambda-video-processor"
+}
+
+# Create S3 test Lambda deployment package
+data "archive_file" "s3_test_zip" {
+  type        = "zip"
+  output_path = "s3_test.zip"
   source_dir  = "${path.module}/lambda-video-processor"
 }
 
