@@ -1407,6 +1407,120 @@ async def debug_ffmpeg():
         }
 
 
+@app.get("/debug/railway-video")
+async def debug_railway_video():
+    """Debug endpoint to test Railway video processing"""
+    try:
+        import subprocess
+        import tempfile
+        import os
+        
+        # Test 1: Check FFmpeg installation
+        ffmpeg_result = subprocess.run(['ffmpeg', '-version'], capture_output=True, text=True, timeout=10)
+        ffmpeg_ok = ffmpeg_result.returncode == 0
+        
+        # Test 2: Check FFprobe installation
+        ffprobe_result = subprocess.run(['ffprobe', '-version'], capture_output=True, text=True, timeout=10)
+        ffprobe_ok = ffprobe_result.returncode == 0
+        
+        # Test 3: Create a simple test video
+        test_video_path = None
+        test_video_ok = False
+        
+        try:
+            test_video_path = "test_railway_video.mp4"
+            cmd = [
+                'ffmpeg',
+                '-y',
+                '-f', 'lavfi',
+                '-i', 'testsrc=duration=10:size=640x480:rate=30',
+                '-f', 'lavfi',
+                '-i', 'sine=frequency=440:duration=10',
+                '-c:v', 'libx264',
+                '-c:a', 'aac',
+                '-preset', 'ultrafast',
+                '-crf', '30',
+                test_video_path
+            ]
+            
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+            test_video_ok = result.returncode == 0 and os.path.exists(test_video_path)
+            
+        except Exception as e:
+            test_video_ok = False
+            test_video_error = str(e)
+        
+        # Test 4: Test Railway video processing
+        processing_ok = False
+        processing_error = None
+        
+        if test_video_ok and test_video_path:
+            try:
+                from video_processing_utils_railway import (
+                    split_video_with_precise_timing_and_dynamic_text,
+                    get_video_info_railway
+                )
+                from models import TextStrategy
+                
+                # Get video info
+                video_info = get_video_info_railway(test_video_path)
+                
+                # Process video with simple parameters
+                with tempfile.TemporaryDirectory() as temp_dir:
+                    output_prefix = os.path.join(temp_dir, "processed_test")
+                    segment_times = [(0, 5), (5, 10)]  # Two 5-second segments
+                    
+                    output_paths = split_video_with_precise_timing_and_dynamic_text(
+                        input_path=test_video_path,
+                        output_prefix=output_prefix,
+                        segment_times=segment_times,
+                        text_strategy=TextStrategy.ONE_FOR_ALL
+                    )
+                    
+                    processing_ok = len(output_paths) == 2
+                    
+            except Exception as e:
+                processing_ok = False
+                processing_error = str(e)
+        
+        # Clean up test video
+        if test_video_path and os.path.exists(test_video_path):
+            try:
+                os.remove(test_video_path)
+            except:
+                pass
+        
+        return {
+            "status": "success" if all([ffmpeg_ok, ffprobe_ok, test_video_ok, processing_ok]) else "partial_success",
+            "tests": {
+                "ffmpeg_installation": {
+                    "status": "success" if ffmpeg_ok else "error",
+                    "details": ffmpeg_result.stdout.split('\n')[0] if ffmpeg_ok else ffmpeg_result.stderr
+                },
+                "ffprobe_installation": {
+                    "status": "success" if ffprobe_ok else "error",
+                    "details": ffprobe_result.stdout.split('\n')[0] if ffprobe_ok else ffprobe_result.stderr
+                },
+                "test_video_creation": {
+                    "status": "success" if test_video_ok else "error",
+                    "details": "Test video created successfully" if test_video_ok else getattr(locals(), 'test_video_error', 'Unknown error')
+                },
+                "video_processing": {
+                    "status": "success" if processing_ok else "error",
+                    "details": "Video processing successful" if processing_ok else processing_error
+                }
+            },
+            "video_info": video_info if test_video_ok else None
+        }
+        
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e),
+            "error_type": type(e).__name__
+        }
+
+
 @app.get("/debug/test")
 async def debug_test():
     """Simple test endpoint to verify backend is running"""

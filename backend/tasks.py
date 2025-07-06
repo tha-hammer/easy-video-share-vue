@@ -55,7 +55,7 @@ def process_video_task(self, s3_input_key: str, job_id: str, cutting_options: di
     import uuid
     from s3_utils import download_file_from_s3, upload_file_to_s3
     from video_processing_utils import calculate_segments, validate_video_file, get_video_duration_from_s3
-    from video_processing_utils_sprint4 import split_video_with_precise_timing_and_dynamic_text
+    from video_processing_utils_railway import split_video_with_precise_timing_and_dynamic_text
     from models import CuttingOptions, FixedCuttingParams, RandomCuttingParams, TextStrategy, TextInput
     import dynamodb_service
 

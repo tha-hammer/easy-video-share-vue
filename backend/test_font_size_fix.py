@@ -7,7 +7,7 @@ import os
 import sys
 import tempfile
 import logging
-from video_processing_utils_sprint4 import get_video_info, process_segment_with_ffmpeg
+from backend.video_processing_utils_helpers import get_video_info, process_segment_with_ffmpeg
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)

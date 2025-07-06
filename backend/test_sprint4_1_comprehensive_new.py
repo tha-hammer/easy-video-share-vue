@@ -29,7 +29,7 @@ backend_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, backend_dir)
 
 from models import TextStrategy, TextInput, CuttingOptions, FixedCuttingParams
-from video_processing_utils_sprint4 import prepare_text_overlays
+from backend.video_processing_utils_helpers import prepare_text_overlays
 from llm_service_vertexai import generate_text_variations, test_llm_connection
 
 # Configure logging
