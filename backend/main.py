@@ -1837,6 +1837,42 @@ async def test_lambda_video_cutting(request: dict):
             "error_type": type(e).__name__
         }
 
+@router.post("/test/lambda-dynamodb")
+async def test_lambda_dynamodb_operations():
+    """Test endpoint to verify Lambda DynamoDB operations (Phase 3C)"""
+    try:
+        import boto3
+        lambda_client = boto3.client('lambda', region_name=settings.AWS_REGION)
+
+        payload = {
+            "test_type": "dynamodb_test",
+            "source": "railway"
+        }
+
+        response = lambda_client.invoke(
+            FunctionName=f"{settings.PROJECT_NAME}-video-processor-test",
+            InvocationType='RequestResponse',
+            Payload=json.dumps(payload)
+        )
+
+        # Read the response payload
+        response_payload = response['Payload'].read()
+        response_data = json.loads(response_payload)
+
+        return {
+            "status": "success",
+            "lambda_response": response_data,
+            "status_code": response['StatusCode'],
+            "function_name": f"{settings.PROJECT_NAME}-video-processor-test",
+            "test_parameters": payload
+        }
+    except Exception as e:
+        return {
+            "status": "error", 
+            "error": str(e),
+            "error_type": type(e).__name__
+        }
+
 # Include router in app (after all endpoints are defined)
 app.include_router(router)
 

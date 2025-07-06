@@ -20,6 +20,10 @@ def lambda_handler(event, context):
         if event.get('test_type') == 'video_cutting':
             return test_video_cutting(event, context)
         
+        # Check if this is a DynamoDB test
+        if event.get('test_type') == 'dynamodb_test':
+            return test_dynamodb_operations(event, context)
+        
         # Default hello world test
         return {
             'statusCode': 200,
@@ -27,7 +31,7 @@ def lambda_handler(event, context):
                 'message': 'Hello from Lambda!',
                 'event_received': event,
                 'test_status': 'SUCCESS',
-                'available_tests': ['s3_operations', 'ffmpeg_test', 'video_cutting']
+                'available_tests': ['s3_operations', 'ffmpeg_test', 'video_cutting', 'dynamodb_test']
             })
         }
     except Exception as e:
@@ -344,6 +348,165 @@ def test_video_cutting(event, context=None):
             'statusCode': 500,
             'body': json.dumps({
                 'test_type': 'video_cutting',
+                'error': str(e),
+                'test_status': 'FAILED'
+            })
+        }
+
+def test_dynamodb_operations(event, context=None):
+    """
+    Phase 3C: Test DynamoDB job status updates
+    """
+    import uuid
+    from datetime import datetime, timezone
+    
+    dynamodb = boto3.resource('dynamodb')
+    table_name = 'easy-video-share-video-metadata'
+    table = dynamodb.Table(table_name)
+    
+    test_job_id = f"lambda-test-{uuid.uuid4()}"
+    
+    try:
+        # Test 1: Create a test job entry
+        create_success = False
+        try:
+            timestamp = datetime.utcnow().replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
+            
+            # Create job entry similar to Railway processing
+            table.put_item(Item={
+                'video_id': test_job_id,
+                'user_id': 'lambda-test-user',
+                'filename': 'test-video.mov',
+                'original_s3_key': 'test/video.mov',
+                'upload_date': timestamp,
+                'created_at': timestamp,
+                'updated_at': timestamp,
+                'status': 'QUEUED',
+                'processing_stage': 'queued',
+                'progress_percentage': 0.0,
+                'metadata': {
+                    'duration': 360.0,
+                    'test_mode': True
+                }
+            })
+            create_success = True
+            
+        except Exception as e:
+            create_error = str(e)
+        
+        # Test 2: Update job status to PROCESSING
+        processing_update_success = False
+        try:
+            table.update_item(
+                Key={'video_id': test_job_id},
+                UpdateExpression='SET #status = :status, processing_stage = :stage, progress_percentage = :progress, updated_at = :updated_at',
+                ExpressionAttributeNames={'#status': 'status'},
+                ExpressionAttributeValues={
+                    ':status': 'PROCESSING',
+                    ':stage': 'processing_video',
+                    ':progress': 25.0,
+                    ':updated_at': datetime.utcnow().replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
+                }
+            )
+            processing_update_success = True
+            
+        except Exception as e:
+            processing_update_error = str(e)
+        
+        # Test 3: Update job status to COMPLETED with results
+        completion_update_success = False
+        try:
+            output_s3_keys = [
+                f"lambda-tests/segments/segment_000_{test_job_id}.mp4",
+                f"lambda-tests/segments/segment_001_{test_job_id}.mp4"
+            ]
+            
+            table.update_item(
+                Key={'video_id': test_job_id},
+                UpdateExpression='SET #status = :status, processing_stage = :stage, progress_percentage = :progress, output_s3_urls = :outputs, segments_created = :segments, updated_at = :updated_at',
+                ExpressionAttributeNames={'#status': 'status'},
+                ExpressionAttributeValues={
+                    ':status': 'COMPLETED',
+                    ':stage': 'completed',
+                    ':progress': 100.0,
+                    ':outputs': output_s3_keys,
+                    ':segments': len(output_s3_keys),
+                    ':updated_at': datetime.utcnow().replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
+                }
+            )
+            completion_update_success = True
+            
+        except Exception as e:
+            completion_update_error = str(e)
+        
+        # Test 4: Read the final job record
+        read_success = False
+        final_record = None
+        try:
+            response = table.get_item(Key={'video_id': test_job_id})
+            if 'Item' in response:
+                final_record = response['Item']
+                read_success = True
+                # Convert Decimal types to float for JSON serialization
+                if 'progress_percentage' in final_record:
+                    final_record['progress_percentage'] = float(final_record['progress_percentage'])
+                if 'metadata' in final_record and 'duration' in final_record['metadata']:
+                    final_record['metadata']['duration'] = float(final_record['metadata']['duration'])
+            else:
+                read_error = "Job record not found"
+                
+        except Exception as e:
+            read_error = str(e)
+        
+        # Test 5: Clean up - delete test record
+        cleanup_success = False
+        try:
+            table.delete_item(Key={'video_id': test_job_id})
+            cleanup_success = True
+        except Exception as e:
+            cleanup_error = str(e)
+        
+        # Compile results
+        test_results = {
+            'test_type': 'dynamodb_test',
+            'test_job_id': test_job_id,
+            'table_name': table_name,
+            'operations': {
+                'create_job': {
+                    'success': create_success,
+                    'error': create_error if not create_success else None
+                },
+                'update_processing': {
+                    'success': processing_update_success,
+                    'error': processing_update_error if not processing_update_success else None
+                },
+                'update_completed': {
+                    'success': completion_update_success,
+                    'error': completion_update_error if not completion_update_success else None
+                },
+                'read_record': {
+                    'success': read_success,
+                    'error': read_error if not read_success else None,
+                    'final_record': final_record if read_success else None
+                },
+                'cleanup': {
+                    'success': cleanup_success,
+                    'error': cleanup_error if not cleanup_success else None
+                }
+            },
+            'test_status': 'SUCCESS' if all([create_success, processing_update_success, completion_update_success, read_success]) else 'PARTIAL_SUCCESS'
+        }
+        
+        return {
+            'statusCode': 200,
+            'body': json.dumps(test_results)
+        }
+        
+    except Exception as e:
+        return {
+            'statusCode': 500,
+            'body': json.dumps({
+                'test_type': 'dynamodb_test',
                 'error': str(e),
                 'test_status': 'FAILED'
             })
