@@ -49,6 +49,7 @@ import redis.asyncio as redis
 import asyncio
 import json
 from datetime import datetime,timedelta
+import os
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -274,6 +275,10 @@ async def complete_multipart_upload(request: CompleteMultipartUploadRequest) -> 
     """
     try:
         print(f"DEBUG: complete_multipart_upload called with request: {request}")
+        print(f"DEBUG: Redis URL: {settings.REDIS_URL}")
+        print(f"DEBUG: REDISHOST: {settings.REDISHOST}")
+        print(f"DEBUG: REDISPORT: {settings.REDISPORT}")
+        print(f"DEBUG: REDIS_PASSWORD: {'SET' if settings.REDIS_PASSWORD else 'NOT SET'}")
         
         # Validate that we have parts to complete the upload
         if not request.parts or len(request.parts) == 0:
@@ -311,15 +316,32 @@ async def complete_multipart_upload(request: CompleteMultipartUploadRequest) -> 
         if request.text_input:
             text_input_dict = request.text_input.dict()
 
+        # Test Redis connection before dispatching task
+        try:
+            print(f"DEBUG: Testing Redis connection before dispatching task...")
+            import redis
+            redis_client = redis.from_url(settings.REDIS_URL)
+            redis_client.ping()
+            print(f"DEBUG: Redis connection test successful")
+        except Exception as redis_error:
+            print(f"DEBUG: Redis connection test failed: {type(redis_error).__name__}: {str(redis_error)}")
+            raise HTTPException(status_code=500, detail=f"Redis connection failed: {str(redis_error)}")
+
         # Dispatch video processing task to Celery
-        task = process_video_task.delay(
-            request.s3_key,
-            request.job_id,
-            cutting_options_dict,
-            text_strategy_str,
-            text_input_dict,
-            request.user_id or "anonymous"  # Use provided user_id or default to "anonymous"
-        )
+        try:
+            print(f"DEBUG: Dispatching Celery task...")
+            task = process_video_task.delay(
+                request.s3_key,
+                request.job_id,
+                cutting_options_dict,
+                text_strategy_str,
+                text_input_dict,
+                request.user_id or "anonymous"  # Use provided user_id or default to "anonymous"
+            )
+            print(f"DEBUG: Celery task dispatched successfully: {task.id}")
+        except Exception as celery_error:
+            print(f"DEBUG: Celery task dispatch failed: {type(celery_error).__name__}: {str(celery_error)}")
+            raise HTTPException(status_code=500, detail=f"Failed to dispatch video processing task: {str(celery_error)}")
 
         # Immediately create DynamoDB job entry (QUEUED) with video duration
         try:
@@ -342,6 +364,7 @@ async def complete_multipart_upload(request: CompleteMultipartUploadRequest) -> 
                 content_type=request.content_type,
                 bucket_location=request.s3_key
             )
+            print(f"DEBUG: DynamoDB job entry created successfully")
         except Exception as e:
             print(f"[DynamoDB] Failed to create job entry in /upload/complete-multipart for job_id={request.job_id}: {e}")
 
@@ -351,6 +374,9 @@ async def complete_multipart_upload(request: CompleteMultipartUploadRequest) -> 
             message="Video processing job has been queued successfully"
         )
 
+    except HTTPException:
+        # Re-raise HTTP exceptions as-is
+        raise
     except Exception as e:
         print(f"DEBUG: ERROR in complete_multipart_upload: {type(e).__name__}: {str(e)}")
         import traceback
@@ -1250,31 +1276,85 @@ async def debug_redis():
     """Debug endpoint to test Redis connection"""
     try:
         print(f"DEBUG: REDIS_URL = {settings.REDIS_URL}")
+        print(f"DEBUG: REDISHOST = {settings.REDISHOST}")
+        print(f"DEBUG: REDISPORT = {settings.REDISPORT}")
+        print(f"DEBUG: REDIS_PASSWORD = {'SET' if settings.REDIS_PASSWORD else 'NOT SET'}")
         
-        # Test Redis connection
-        redis_conn = await get_async_redis_client_from_pool()
-        await redis_conn.ping()
+        # Test Redis connection with detailed error handling
+        import redis
+        try:
+            redis_client = redis.from_url(settings.REDIS_URL)
+            ping_result = redis_client.ping()
+            print(f"DEBUG: Redis ping result: {ping_result}")
+            
+            if not ping_result:
+                return {
+                    "status": "error",
+                    "error": "Redis ping failed",
+                    "error_type": "RedisError",
+                    "redis_url": settings.REDIS_URL,
+                    "redis_host": settings.REDISHOST,
+                    "redis_port": settings.REDISPORT,
+                    "redis_password_set": bool(settings.REDIS_PASSWORD)
+                }
+        except redis.AuthenticationError as auth_error:
+            print(f"DEBUG: Redis authentication error: {auth_error}")
+            return {
+                "status": "error",
+                "error": f"Redis authentication failed: {str(auth_error)}",
+                "error_type": "AuthenticationError",
+                "redis_url": settings.REDIS_URL,
+                "redis_host": settings.REDISHOST,
+                "redis_port": settings.REDISPORT,
+                "redis_password_set": bool(settings.REDIS_PASSWORD)
+            }
+        except redis.ConnectionError as conn_error:
+            print(f"DEBUG: Redis connection error: {conn_error}")
+            return {
+                "status": "error",
+                "error": f"Redis connection failed: {str(conn_error)}",
+                "error_type": "ConnectionError",
+                "redis_url": settings.REDIS_URL,
+                "redis_host": settings.REDISHOST,
+                "redis_port": settings.REDISPORT,
+                "redis_password_set": bool(settings.REDIS_PASSWORD)
+            }
         
         # Test pubsub
-        pubsub = redis_conn.pubsub()
-        test_channel = "test_channel"
-        await pubsub.subscribe(test_channel)
-        
-        # Send a test message
-        await redis_conn.publish(test_channel, "test_message")
-        
-        # Wait for message
-        message = await pubsub.get_message(timeout=1)
-        
-        await pubsub.unsubscribe(test_channel)
-        await pubsub.close()
-        
-        return {
-            "status": "success",
-            "redis_url": settings.REDIS_URL,
-            "connection": "OK",
-            "pubsub_test": "OK" if message else "FAILED"
-        }
+        try:
+            pubsub = redis_client.pubsub()
+            test_channel = "test_channel"
+            await pubsub.subscribe(test_channel)
+            
+            # Send a test message
+            await redis_client.publish(test_channel, "test_message")
+            
+            # Wait for message
+            message = await pubsub.get_message(timeout=1)
+            
+            await pubsub.unsubscribe(test_channel)
+            await pubsub.close()
+            
+            return {
+                "status": "success",
+                "redis_url": settings.REDIS_URL,
+                "redis_host": settings.REDISHOST,
+                "redis_port": settings.REDISPORT,
+                "redis_password_set": bool(settings.REDIS_PASSWORD),
+                "connection": "OK",
+                "pubsub_test": "OK" if message else "FAILED"
+            }
+        except Exception as pubsub_error:
+            return {
+                "status": "partial_success",
+                "redis_url": settings.REDIS_URL,
+                "redis_host": settings.REDISHOST,
+                "redis_port": settings.REDISPORT,
+                "redis_password_set": bool(settings.REDIS_PASSWORD),
+                "connection": "OK",
+                "pubsub_test": f"FAILED: {str(pubsub_error)}"
+            }
+            
     except Exception as e:
         print(f"DEBUG: Redis test failed: {type(e).__name__}: {str(e)}")
         import traceback
@@ -1283,7 +1363,10 @@ async def debug_redis():
             "status": "error",
             "error": str(e),
             "error_type": type(e).__name__,
-            "redis_url": getattr(settings, 'REDIS_URL', 'NOT SET')
+            "redis_url": getattr(settings, 'REDIS_URL', 'NOT SET'),
+            "redis_host": getattr(settings, 'REDISHOST', 'NOT SET'),
+            "redis_port": getattr(settings, 'REDISPORT', 'NOT SET'),
+            "redis_password_set": bool(getattr(settings, 'REDIS_PASSWORD', None))
         }
 
 
@@ -1404,6 +1487,29 @@ async def debug_test_segment_play():
             "error": f"Debug test failed: {str(e)}",
             "traceback": traceback.format_exc()
         }
+
+
+@app.get("/debug/env")
+async def debug_env():
+    """Debug endpoint to check environment variables"""
+    return {
+        "status": "success",
+        "environment_variables": {
+            "REDISHOST": os.getenv("REDISHOST"),
+            "REDISPORT": os.getenv("REDISPORT"),
+            "REDIS_PASSWORD": "SET" if os.getenv("REDIS_PASSWORD") else "NOT SET",
+            "REDIS_URL": os.getenv("REDIS_URL"),
+            "RAILWAY_ENVIRONMENT": os.getenv("RAILWAY_ENVIRONMENT"),
+            "RAILWAY_STATIC_URL": os.getenv("RAILWAY_STATIC_URL")
+        },
+        "settings": {
+            "REDISHOST": settings.REDISHOST,
+            "REDISPORT": settings.REDISPORT,
+            "REDIS_PASSWORD": "SET" if settings.REDIS_PASSWORD else "NOT SET",
+            "REDIS_URL": settings.REDIS_URL,
+            "RAILWAY_ENVIRONMENT": settings.RAILWAY_ENVIRONMENT
+        }
+    }
 
 
 if __name__ == "__main__":

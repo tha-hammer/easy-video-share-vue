@@ -112,7 +112,7 @@ export function useVideoUpload() {
   const multipartState = ref<MultipartUploadState | null>(null)
 
   // Upload configuration (adaptive based on device/network)
-  const getUploadConfig = () => {
+  const _getUploadConfig = () => {
     const MB = 1024 * 1024
     const isMobile = /Android|iPhone|iPad|iPod|IEMobile|Opera Mini/i.test(navigator.userAgent)
     const netInfo =
@@ -202,7 +202,7 @@ export function useVideoUpload() {
 
           // Calculate actual bytes uploaded across all chunks
           let totalBytesUploaded = 0
-          progress.chunkProgress.forEach((chunkPercent, partNum) => {
+          progress.chunkProgress.forEach((chunkPercent, _partNum) => {
             // For multi-part uploads, each chunk has the same size except the last one
             const chunkSize = multipartState.value?.chunkSize || chunk.data.size
             const bytesUploadedForChunk = Math.round((chunkPercent / 100) * chunkSize)
@@ -292,7 +292,7 @@ export function useVideoUpload() {
 
   // Main upload function with multi-part support
   const uploadVideo = async (file: File, metadata: VideoMetadata): Promise<void> => {
-    const videoId = metadata.video_id
+    const _videoId = metadata.video_id
 
     if (shouldUseMultipart(file.size)) {
       await uploadVideoMultipart(file, metadata)
