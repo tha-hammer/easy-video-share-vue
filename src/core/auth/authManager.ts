@@ -85,7 +85,10 @@ class AuthManager {
       const tokenPayload = this.parseJwt(this.idToken)
       const groups = tokenPayload['cognito:groups'] || []
 
-      this.isAdmin = groups.includes('admin')
+      // Ensure groups is an array
+      const groupsArray = Array.isArray(groups) ? groups : []
+
+      this.isAdmin = groupsArray.includes('admin')
       console.log('Admin status:', this.isAdmin, 'Groups:', groups)
 
       return this.isAdmin
