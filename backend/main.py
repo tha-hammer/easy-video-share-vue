@@ -1692,7 +1692,7 @@ async def test_lambda_invoke():
     """Test endpoint to verify Lambda connectivity (Phase 1B)"""
     try:
         import boto3
-        lambda_client = boto3.client('lambda')
+        lambda_client = boto3.client('lambda', region_name=settings.AWS_REGION)
 
         response = lambda_client.invoke(
             FunctionName=f"{settings.PROJECT_NAME}-video-processor-test",
