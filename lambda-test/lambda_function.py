@@ -16,6 +16,10 @@ def lambda_handler(event, context):
         if event.get('test_type') == 'ffmpeg_test':
             return test_ffmpeg_operations(event, context)
         
+        # Check if this is a video cutting test
+        if event.get('test_type') == 'video_cutting':
+            return test_video_cutting(event, context)
+        
         # Default hello world test
         return {
             'statusCode': 200,
@@ -23,7 +27,7 @@ def lambda_handler(event, context):
                 'message': 'Hello from Lambda!',
                 'event_received': event,
                 'test_status': 'SUCCESS',
-                'available_tests': ['s3_operations', 'ffmpeg_test']
+                'available_tests': ['s3_operations', 'ffmpeg_test', 'video_cutting']
             })
         }
     except Exception as e:
@@ -185,6 +189,135 @@ def test_ffmpeg_operations(event, context=None):
             'statusCode': 500,
             'body': json.dumps({
                 'test_type': 'ffmpeg_test',
+                'error': str(e),
+                'test_status': 'FAILED'
+            })
+        }
+
+def test_video_cutting(event, context=None):
+    """
+    Phase 3B: Test video cutting with real S3 files
+    """
+    import subprocess
+    
+    s3_client = boto3.client('s3')
+    
+    # Get parameters from event
+    bucket = event.get('s3_bucket', 'easy-video-share-silmari-dev')
+    video_key = event.get('s3_key', 'uploads/f5657863-5078-481c-b4c5-99ffa1dd1ad5/20250706_155512_IMG_0899.mov')
+    
+    try:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # Step 1: Download video from S3
+            input_video_path = os.path.join(temp_dir, 'input_video.mov')
+            
+            try:
+                s3_client.download_file(bucket, video_key, input_video_path)
+                download_success = True
+                input_file_size = os.path.getsize(input_video_path)
+            except Exception as e:
+                return {
+                    'statusCode': 500,
+                    'body': json.dumps({
+                        'test_type': 'video_cutting',
+                        'error': f'Failed to download video: {str(e)}',
+                        'test_status': 'FAILED'
+                    })
+                }
+            
+            # Step 2: Get video duration
+            try:
+                duration_cmd = [
+                    '/opt/bin/ffprobe', '-v', 'quiet', 
+                    '-show_entries', 'format=duration', 
+                    '-of', 'csv=p=0', input_video_path
+                ]
+                duration_result = subprocess.run(duration_cmd, capture_output=True, text=True, timeout=30)
+                total_duration = float(duration_result.stdout.strip())
+            except Exception as e:
+                return {
+                    'statusCode': 500,
+                    'body': json.dumps({
+                        'test_type': 'video_cutting',
+                        'error': f'Failed to get video duration: {str(e)}',
+                        'test_status': 'FAILED'
+                    })
+                }
+            
+            # Step 3: Cut video into 2 segments (10 seconds each or less if video is shorter)
+            segment_duration = min(10, total_duration / 2)
+            segments_created = []
+            
+            for i in range(2):
+                start_time = i * segment_duration
+                if start_time >= total_duration:
+                    break
+                    
+                segment_path = os.path.join(temp_dir, f'segment_{i:03d}.mp4')
+                
+                # Cut segment
+                cut_cmd = [
+                    '/opt/bin/ffmpeg', '-i', input_video_path,
+                    '-ss', str(start_time), '-t', str(segment_duration),
+                    '-c:v', 'libx264', '-c:a', 'aac', 
+                    '-y', segment_path
+                ]
+                
+                try:
+                    cut_result = subprocess.run(cut_cmd, capture_output=True, text=True, timeout=60)
+                    
+                    if cut_result.returncode == 0 and os.path.exists(segment_path):
+                        segment_size = os.path.getsize(segment_path)
+                        
+                        # Upload segment to S3
+                        segment_s3_key = f"lambda-tests/segments/segment_{i:03d}_{context.aws_request_id if context else 'test'}.mp4"
+                        s3_client.upload_file(segment_path, bucket, segment_s3_key)
+                        
+                        segments_created.append({
+                            'segment_number': i,
+                            'start_time': start_time,
+                            'duration': segment_duration,
+                            'file_size': segment_size,
+                            's3_key': segment_s3_key
+                        })
+                    else:
+                        segments_created.append({
+                            'segment_number': i,
+                            'error': f'FFmpeg failed: {cut_result.stderr}'
+                        })
+                        
+                except Exception as e:
+                    segments_created.append({
+                        'segment_number': i,
+                        'error': f'Segment creation failed: {str(e)}'
+                    })
+            
+            # Return results
+            return {
+                'statusCode': 200,
+                'body': json.dumps({
+                    'test_type': 'video_cutting',
+                    'input_video': {
+                        'bucket': bucket,
+                        's3_key': video_key,
+                        'file_size': input_file_size,
+                        'duration': total_duration
+                    },
+                    'cutting_results': {
+                        'segments_attempted': 2,
+                        'segments_created': len([s for s in segments_created if 'error' not in s]),
+                        'segment_duration': segment_duration,
+                        'segments': segments_created
+                    },
+                    'test_status': 'SUCCESS' if any('error' not in s for s in segments_created) else 'FAILED'
+                })
+            }
+            
+    except Exception as e:
+        return {
+            'statusCode': 500,
+            'body': json.dumps({
+                'test_type': 'video_cutting',
                 'error': str(e),
                 'test_status': 'FAILED'
             })
