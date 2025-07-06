@@ -1,0 +1,6 @@
+{
+  "test": "data",
+  "source": "railway",
+  "s3_bucket": "easy-video-share-bucket",
+  "s3_key": "uploads/test-video.mp4"
+}
