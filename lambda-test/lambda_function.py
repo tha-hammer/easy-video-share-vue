@@ -225,15 +225,41 @@ def test_video_cutting(event, context=None):
                     })
                 }
             
-            # Step 2: Get video duration
+            # Step 2: Get video duration using ffprobe
             try:
-                duration_cmd = [
-                    '/opt/bin/ffprobe', '-v', 'quiet', 
-                    '-show_entries', 'format=duration', 
-                    '-of', 'csv=p=0', input_video_path
-                ]
-                duration_result = subprocess.run(duration_cmd, capture_output=True, text=True, timeout=30)
-                total_duration = float(duration_result.stdout.strip())
+                # Try different ffprobe locations
+                ffprobe_paths = ['/opt/bin/ffprobe', '/usr/bin/ffprobe', '/usr/local/bin/ffprobe']
+                ffprobe_cmd = None
+                
+                for path in ffprobe_paths:
+                    if os.path.exists(path):
+                        ffprobe_cmd = path
+                        break
+                
+                if ffprobe_cmd:
+                    duration_cmd = [
+                        ffprobe_cmd, '-v', 'quiet', 
+                        '-show_entries', 'format=duration', 
+                        '-of', 'csv=p=0', input_video_path
+                    ]
+                    duration_result = subprocess.run(duration_cmd, capture_output=True, text=True, timeout=30)
+                    total_duration = float(duration_result.stdout.strip())
+                else:
+                    # Fallback to ffmpeg method
+                    duration_cmd = [
+                        '/opt/bin/ffmpeg', '-i', input_video_path, 
+                        '-t', '0.1', '-f', 'null', '-'
+                    ]
+                    duration_result = subprocess.run(duration_cmd, capture_output=True, text=True, timeout=60)
+                    
+                    # Parse duration from stderr
+                    import re
+                    duration_match = re.search(r'Duration: (\d+):(\d+):(\d+\.?\d*)', duration_result.stderr)
+                    if duration_match:
+                        hours, minutes, seconds = duration_match.groups()
+                        total_duration = int(hours) * 3600 + int(minutes) * 60 + float(seconds)
+                    else:
+                        raise Exception("Could not parse duration from ffmpeg output")
             except Exception as e:
                 return {
                     'statusCode': 500,
@@ -264,7 +290,7 @@ def test_video_cutting(event, context=None):
                 ]
                 
                 try:
-                    cut_result = subprocess.run(cut_cmd, capture_output=True, text=True, timeout=60)
+                    cut_result = subprocess.run(cut_cmd, capture_output=True, text=True, timeout=120)
                     
                     if cut_result.returncode == 0 and os.path.exists(segment_path):
                         segment_size = os.path.getsize(segment_path)
