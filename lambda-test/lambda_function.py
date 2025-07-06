@@ -359,6 +359,7 @@ def test_dynamodb_operations(event, context=None):
     """
     import uuid
     from datetime import datetime, timezone
+    from decimal import Decimal
     
     dynamodb = boto3.resource('dynamodb')
     table_name = 'easy-video-share-video-metadata'
@@ -383,9 +384,9 @@ def test_dynamodb_operations(event, context=None):
                 'updated_at': timestamp,
                 'status': 'QUEUED',
                 'processing_stage': 'queued',
-                'progress_percentage': 0.0,
+                'progress_percentage': Decimal('0.0'),
                 'metadata': {
-                    'duration': 360.0,
+                    'duration': Decimal('360.0'),
                     'test_mode': True
                 }
             })
@@ -404,7 +405,7 @@ def test_dynamodb_operations(event, context=None):
                 ExpressionAttributeValues={
                     ':status': 'PROCESSING',
                     ':stage': 'processing_video',
-                    ':progress': 25.0,
+                    ':progress': Decimal('25.0'),
                     ':updated_at': datetime.utcnow().replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
                 }
             )
@@ -428,7 +429,7 @@ def test_dynamodb_operations(event, context=None):
                 ExpressionAttributeValues={
                     ':status': 'COMPLETED',
                     ':stage': 'completed',
-                    ':progress': 100.0,
+                    ':progress': Decimal('100.0'),
                     ':outputs': output_s3_keys,
                     ':segments': len(output_s3_keys),
                     ':updated_at': datetime.utcnow().replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
