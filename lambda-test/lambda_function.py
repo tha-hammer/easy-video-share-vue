@@ -12,6 +12,10 @@ def lambda_handler(event, context):
         if event.get('test_type') == 's3_operations':
             return test_s3_operations(event, context)
         
+        # Check if this is an FFmpeg test
+        if event.get('test_type') == 'ffmpeg_test':
+            return test_ffmpeg_operations(event, context)
+        
         # Default hello world test
         return {
             'statusCode': 200,
@@ -19,7 +23,7 @@ def lambda_handler(event, context):
                 'message': 'Hello from Lambda!',
                 'event_received': event,
                 'test_status': 'SUCCESS',
-                'available_tests': ['s3_operations']
+                'available_tests': ['s3_operations', 'ffmpeg_test']
             })
         }
     except Exception as e:
@@ -103,6 +107,84 @@ def test_s3_operations(event, context=None):
             'statusCode': 500,
             'body': json.dumps({
                 'test_type': 's3_operations',
+                'error': str(e),
+                'test_status': 'FAILED'
+            })
+        }
+
+def test_ffmpeg_operations(event, context=None):
+    """
+    Phase 3A: Test FFmpeg availability and basic operations
+    """
+    import subprocess
+    
+    try:
+        # Test 1: Check if FFmpeg is available
+        try:
+            result = subprocess.run(['/opt/bin/ffmpeg', '-version'], 
+                                   capture_output=True, text=True, timeout=10)
+            ffmpeg_available = result.returncode == 0
+            ffmpeg_version = result.stdout.split('\n')[0] if result.stdout else "Unknown"
+        except FileNotFoundError:
+            ffmpeg_available = False
+            ffmpeg_version = "FFmpeg not found at /opt/bin/ffmpeg"
+        except Exception as e:
+            ffmpeg_available = False
+            ffmpeg_version = f"FFmpeg test failed: {str(e)}"
+        
+        # Test 2: Check if we can create a simple test video
+        test_video_created = False
+        test_video_error = None
+        test_video_size = 0
+        
+        if ffmpeg_available:
+            try:
+                with tempfile.TemporaryDirectory() as temp_dir:
+                    test_video_path = os.path.join(temp_dir, 'test.mp4')
+                    
+                    # Create a 5-second test video (solid color)
+                    cmd = [
+                        '/opt/bin/ffmpeg', '-f', 'lavfi', 
+                        '-i', 'color=c=blue:size=320x240:duration=5',
+                        '-c:v', 'libx264', '-t', '5', test_video_path
+                    ]
+                    
+                    result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+                    
+                    if result.returncode == 0 and os.path.exists(test_video_path):
+                        test_video_created = True
+                        test_video_size = os.path.getsize(test_video_path)
+                    else:
+                        test_video_error = f"FFmpeg command failed: {result.stderr}"
+                        
+            except Exception as e:
+                test_video_error = f"Video creation test failed: {str(e)}"
+        
+        # Return results
+        result = {
+            'test_type': 'ffmpeg_test',
+            'ffmpeg_available': ffmpeg_available,
+            'ffmpeg_version': ffmpeg_version,
+            'video_creation_test': {
+                'success': test_video_created,
+                'file_size': test_video_size
+            },
+            'test_status': 'SUCCESS' if ffmpeg_available else 'FAILED'
+        }
+        
+        if test_video_error:
+            result['video_creation_test']['error'] = test_video_error
+            
+        return {
+            'statusCode': 200,
+            'body': json.dumps(result)
+        }
+        
+    except Exception as e:
+        return {
+            'statusCode': 500,
+            'body': json.dumps({
+                'test_type': 'ffmpeg_test',
                 'error': str(e),
                 'test_status': 'FAILED'
             })
