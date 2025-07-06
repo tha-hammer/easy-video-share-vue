@@ -10,7 +10,7 @@ def lambda_handler(event, context):
     try:
         # Check if this is an S3 test
         if event.get('test_type') == 's3_operations':
-            return test_s3_operations(event)
+            return test_s3_operations(event, context)
         
         # Default hello world test
         return {
@@ -31,7 +31,7 @@ def lambda_handler(event, context):
             })
         }
 
-def test_s3_operations(event):
+def test_s3_operations(event, context=None):
     """
     Test S3 download and upload operations
     """
@@ -62,7 +62,7 @@ def test_s3_operations(event):
             with open(test_upload_path, 'w') as f:
                 f.write(test_content)
             
-            upload_key = f"lambda-tests/test-upload-{context.aws_request_id}.txt"
+            upload_key = f"lambda-tests/test-upload-{context.aws_request_id if context else 'test'}.txt"
             
             try:
                 s3_client.upload_file(test_upload_path, bucket, upload_key)
