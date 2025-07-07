@@ -54,10 +54,21 @@ def test_full_integration(event, context=None):
     table = dynamodb.Table('easy-video-share-video-metadata')
     
     # Initialize Redis for progress updates (same as Railway)
-    redis_client = redis.StrictRedis.from_url('redis://redis-production-a637.up.railway.app:6379', decode_responses=True)
+    try:
+        redis_client = redis.StrictRedis.from_url('redis://redis-production-a637.up.railway.app:6379', decode_responses=True, socket_timeout=5, socket_connect_timeout=5)
+        # Test connection
+        redis_client.ping()
+        logger.info("Redis connection established successfully")
+    except Exception as e:
+        logger.warning(f"Redis connection failed: {e}. Progress updates will be disabled.")
+        redis_client = None
     
     def publish_progress(stage, progress, additional_data=None):
         """Publish progress updates to Redis for real-time UI updates"""
+        if redis_client is None:
+            logger.debug(f"Redis disabled - progress: {stage} - {progress}%")
+            return
+            
         try:
             progress_data = {
                 'job_id': job_id,
