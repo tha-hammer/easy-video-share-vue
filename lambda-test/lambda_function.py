@@ -53,14 +53,22 @@ def test_full_integration(event, context=None):
     dynamodb = boto3.resource('dynamodb')
     table = dynamodb.Table('easy-video-share-video-metadata')
     
-    # Initialize Redis for progress updates (AWS ElastiCache)
+    # Initialize Redis for progress updates (Redis Cloud)
     try:
-        redis_client = redis.StrictRedis(host='easy-video-share-redis.ugdf8j.ng.0001.use1.cache.amazonaws.com', port=6379, decode_responses=True, socket_timeout=5, socket_connect_timeout=5)
+        redis_client = redis.StrictRedis(
+            host='redis-14117.c265.us-east-1-2.ec2.redns.redis-cloud.com', 
+            port=14117, 
+            username='default',
+            password='MNQmxGqbUGtAhKhQgH0fvxWvSG90qUvd',
+            decode_responses=True, 
+            socket_timeout=5, 
+            socket_connect_timeout=5
+        )
         # Test connection
         redis_client.ping()
-        logger.info("AWS Redis connection established successfully")
+        logger.info("Redis Cloud connection established successfully")
     except Exception as e:
-        logger.warning(f"AWS Redis connection failed: {e}. Progress updates will be disabled.")
+        logger.warning(f"Redis Cloud connection failed: {e}. Progress updates will be disabled.")
         redis_client = None
     
     def publish_progress(stage, progress, additional_data=None):
