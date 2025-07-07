@@ -8,10 +8,10 @@ echo "Installing Python dependencies..."
 pip install -r requirements.txt -t .
 
 echo "Creating deployment package..."
-"C:/Program Files/7-Zip/7z.exe" a function.zip lambda_function.py redis/ certifi/ charset_normalizer/ idna/ requests/ urllib3/ async_timeout/ typing_extensions/
+"C:/Program Files/7-Zip/7z.exe" a function.zip lambda_function.py redis/
 
 echo "Cleaning up dependency files..."
-rm -rf redis/ certifi/ charset_normalizer/ idna/ requests/ urllib3/ async_timeout/ typing_extensions/
+rm -rf redis/
 
 echo "Checking if function exists..."
 if aws lambda get-function --function-name $FUNCTION_NAME 2>/dev/null; then
