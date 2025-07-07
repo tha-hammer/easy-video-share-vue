@@ -13,6 +13,8 @@ def lambda_handler(event, context):
     Phase 4: Clean integration test
     """
     logger.info(f"Lambda invoked with event: {json.dumps(event)}")
+    logger.info(f"Event test_type value: '{event.get('test_type')}'")
+    logger.info(f"Event keys: {list(event.keys())}")
     try:
         # Check if this is a full integration test
         if event.get('test_type') == 'full_integration':
