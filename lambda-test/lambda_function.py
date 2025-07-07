@@ -2,14 +2,21 @@ import json
 import boto3
 import tempfile
 import os
+import logging
+
+# Configure logging for CloudWatch
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 def lambda_handler(event, context):
     """
     Phase 4: Clean integration test
     """
+    logger.info(f"Lambda invoked with event: {json.dumps(event)}")
     try:
         # Check if this is a full integration test
         if event.get('test_type') == 'full_integration':
+            logger.info("Starting full integration test")
             return test_full_integration(event, context)
         
         # Default hello world test
@@ -64,9 +71,10 @@ def test_full_integration(event, context=None):
             # Publish to the same Redis channel pattern as Railway
             channel = f"job_progress_{job_id}"
             redis_client.publish(channel, json.dumps(progress_data))
+            logger.info(f"Published progress to Redis: {stage} - {progress}%")
         except Exception as e:
             # Don't fail the job if Redis publishing fails
-            print(f"Warning: Redis progress publishing failed: {e}")
+            logger.warning(f"Redis progress publishing failed: {e}")
     
     # Get parameters from event
     bucket = event.get('s3_bucket', 'easy-video-share-silmari-dev')
@@ -76,9 +84,13 @@ def test_full_integration(event, context=None):
     segment_duration = event.get('segment_duration', 30)  # 30 seconds for social media
     
     processing_start_time = datetime.utcnow()
+    logger.info(f"Starting video processing for job_id: {job_id}")
+    logger.info(f"Input video: s3://{bucket}/{input_video_key}")
+    logger.info(f"Segment duration: {segment_duration}s")
     
     try:
         with tempfile.TemporaryDirectory() as temp_dir:
+            logger.info(f"Created temp directory: {temp_dir}")
             # === STEP 1: CREATE JOB RECORD (QUEUED) ===
             timestamp = datetime.utcnow().replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
             
@@ -120,8 +132,10 @@ def test_full_integration(event, context=None):
             
             # === STEP 3: DOWNLOAD VIDEO FROM S3 ===
             input_video_path = os.path.join(temp_dir, 'input_video.mov')
+            logger.info(f"Downloading video from S3: {bucket}/{input_video_key}")
             s3_client.download_file(bucket, input_video_key, input_video_path)
             input_file_size = os.path.getsize(input_video_path)
+            logger.info(f"Downloaded video: {input_file_size} bytes")
             
             # === STEP 4: GET VIDEO DURATION ===
             table.update_item(
@@ -147,10 +161,13 @@ def test_full_integration(event, context=None):
                     break
             
             if ffprobe_cmd:
+                logger.info(f"Using ffprobe: {ffprobe_cmd}")
                 duration_cmd = [ffprobe_cmd, '-v', 'quiet', '-show_entries', 'format=duration', '-of', 'csv=p=0', input_video_path]
                 duration_result = subprocess.run(duration_cmd, capture_output=True, text=True, timeout=30)
                 total_duration = float(duration_result.stdout.strip())
+                logger.info(f"Video duration: {total_duration}s")
             else:
+                logger.info("Using ffmpeg fallback for duration")
                 # Fallback to ffmpeg method
                 duration_cmd = ['/opt/bin/ffmpeg', '-i', input_video_path, '-t', '0.1', '-f', 'null', '-']
                 duration_result = subprocess.run(duration_cmd, capture_output=True, text=True, timeout=60)
@@ -159,7 +176,9 @@ def test_full_integration(event, context=None):
                 if duration_match:
                     hours, minutes, seconds = duration_match.groups()
                     total_duration = int(hours) * 3600 + int(minutes) * 60 + float(seconds)
+                    logger.info(f"Video duration: {total_duration}s")
                 else:
+                    logger.error("Could not parse duration from ffmpeg output")
                     raise Exception("Could not parse duration")
             
             # === STEP 5: CALCULATE SEGMENTS ===
@@ -171,6 +190,8 @@ def test_full_integration(event, context=None):
             if max_segments > 5:
                 max_segments = 5
                 segment_duration = total_duration / max_segments
+            
+            logger.info(f"Calculated segments: {max_segments} segments of {segment_duration:.1f}s each")
             
             table.update_item(
                 Key={'video_id': job_id},
@@ -200,6 +221,8 @@ def test_full_integration(event, context=None):
                 start_time = i * segment_duration
                 if start_time >= total_duration:
                     break
+                
+                logger.info(f"Processing segment {i+1}/{max_segments} starting at {start_time:.1f}s")
                 
                 # Update progress for each segment
                 segment_progress = 25.0 + (i / max_segments) * 60.0  # 25% to 85%
@@ -238,8 +261,10 @@ def test_full_integration(event, context=None):
                 if cut_result.returncode == 0 and os.path.exists(segment_path):
                     # Upload segment to S3
                     segment_s3_key = f"processed/{job_id}/segment_{i:03d}.mp4"
+                    logger.info(f"Uploading segment to S3: {segment_s3_key}")
                     s3_client.upload_file(segment_path, bucket, segment_s3_key)
                     output_s3_keys.append(segment_s3_key)
+                    logger.info(f"Segment {i+1} uploaded successfully")
                     
                     # Publish segment completion to Redis
                     publish_progress('processing_segments', segment_progress, {
@@ -248,10 +273,17 @@ def test_full_integration(event, context=None):
                         'total_segments': max_segments,
                         'segment_s3_key': segment_s3_key
                     })
+                else:
+                    logger.error(f"Failed to create segment {i+1}: FFmpeg returned {cut_result.returncode}")
+                    logger.error(f"FFmpeg stderr: {cut_result.stderr}")
+                    logger.error(f"FFmpeg stdout: {cut_result.stdout}")
             
             # === STEP 7: COMPLETE JOB ===
             processing_end_time = datetime.utcnow()
             processing_duration = (processing_end_time - processing_start_time).total_seconds()
+            
+            logger.info(f"Processing completed: {len(output_s3_keys)} segments in {processing_duration:.1f}s")
+            logger.info(f"Output S3 keys: {output_s3_keys}")
             
             table.update_item(
                 Key={'video_id': job_id},
