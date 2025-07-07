@@ -54,7 +54,7 @@ def test_full_integration(event, context=None):
     table = dynamodb.Table('easy-video-share-video-metadata')
     
     # Initialize Redis for progress updates (same as Railway)
-    redis_client = redis.StrictRedis.from_url('redis://redis-production-3941.railway.internal:6379', decode_responses=True)
+    redis_client = redis.StrictRedis.from_url('redis://redis-production-a637.up.railway.app:6379', decode_responses=True)
     
     def publish_progress(stage, progress, additional_data=None):
         """Publish progress updates to Redis for real-time UI updates"""
