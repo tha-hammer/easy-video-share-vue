@@ -1,0 +1,1 @@
+{"statusCode": 500, "body": "{\"test_type\": \"full_integration\", \"error\": \"ffprobe not found\", \"test_status\": \"FAILED\"}"}
