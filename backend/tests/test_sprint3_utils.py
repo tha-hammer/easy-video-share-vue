@@ -29,7 +29,7 @@ def list_s3_videos():
     print("-" * 50)
     
     try:
-        s3_client = boto3.client('s3')
+        s3_client = boto3.client('s3', region_name=settings.AWS_REGION)
         response = s3_client.list_objects_v2(Bucket=settings.AWS_BUCKET_NAME)
         
         if 'Contents' not in response:

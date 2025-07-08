@@ -13,8 +13,8 @@ from config import settings
 
 logger = logging.getLogger(__name__)
 
-# Initialize AWS Lambda client
-lambda_client = boto3.client('lambda')
+# Initialize AWS Lambda client with region
+lambda_client = boto3.client('lambda', region_name=settings.AWS_REGION)
 
 def use_lambda_processing(request_data: Dict[str, Any]) -> bool:
     """

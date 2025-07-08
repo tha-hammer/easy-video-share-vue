@@ -80,7 +80,7 @@ class Sprint2Validator:
         try:
             result = subprocess.run([
                 "python", "-c",
-                "import boto3; s3 = boto3.client('s3'); s3.list_buckets(); print('AWS OK')"
+                "import boto3; s3 = boto3.client('s3', region_name='us-east-1'); s3.list_buckets(); print('AWS OK')"
             ], capture_output=True, text=True, timeout=15)
             
             if result.returncode == 0:
