@@ -138,9 +138,17 @@ def test_full_integration(event, context=None):
             logger.info(f"STEP 9: ✅ Downloaded video: {input_file_size} bytes")
             
             logger.info("STEP 10: Getting video duration...")
-            # Test if ffprobe exists
-            ffprobe_paths = ['/opt/bin/ffprobe', '/usr/bin/ffprobe']
+            # Search for ffprobe in common locations
+            ffprobe_paths = ['/opt/bin/ffprobe', '/usr/bin/ffprobe', '/usr/local/bin/ffprobe', '/opt/ffmpeg/bin/ffprobe']
             ffprobe_cmd = None
+            
+            # Also check if ffprobe is in PATH
+            import shutil
+            ffprobe_in_path = shutil.which('ffprobe')
+            if ffprobe_in_path:
+                ffprobe_paths.insert(0, ffprobe_in_path)
+            
+            logger.info(f"STEP 10: Searching for ffprobe in: {ffprobe_paths}")
             
             for path in ffprobe_paths:
                 if os.path.exists(path):
@@ -156,7 +164,19 @@ def test_full_integration(event, context=None):
                 logger.info(f"STEP 10: ✅ Video duration: {total_duration}s")
             else:
                 logger.error("STEP 10: ❌ No ffprobe found!")
-                raise Exception("ffprobe not found")
+                # Try using ffmpeg instead
+                logger.info("STEP 10: Trying ffmpeg fallback for duration...")
+                duration_cmd = ['/opt/bin/ffmpeg', '-i', input_video_path, '-t', '0.1', '-f', 'null', '-']
+                duration_result = subprocess.run(duration_cmd, capture_output=True, text=True, timeout=60)
+                import re
+                duration_match = re.search(r'Duration: (\d+):(\d+):(\d+\.?\d*)', duration_result.stderr)
+                if duration_match:
+                    hours, minutes, seconds = duration_match.groups()
+                    total_duration = int(hours) * 3600 + int(minutes) * 60 + float(seconds)
+                    logger.info(f"STEP 10: ✅ Video duration via ffmpeg: {total_duration}s")
+                else:
+                    logger.error("STEP 10: ❌ Could not get duration from ffmpeg either")
+                    raise Exception("Could not determine video duration")
             
             logger.info("STEP 11: Calculating segments...")
             max_segments = int(total_duration / segment_duration)
