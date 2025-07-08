@@ -1,5 +1,5 @@
 from pydantic_settings import BaseSettings
-from typing import Optional
+from typing import Optional, List
 import os
 
 class Settings(BaseSettings):
@@ -43,6 +43,12 @@ class Settings(BaseSettings):
     RAILWAY_ENVIRONMENT: Optional[str] = None
     RAILWAY_STATIC_URL: Optional[str] = None
 
+    # Lambda Configuration
+    USE_LAMBDA_PROCESSING: bool = False
+    LAMBDA_FUNCTION_NAME: str = "easy-video-share-video-processor"
+    LAMBDA_USERS: Optional[List[str]] = None
+    LAMBDA_FILE_SIZE_THRESHOLD_MB: int = 100
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
@@ -77,6 +83,11 @@ class Settings(BaseSettings):
         # Detect Railway environment
         if os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("RAILWAY_STATIC_URL"):
             self.RAILWAY_ENVIRONMENT = os.getenv("RAILWAY_ENVIRONMENT", "false")
+
+        # Parse Lambda users from environment variable
+        lambda_users_env = os.getenv("LAMBDA_USERS")
+        if lambda_users_env:
+            self.LAMBDA_USERS = [user.strip() for user in lambda_users_env.split(",")]
 
     @property
     def is_railway_environment(self) -> bool:
