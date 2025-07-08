@@ -138,6 +138,15 @@ def test_full_integration(event, context=None):
             logger.info(f"STEP 9: ✅ Downloaded video: {input_file_size} bytes")
             
             logger.info("STEP 10: Getting video duration...")
+            
+            # First, let's see what's actually in /opt/bin/
+            logger.info("STEP 10: Checking what's in /opt/bin/")
+            try:
+                opt_bin_contents = os.listdir('/opt/bin/')
+                logger.info(f"STEP 10: /opt/bin/ contents: {opt_bin_contents}")
+            except Exception as e:
+                logger.info(f"STEP 10: Cannot list /opt/bin/: {e}")
+            
             # Search for ffprobe in common locations
             ffprobe_paths = ['/opt/bin/ffprobe', '/usr/bin/ffprobe', '/usr/local/bin/ffprobe', '/opt/ffmpeg/bin/ffprobe']
             ffprobe_cmd = None
@@ -151,10 +160,13 @@ def test_full_integration(event, context=None):
             logger.info(f"STEP 10: Searching for ffprobe in: {ffprobe_paths}")
             
             for path in ffprobe_paths:
+                logger.info(f"STEP 10: Checking if {path} exists...")
                 if os.path.exists(path):
                     ffprobe_cmd = path
                     logger.info(f"STEP 10: Found ffprobe at {path}")
                     break
+                else:
+                    logger.info(f"STEP 10: {path} does not exist")
             
             if ffprobe_cmd:
                 duration_cmd = [ffprobe_cmd, '-v', 'quiet', '-show_entries', 'format=duration', '-of', 'csv=p=0', input_video_path]
