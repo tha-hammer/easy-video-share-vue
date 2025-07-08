@@ -192,7 +192,7 @@ class Sprint2Validator:
                 "python", "-c", f"""
 import sys
 sys.path.append('.')
-from video_processing_utils_robust import split_and_overlay_hardcoded, validate_video_file
+from video_processor import split_and_overlay_hardcoded, validate_video_file
 
 # Validate test video
 if not validate_video_file('{self.test_video_path}'):

@@ -6,7 +6,7 @@ Tests the simplified video processing for Railway deployment
 import os
 import tempfile
 import subprocess
-from video_processing_utils_railway import (
+from video_processor import (
     split_video_with_precise_timing_and_dynamic_text,
     get_video_info_railway,
     validate_video_file_railway

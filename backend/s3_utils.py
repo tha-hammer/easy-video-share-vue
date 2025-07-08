@@ -358,7 +358,7 @@ def get_video_duration_from_s3(bucket: str, key: str) -> float:
     """
     import tempfile
     import os
-    from video_processing_utils import get_video_duration_from_s3 as get_duration
+    from video_processor import get_video_duration_from_s3 as get_duration
     
     # Download file temporarily to get duration
     temp_dir = tempfile.mkdtemp()
