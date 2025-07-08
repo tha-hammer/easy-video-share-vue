@@ -44,6 +44,7 @@ from dynamodb_service import iso_utc_now, table
 from tasks import process_video_task, celery_app
 from video_processing_utils import get_video_duration_from_s3, calculate_segments
 from config import settings
+from lambda_integration import use_lambda_processing, trigger_lambda_processing, test_lambda_connectivity, validate_lambda_config
 from sse_starlette.sse import EventSourceResponse
 import redis.asyncio as redis
 import asyncio
@@ -448,15 +449,45 @@ async def complete_upload(request: CompleteUploadRequest) -> JobCreatedResponse:
         if request.text_input:
             text_input_dict = request.text_input.dict()
 
-        # Dispatch video processing task to Celery
-        task = process_video_task.delay(
-            request.s3_key,
-            request.job_id,
-            cutting_options_dict,
-            text_strategy_str,
-            text_input_dict,
-            request.user_id or "anonymous"  # Use provided user_id or default to "anonymous"
-        )
+        # Determine processing method (Lambda vs Celery)
+        request_data = {
+            's3_key': request.s3_key,
+            'job_id': request.job_id,
+            'user_id': request.user_id or "anonymous",
+            'file_size': request.file_size,
+            'cutting_options': cutting_options_dict,
+            'text_input': text_input_dict,
+            'segment_duration': 30  # Default segment duration
+        }
+        
+        if use_lambda_processing(request_data):
+            # Use Lambda processing
+            print(f"DEBUG: Using Lambda processing for job {request.job_id}")
+            try:
+                lambda_result = await trigger_lambda_processing(request_data)
+                print(f"DEBUG: Lambda processing triggered: {lambda_result}")
+            except Exception as lambda_error:
+                print(f"DEBUG: Lambda processing failed, falling back to Celery: {lambda_error}")
+                # Fallback to Celery if Lambda fails
+                task = process_video_task.delay(
+                    request.s3_key,
+                    request.job_id,
+                    cutting_options_dict,
+                    text_strategy_str,
+                    text_input_dict,
+                    request.user_id or "anonymous"
+                )
+        else:
+            # Use Celery processing
+            print(f"DEBUG: Using Celery processing for job {request.job_id}")
+            task = process_video_task.delay(
+                request.s3_key,
+                request.job_id,
+                cutting_options_dict,
+                text_strategy_str,
+                text_input_dict,
+                request.user_id or "anonymous"
+            )
 
         # Immediately create DynamoDB job entry (QUEUED) with video duration
         try:
@@ -599,6 +630,30 @@ async def get_job_status(job_id: str) -> JobStatusResponse:
 async def health_check():
     """Health check endpoint"""
     return {"status": "healthy", "message": "Video processing API is running"}
+
+@router.get("/lambda/status")
+async def lambda_status():
+    """Get Lambda processing status and configuration"""
+    try:
+        # Validate Lambda configuration
+        config = validate_lambda_config()
+        
+        # Test Lambda connectivity
+        connectivity = await test_lambda_connectivity()
+        
+        return {
+            "lambda_enabled": config['use_lambda_processing'],
+            "function_name": config['lambda_function_name'],
+            "configuration": config,
+            "connectivity": connectivity,
+            "processing_method": "Lambda" if config['use_lambda_processing'] else "Celery"
+        }
+    except Exception as e:
+        return {
+            "error": str(e),
+            "lambda_enabled": False,
+            "processing_method": "Celery (fallback)"
+        }
 
 
 @router.get("/routes")
