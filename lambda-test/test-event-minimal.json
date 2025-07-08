@@ -1,9 +1,8 @@
 {
   "test_type": "full_integration",
-  "source": "railway",
   "s3_bucket": "easy-video-share-silmari-dev",
   "s3_key": "uploads/f5657863-5078-481c-b4c5-99ffa1dd1ad5/20250706_155512_IMG_0899.mov",
-  "job_id": "lambda-test-2025-01-06",
-  "user_id": "lambda-test-user",
+  "job_id": "test-2025-01-06",
+  "user_id": "test-user",
   "segment_duration": 30
 }

@@ -1,0 +1,51 @@
+{
+  "invalid_s3_key": {
+    "test_scenario": "invalid_s3_key",
+    "s3_bucket": "easy-video-share-silmari-dev",
+    "s3_key": "uploads/nonexistent-video.mov",
+    "job_id": "error-test-invalid-s3",
+    "user_id": "error-test-user"
+  },
+  "processing_timeout": {
+    "test_scenario": "processing_timeout",
+    "s3_bucket": "easy-video-share-silmari-dev",
+    "s3_key": "uploads/timeout-test.mov",
+    "job_id": "error-test-timeout",
+    "user_id": "error-test-user"
+  },
+  "upload_failure": {
+    "test_scenario": "upload_failure",
+    "s3_bucket": "non-existent-bucket",
+    "s3_key": "uploads/upload-test.mov",
+    "job_id": "error-test-upload",
+    "user_id": "error-test-user"
+  },
+  "ffmpeg_failure": {
+    "test_scenario": "ffmpeg_failure",
+    "s3_bucket": "easy-video-share-silmari-dev",
+    "s3_key": "uploads/ffmpeg-test.mov",
+    "job_id": "error-test-ffmpeg",
+    "user_id": "error-test-user"
+  },
+  "dynamodb_failure": {
+    "test_scenario": "dynamodb_failure",
+    "s3_bucket": "easy-video-share-silmari-dev",
+    "s3_key": "uploads/dynamodb-test.mov",
+    "job_id": "error-test-dynamodb",
+    "user_id": "error-test-user"
+  },
+  "memory_pressure": {
+    "test_scenario": "memory_pressure",
+    "s3_bucket": "easy-video-share-silmari-dev",
+    "s3_key": "uploads/memory-test.mov",
+    "job_id": "error-test-memory",
+    "user_id": "error-test-user"
+  },
+  "all_scenarios": {
+    "test_scenario": "all_scenarios",
+    "s3_bucket": "easy-video-share-silmari-dev",
+    "s3_key": "uploads/all-test.mov",
+    "job_id": "error-test-all",
+    "user_id": "error-test-user"
+  }
+}
