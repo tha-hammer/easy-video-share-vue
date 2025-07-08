@@ -214,18 +214,17 @@ def test_full_integration(event, context=None):
                 
                 segment_path = os.path.join(temp_dir, f'segment_{i:03d}.mp4')
                 
-                # Cut segment with high quality for social media
+                # Cut segment with FAST settings for testing
                 cut_cmd = [
                     '/opt/bin/ffmpeg', '-i', input_video_path,
                     '-ss', str(start_time), '-t', str(segment_duration),
-                    '-c:v', 'libx264', '-crf', '23', '-preset', 'medium',
-                    '-c:a', 'aac', '-b:a', '128k',
-                    '-movflags', '+faststart',
+                    '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '28',
+                    '-c:a', 'aac', '-b:a', '96k',
                     '-y', segment_path
                 ]
                 
-                logger.info(f"STEP 12.{i+1}: Running FFmpeg command")
-                cut_result = subprocess.run(cut_cmd, capture_output=True, text=True, timeout=120)
+                logger.info(f"STEP 12.{i+1}: Running FFmpeg command with FAST settings")
+                cut_result = subprocess.run(cut_cmd, capture_output=True, text=True, timeout=60)
                 
                 if cut_result.returncode == 0 and os.path.exists(segment_path):
                     # Upload segment to S3
