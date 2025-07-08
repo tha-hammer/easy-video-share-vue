@@ -42,7 +42,7 @@ from s3_utils import (
 import dynamodb_service
 from dynamodb_service import iso_utc_now, table
 from tasks import process_video_task, celery_app
-from video_processing_utils import get_video_duration_from_s3, calculate_segments
+from video_processor import get_video_duration_from_s3, calculate_segments
 from config import settings
 from lambda_integration import use_lambda_processing, trigger_lambda_processing, test_lambda_connectivity, validate_lambda_config
 from sse_starlette.sse import EventSourceResponse
@@ -1573,14 +1573,14 @@ async def debug_railway_video():
         
         if test_video_ok and test_video_path:
             try:
-                from video_processing_utils_railway import (
+                from video_processor import (
                     split_video_with_precise_timing_and_dynamic_text,
-                    get_video_info_railway
+                    get_video_info
                 )
                 from models import TextStrategy
                 
                 # Get video info
-                video_info = get_video_info_railway(test_video_path)
+                video_info = get_video_info(test_video_path)
                 
                 # Process video with simple parameters
                 with tempfile.TemporaryDirectory() as temp_dir:

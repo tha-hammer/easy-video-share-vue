@@ -18,7 +18,7 @@ import os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from models import FixedCuttingParams, RandomCuttingParams
-from video_processing_utils import get_video_duration_from_s3, calculate_segments
+from video_processor import get_video_duration_from_s3, calculate_segments
 from config import settings
 import boto3
 from botocore.exceptions import ClientError

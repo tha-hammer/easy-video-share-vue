@@ -6,7 +6,7 @@ This script tests the video processing pipeline without Celery
 import os
 import sys
 import tempfile
-from video_processing_utils import split_and_overlay_hardcoded, validate_video_file, get_video_info
+from video_processor import split_and_overlay_hardcoded, validate_video_file, get_video_info
 
 def test_video_processing(video_path: str):
     """Test video processing with a local video file"""
