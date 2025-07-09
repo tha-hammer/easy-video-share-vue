@@ -500,6 +500,124 @@ data "archive_file" "s3_test_zip" {
   source_dir  = "${path.module}/lambda-video-processor"
 }
 
+# === Video Processor Lambda (Python) ===
+resource "aws_lambda_function" "video_processor" {
+  filename         = "production-lambda.zip"
+  function_name    = "${var.project_name}-video-processor"
+  role             = aws_iam_role.lambda_execution_role.arn
+  handler          = "lambda_function.lambda_handler"
+  runtime          = "python3.11"
+  timeout          = 900
+  memory_size      = 3008
+  ephemeral_storage {
+    size = 10240
+  }
+  source_code_hash = filebase64sha256("production-lambda.zip")
+  environment {
+    variables = {
+      ENVIRONMENT = "production"
+    }
+  }
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+  }
+}
+
+resource "aws_lambda_permission" "video_processor_api_gateway" {
+  statement_id  = "AllowExecutionFromAPIGatewayVideoProcessor"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.video_processor.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_api_gateway_rest_api.video_api.execution_arn}/*/*"
+}
+
+resource "aws_api_gateway_resource" "video_processor_resource" {
+  rest_api_id = aws_api_gateway_rest_api.video_api.id
+  parent_id   = aws_api_gateway_rest_api.video_api.root_resource_id
+  path_part   = "video-processor"
+}
+
+resource "aws_api_gateway_method" "video_processor_post" {
+  rest_api_id   = aws_api_gateway_rest_api.video_api.id
+  resource_id   = aws_api_gateway_resource.video_processor_resource.id
+  http_method   = "POST"
+  authorization = "COGNITO_USER_POOLS"
+  authorizer_id = aws_api_gateway_authorizer.cognito_authorizer.id
+}
+
+resource "aws_api_gateway_integration" "video_processor_post_integration" {
+  rest_api_id             = aws_api_gateway_rest_api.video_api.id
+  resource_id             = aws_api_gateway_resource.video_processor_resource.id
+  http_method             = aws_api_gateway_method.video_processor_post.http_method
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = aws_lambda_function.video_processor.invoke_arn
+}
+
+resource "aws_api_gateway_method_response" "video_processor_post_response" {
+  rest_api_id = aws_api_gateway_rest_api.video_api.id
+  resource_id = aws_api_gateway_resource.video_processor_resource.id
+  http_method = aws_api_gateway_method.video_processor_post.http_method
+  status_code = "200"
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Origin" = true
+  }
+}
+
+resource "aws_api_gateway_integration_response" "video_processor_post_integration_response" {
+  rest_api_id = aws_api_gateway_rest_api.video_api.id
+  resource_id = aws_api_gateway_resource.video_processor_resource.id
+  http_method = aws_api_gateway_method.video_processor_post.http_method
+  status_code = aws_api_gateway_method_response.video_processor_post_response.status_code
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Origin" = "'*'"
+  }
+}
+
+# CORS support for /video-processor
+resource "aws_api_gateway_method" "video_processor_options" {
+  rest_api_id   = aws_api_gateway_rest_api.video_api.id
+  resource_id   = aws_api_gateway_resource.video_processor_resource.id
+  http_method   = "OPTIONS"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_integration" "video_processor_options_integration" {
+  rest_api_id             = aws_api_gateway_rest_api.video_api.id
+  resource_id             = aws_api_gateway_resource.video_processor_resource.id
+  http_method             = aws_api_gateway_method.video_processor_options.http_method
+  integration_http_method = "POST"
+  type                    = "MOCK"
+  request_templates = {
+    "application/json" = "{\"statusCode\": 200}"
+  }
+}
+
+resource "aws_api_gateway_method_response" "video_processor_options_response" {
+  rest_api_id = aws_api_gateway_rest_api.video_api.id
+  resource_id = aws_api_gateway_resource.video_processor_resource.id
+  http_method = aws_api_gateway_method.video_processor_options.http_method
+  status_code = "200"
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Origin"  = true
+    "method.response.header.Access-Control-Allow-Methods" = true
+    "method.response.header.Access-Control-Allow-Headers" = true
+  }
+}
+
+resource "aws_api_gateway_integration_response" "video_processor_options_integration_response" {
+  rest_api_id = aws_api_gateway_rest_api.video_api.id
+  resource_id = aws_api_gateway_resource.video_processor_resource.id
+  http_method = aws_api_gateway_method.video_processor_options.http_method
+  status_code = aws_api_gateway_method_response.video_processor_options_response.status_code
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Origin"  = "'*'"
+    "method.response.header.Access-Control-Allow-Methods" = "'POST,OPTIONS'"
+    "method.response.header.Access-Control-Allow-Headers" = "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+  }
+}
+
 # API Gateway REST API
 resource "aws_api_gateway_rest_api" "video_api" {
   name        = "${var.project_name}-api"
@@ -975,6 +1093,9 @@ resource "aws_api_gateway_deployment" "video_api_deployment" {
     aws_api_gateway_integration_response.admin_users_options_integration_response,
     aws_api_gateway_integration_response.admin_videos_options_integration_response,
     aws_api_gateway_integration_response.admin_user_videos_options_integration_response,
+    # Add video processor integration responses
+    aws_api_gateway_integration_response.video_processor_post_integration_response,
+    aws_api_gateway_integration_response.video_processor_options_integration_response,
   ]
 
   rest_api_id = aws_api_gateway_rest_api.video_api.id
@@ -1023,6 +1144,15 @@ resource "aws_api_gateway_deployment" "video_api_deployment" {
       aws_api_gateway_integration_response.admin_users_options_integration_response.id,
       aws_api_gateway_integration_response.admin_videos_options_integration_response.id,
       aws_api_gateway_integration_response.admin_user_videos_options_integration_response.id,
+      # Video processor resources
+      aws_api_gateway_resource.video_processor_resource.id,
+      aws_api_gateway_method.video_processor_post.id,
+      aws_api_gateway_method.video_processor_options.id,
+      aws_api_gateway_integration.video_processor_post_integration.id,
+      aws_api_gateway_integration.video_processor_options_integration.id,
+      # Video processor integration responses
+      aws_api_gateway_integration_response.video_processor_post_integration_response.id,
+      aws_api_gateway_integration_response.video_processor_options_integration_response.id,
     ]))
   }
 
