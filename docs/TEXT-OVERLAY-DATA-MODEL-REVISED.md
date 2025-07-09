@@ -2,11 +2,12 @@
 
 ## Infrastructure Context
 Based on the Terraform configuration and backend analysis:
-- **Cloud Deployment**: Railway (backend) + AWS (S3, DynamoDB, Cognito)
+- **Cloud Deployment**: Hybrid architecture with Railway (backend) + AWS Lambda (video processing) + AWS (S3, DynamoDB, Cognito)
 - **Database**: Single DynamoDB table `video-metadata` with multiple GSIs
 - **Storage**: S3 bucket with organized folder structure
 - **Authentication**: AWS Cognito User Pools
-- **Backend**: FastAPI on Railway (not AWS Lambda/API Gateway)
+- **Backend**: FastAPI on Railway with intelligent routing to AWS Lambda for video processing
+- **Video Processing**: Hybrid model using `lambda_integration.py` to route between Railway and Lambda based on file size and configuration
 
 ## Current Database Schema Analysis
 
@@ -117,21 +118,26 @@ easy-video-share-bucket/
 2. **List user videos with thumbnails**: Use `user_id-upload_date-index` GSI
 3. **No new GSI needed** - thumbnail data stored in existing video record
 
-### 5. API Endpoints (Railway Backend)
+### 5. API Endpoints (Hybrid Backend)
 
 ```python
 # Add to backend/main.py
 
 @router.post("/videos/{video_id}/thumbnail")
 async def generate_video_thumbnail(video_id: str):
-    """Generate thumbnail for video using FFmpeg"""
+    """Generate thumbnail for video using Lambda (preferred) or Railway FFmpeg"""
+    # Use lambda_integration.py to determine processor
+    # Lambda: FFmpeg layer for thumbnail extraction
+    # Railway: Local FFmpeg fallback
     
 @router.post("/videos/{video_id}/text-overlay-preview") 
 async def generate_text_overlay_preview(
     video_id: str, 
     request: TextOverlayPreviewRequest
 ):
-    """Generate text overlay preview on thumbnail using Pillow"""
+    """Generate text overlay preview using available processor"""
+    # Lambda: FFmpeg drawtext filter (when text overlay implemented)
+    # Railway: Pillow for text compositing
 
 @router.get("/videos/{video_id}/thumbnail")
 async def get_video_thumbnail(video_id: str):
@@ -140,20 +146,24 @@ async def get_video_thumbnail(video_id: str):
 
 ### 6. Backend Services
 
-#### Thumbnail Service (`backend/thumbnail_service.py`)
+#### Hybrid Thumbnail Service (`backend/thumbnail_service.py`)
 ```python
 import subprocess
 from PIL import Image, ImageDraw, ImageFont
 import hashlib
+from lambda_integration import use_lambda_processing, trigger_lambda_processing
 
 class ThumbnailService:
     @staticmethod
     def extract_video_thumbnail(video_s3_key: str, timestamp: float = None) -> str:
-        """Extract thumbnail from S3 video using FFmpeg"""
-        # Download video temporarily
-        # Use FFmpeg to extract frame at timestamp (default: midpoint)
-        # Upload thumbnail to S3
-        # Return thumbnail S3 key
+        """Extract thumbnail using Lambda (preferred) or Railway FFmpeg"""
+        # Determine processor using lambda_integration.py logic
+        if use_lambda_processing({"video_s3_key": video_s3_key}):
+            # Lambda: Use FFmpeg layer for thumbnail extraction
+            return trigger_lambda_thumbnail_extraction(video_s3_key, timestamp)
+        else:
+            # Railway: Local FFmpeg processing
+            return extract_thumbnail_railway(video_s3_key, timestamp)
         
     @staticmethod  
     def generate_text_overlay_preview(
@@ -161,12 +171,14 @@ class ThumbnailService:
         text_content: str,
         style: TextOverlayStyle
     ) -> str:
-        """Generate text overlay preview using Pillow"""
-        # Download thumbnail from S3
-        # Apply text overlay with styling
-        # Generate cache key based on style hash
-        # Upload preview to S3
-        # Return preview S3 key
+        """Generate text overlay preview using available processor"""
+        # Check if Lambda has text overlay capability
+        if lambda_has_text_overlay() and use_lambda_processing({}):
+            # Lambda: Use FFmpeg drawtext filter
+            return trigger_lambda_text_overlay(thumbnail_s3_key, text_content, style)
+        else:
+            # Railway: Use Pillow for text compositing
+            return generate_preview_railway(thumbnail_s3_key, text_content, style)
 ```
 
 ### 7. Data Migration Strategy
@@ -199,17 +211,23 @@ def create_job_entry(
 
 #### Modified Upload Steps:
 1. **Video Selection & Upload** (unchanged)
-2. **Thumbnail Generation** (NEW - automatic after upload)
-3. **Text Customization** (enhanced with visual preview)
+2. **Thumbnail Generation** (NEW - automatic after upload using Lambda preferred)
+3. **Text Customization** (enhanced with visual preview using hybrid processing)
 4. **Segment Selection** (unchanged)  
-5. **Processing** (uses enhanced text styling)
+5. **Processing** (uses enhanced text styling via intelligent routing)
 
-#### Workflow Data Flow:
+#### Hybrid Workflow Data Flow:
 ```
 1. Video uploaded to S3 → video_id created in DynamoDB
-2. Thumbnail extracted → stored in S3 → thumbnail_s3_key added to video record
-3. User designs text overlay → preview generated → cached in S3
-4. Processing uses enhanced TextInput with styling → applied to video segments
+2. Thumbnail extraction:
+   - Lambda preferred: Use FFmpeg layer for efficient extraction
+   - Railway fallback: Local FFmpeg processing
+3. Text overlay preview:
+   - Lambda: FFmpeg drawtext filter (when implemented)
+   - Railway: Pillow compositing (current)
+4. Video processing:
+   - Route via lambda_integration.py based on file size/config
+   - Apply enhanced TextInput styling in chosen processor
 ```
 
 ### 9. Performance Optimizations
@@ -218,11 +236,19 @@ def create_job_entry(
 - **Thumbnail Generation**: Once per video, stored permanently
 - **Preview Generation**: Hash-based caching, TTL cleanup
 - **S3 Presigned URLs**: 1-hour expiration for thumbnails/previews
+- **Processor Selection**: Cache Lambda availability checks
 
 #### Memory Management:
-- **Railway Environment**: Optimize for limited memory
-- **Temp File Cleanup**: Automatic cleanup of downloaded files
-- **Image Processing**: Resize thumbnails for web optimization
+- **Railway Environment**: Optimize for limited memory in fallback scenarios
+- **Lambda Environment**: Leverage serverless scalability for thumbnail generation
+- **Temp File Cleanup**: Automatic cleanup in both environments
+- **Image Processing**: Optimize for target environment (Railway vs Lambda)
+
+#### Performance Benefits:
+- **Thumbnail Generation**: Lambda scalability reduces bottlenecks
+- **Large Files**: Lambda handles >100MB files more efficiently
+- **Concurrent Processing**: Lambda auto-scaling vs Railway worker limits
+- **Cost Optimization**: Pay-per-use Lambda for thumbnail generation
 
 ### 10. Security Considerations
 
@@ -239,32 +265,77 @@ def create_job_entry(
 ## Implementation Priority
 
 ### Phase 1: Core Infrastructure
-1. Add thumbnail fields to existing video records
-2. Implement thumbnail generation service with FFmpeg
-3. Add thumbnail generation to upload workflow
+1. **Hybrid Thumbnail Service**: Implement Lambda-preferred thumbnail generation with Railway fallback
+2. **Enhanced Data Models**: Add thumbnail fields to existing video records
+3. **Lambda Integration**: Leverage existing FFmpeg layer for thumbnail extraction
 
 ### Phase 2: Preview System  
-1. Implement text overlay preview generation with Pillow
-2. Add preview API endpoints
-3. Create preview caching system
+1. **Hybrid Preview Generation**: Railway Pillow + Lambda FFmpeg (when text overlay implemented)
+2. **Smart Routing**: Use `lambda_integration.py` for optimal processor selection
+3. **Preview Caching**: Hash-based caching system with S3 storage
 
-### Phase 3: Frontend Integration
-1. Enhance Upload.vue Step 3 with visual preview
-2. Create TextOverlayDesigner component
-3. Integrate with existing text strategy system
+### Phase 3: Text Overlay Parity
+1. **Lambda Text Overlay**: Implement FFmpeg drawtext functionality in Lambda
+2. **Feature Consistency**: Ensure consistent output between processors
+3. **Processing Optimization**: Complete migration to Lambda for large files
+
+### Phase 4: Frontend Integration
+1. **Enhanced Upload.vue**: Step 3 with visual preview using hybrid backend
+2. **TextOverlayDesigner**: Component that works with both processors
+3. **Processing Indicators**: Show user which processor will handle their job
 
 ## Risks and Mitigation
 
+### Hybrid Architecture Considerations:
+- **Processor Availability**: Implement robust fallback between Lambda and Railway
+- **Feature Parity**: Ensure consistent text overlay output across processors
+- **Cost Management**: Monitor Lambda usage vs Railway costs for optimization
+- **Cold Starts**: Minimize Lambda cold start impact on thumbnail generation
+
 ### Railway Deployment Considerations:
-- **Memory Limits**: Optimize image processing for Railway's memory constraints
+- **Memory Limits**: Optimize image processing for Railway's memory constraints (fallback scenarios)
 - **Storage**: Use S3 for all file storage, not local filesystem
 - **Processing Time**: Ensure thumbnail/preview generation completes within request timeouts
+
+### Lambda Integration Risks:
+- **Text Overlay Gap**: Lambda currently lacks text overlay functionality
+- **Font Management**: Ensure fonts available in Lambda layers
+- **Error Handling**: Robust error handling between processors
+- **Monitoring**: Track success rates across both processing paths
 
 ### DynamoDB Single Table:
 - **No Schema Changes**: Thumbnail data added as optional fields to existing records
 - **GSI Limits**: Reuse existing GSIs, no new indexes needed
 - **Backward Compatibility**: Existing records work without thumbnail data
 
+## Architecture Decision Framework
+
+### Processing Selection Logic
+```python
+# Integration with existing lambda_integration.py
+
+def select_thumbnail_processor(video_data):
+    """Determine optimal processor for thumbnail generation"""
+    # Always prefer Lambda for thumbnails (scalability)
+    if lambda_available():
+        return "lambda"
+    return "railway"
+    
+def select_preview_processor(text_overlay_data):
+    """Determine optimal processor for text overlay preview"""
+    # Use Lambda if text overlay implemented
+    if lambda_has_text_overlay():
+        return "lambda"
+    # Fall back to Railway Pillow processing
+    return "railway"
+```
+
+### Migration Strategy
+1. **Phase 1**: Use Lambda for thumbnail generation (all files)
+2. **Phase 2**: Implement text overlay in Lambda for feature parity
+3. **Phase 3**: Migrate text overlay processing to Lambda (large files first)
+4. **Phase 4**: Optimize routing based on performance metrics
+
 ---
 
-*Revised Data Model for Railway + AWS Architecture - Date: 2025-07-06*
+*Revised Data Model for Hybrid Railway + Lambda Architecture - Date: 2025-07-09*
