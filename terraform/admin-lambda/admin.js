@@ -101,7 +101,7 @@ exports.handler = async (event) => {
       return await handleDeleteVideo(event);
     }
     
-    if (path.match(/^\/admin\/users\/[^\/]+\/videos$/) && httpMethod === "GET") {
+    if (path.match(/^\/admin\/users\/[^/]+\/videos$/) && httpMethod === "GET") {
       const userIdFromPath = path.split('/')[3];
       return await handleListUserVideos(userIdFromPath);
     }

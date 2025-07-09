@@ -52,6 +52,15 @@
       </div>
 
       <div class="menu-item">
+        <router-link to="/text-overlay-demo" class="menu-link" active-class="active">
+          <span class="menu-icon">
+            <KTIcon icon-name="text" icon-class="fs-2" />
+          </span>
+          <span class="menu-title">Text Overlay Demo</span>
+        </router-link>
+      </div>
+
+      <div class="menu-item">
         <router-link to="/segments" class="menu-link" active-class="active">
           <span class="menu-icon">
             <KTIcon icon-name="element-4" icon-class="fs-2" />

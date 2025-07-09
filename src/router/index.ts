@@ -106,6 +106,15 @@ const routes: Array<RouteRecordRaw> = [
           breadcrumbs: ['Videos', 'Processing'],
         },
       },
+      {
+        path: '/text-overlay-demo',
+        name: 'text-overlay-demo',
+        component: () => import('@/views/TextOverlayDemoSimple.vue'),
+        meta: {
+          pageTitle: 'Text Overlay Demo',
+          breadcrumbs: ['Videos', 'Text Overlay Demo'],
+        },
+      },
     ],
   },
   {
