@@ -2,6 +2,19 @@
 
 import { fabric } from 'fabric'
 
+// Temporary fix for fabric types
+declare module 'fabric' {
+  export namespace fabric {
+    interface Point {
+      x: number
+      y: number
+    }
+    interface Shadow {}
+    interface Pattern {}
+    interface Gradient {}
+  }
+}
+
 // Core Text Overlay Interface
 export interface TextOverlay {
   id: string
@@ -180,7 +193,7 @@ export interface TextOverlayTemplate {
   fontSize: number
   fontFamily: string
   fontWeight: string
-  fontStyle: string
+  fontStyle: 'normal' | 'italic' | 'oblique'
   color: string
   backgroundColor?: string
   shadow?: TextShadow
@@ -203,9 +216,9 @@ export interface TextOverlayOperation {
   segmentId: string
   overlayId: string
 
-  // State before and after operation
-  previousState?: Partial<TextOverlay>
-  newState?: Partial<TextOverlay>
+  // State before and after operation - can be single overlay or bulk operation
+  previousState?: Partial<TextOverlay> | { overlays: TextOverlay[] }
+  newState?: Partial<TextOverlay> | { overlays: TextOverlay[] }
 
   timestamp: string
 }
