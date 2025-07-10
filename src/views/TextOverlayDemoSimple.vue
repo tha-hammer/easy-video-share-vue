@@ -376,33 +376,9 @@ export default defineComponent({
       if (!canvas.value || !selectedSegment.value) return
 
       try {
-        interface FabricTextObject {
-          type: string
-          text?: string
-          left?: number
-          top?: number
-          width?: number
-          height?: number
-          fontSize?: number
-          fontFamily?: string
-          fontWeight?: string
-          fontStyle?: string
-          fill?: string
-          backgroundColor?: string
-          opacity?: number
-          angle?: number
-          scaleX?: number
-          scaleY?: number
-          shadow?: { color?: string; offsetX?: number; offsetY?: number; blur?: number }
-          stroke?: string
-          strokeWidth?: number
-        }
-
-        const textObjects = canvas.value
-          .getObjects()
-          .filter((obj: unknown) => (obj as FabricTextObject).type === 'text')
-        const overlays = textObjects.map((obj: unknown) => {
-          const textObj = obj as FabricTextObject
+        const textObjects = canvas.value.getObjects().filter((obj: any) => obj.type === 'text')
+        const overlays = textObjects.map((obj: any) => {
+          const textObj = obj
           // Extract text overlay data from Fabric.js object
           // This would use the coordinate conversion system from the requirements
           return {

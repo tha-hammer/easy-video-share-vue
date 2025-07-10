@@ -2,8 +2,7 @@
 // This is the CORE composable that handles all text overlay functionality
 
 import { ref, computed, onUnmounted } from 'vue'
-import { Canvas, Text, Image } from 'fabric'
-import type { TEvent } from 'fabric'
+import { Canvas, FabricText, FabricImage } from 'fabric'
 
 export function useTextOverlay() {
   // ==================== STATE MANAGEMENT ====================
@@ -11,7 +10,7 @@ export function useTextOverlay() {
   const canvas = ref<Canvas | null>(null)
   const canvasElement = ref<HTMLCanvasElement | null>(null)
   const isCanvasReady = ref(false)
-  const activeTextObject = ref<Text | null>(null)
+  const activeTextObject = ref<FabricText | null>(null)
 
   // Canvas and video dimensions
   const canvasSize = ref({ width: 800, height: 450 })
@@ -25,109 +24,106 @@ export function useTextOverlay() {
 
   const hasActiveText = computed(() => activeTextObject.value !== null)
 
-  // ==================== CANVAS LIFECYCLE ====================
+  const textObjectCount = computed(() => {
+    if (!canvas.value) return 0
+    return canvas.value.getObjects().filter((obj: any) => obj.type === 'text').length
+  })
 
-  /**
-   * Initialize Fabric.js canvas with video thumbnail background
-   */
+  // ==================== CANVAS INITIALIZATION ====================
+
   const initializeCanvas = async (
     canvasEl: HTMLCanvasElement,
-    thumbnailUrl: string,
-    videoWidth: number,
-    videoHeight: number,
+    backgroundImageUrl: string,
+    videoWidth: number = 1920,
+    videoHeight: number = 1080,
     maxCanvasWidth: number = 800,
     maxCanvasHeight: number = 450,
-  ): Promise<void> => {
-    canvasElement.value = canvasEl
+  ) => {
+    try {
+      console.log('🎨 Initializing Fabric.js Canvas...')
 
-    // Calculate optimal canvas dimensions maintaining aspect ratio
-    const aspectRatio = videoWidth / videoHeight
-    let canvasWidth: number
-    let canvasHeight: number
+      // Store video dimensions
+      videoSize.value = { width: videoWidth, height: videoHeight }
 
-    if (aspectRatio > maxCanvasWidth / maxCanvasHeight) {
-      canvasWidth = maxCanvasWidth
-      canvasHeight = maxCanvasWidth / aspectRatio
-    } else {
-      canvasHeight = maxCanvasHeight
-      canvasWidth = maxCanvasHeight * aspectRatio
-    }
+      // Calculate aspect ratio and canvas size
+      const aspectRatio = videoWidth / videoHeight
+      let canvasWidth = maxCanvasWidth
+      let canvasHeight = maxCanvasWidth / aspectRatio
 
-    // Update dimensions
-    canvasSize.value = { width: canvasWidth, height: canvasHeight }
-    videoSize.value = { width: videoWidth, height: videoHeight }
+      if (canvasHeight > maxCanvasHeight) {
+        canvasHeight = maxCanvasHeight
+        canvasWidth = maxCanvasHeight * aspectRatio
+      }
 
-    // Initialize Fabric.js canvas
-    canvas.value = new Canvas(canvasEl, {
-      width: canvasWidth,
-      height: canvasHeight,
-      backgroundColor: 'transparent',
-      selection: true,
-    })
+      canvasSize.value = { width: canvasWidth, height: canvasHeight }
 
-    // Load thumbnail as background
-    await loadThumbnailBackground(thumbnailUrl)
-
-    // Set up canvas event listeners
-    setupCanvasEvents()
-
-    isCanvasReady.value = true
-
-    console.log('✅ Canvas initialized:', {
-      canvasSize: `${canvasWidth}x${canvasHeight}`,
-      videoSize: `${videoWidth}x${videoHeight}`,
-      scaleFactors: `${scaleFactors.value.x.toFixed(2)}x, ${scaleFactors.value.y.toFixed(2)}x`,
-    })
-  }
-
-  /**
-   * Load video thumbnail as canvas background
-   */
-  const loadThumbnailBackground = async (thumbnailUrl: string): Promise<void> => {
-    if (!canvas.value) return
-
-    // If no thumbnail URL provided, use a solid color background
-    if (!thumbnailUrl || thumbnailUrl.trim() === '') {
-      canvas.value.backgroundColor = '#4A90E2'
-      canvas.value.renderAll()
-      return
-    }
-
-    return new Promise((resolve) => {
-      Image.fromURL(thumbnailUrl, {}).then((img: Image) => {
-        img.set({
-          scaleX: canvasSize.value.width / videoSize.value.width,
-          scaleY: canvasSize.value.height / videoSize.value.height,
-          selectable: false,
-          evented: false,
-        })
-
-        canvas.value!.backgroundImage = img
-        canvas.value!.renderAll()
-        resolve()
+      // Create Fabric.js Canvas
+      canvas.value = new Canvas(canvasEl, {
+        width: canvasWidth,
+        height: canvasHeight,
+        backgroundColor: '#ffffff',
+        preserveObjectStacking: true,
       })
+
+      // Load background image
+      if (backgroundImageUrl) {
+        await loadBackgroundImage(backgroundImageUrl)
+      }
+
+      // Set up event handlers
+      setupEventHandlers()
+
+      isCanvasReady.value = true
+      console.log('✅ Canvas initialized successfully')
+    } catch (error) {
+      console.error('❌ Failed to initialize canvas:', error)
+      throw error
+    }
+  }
+
+  const loadBackgroundImage = async (imageUrl: string): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      FabricImage.fromURL(imageUrl, { crossOrigin: 'anonymous' })
+        .then((img: FabricImage) => {
+          if (!canvas.value) {
+            reject(new Error('Canvas not initialized'))
+            return
+          }
+
+          // Scale image to fit canvas
+          const scaleX = canvasSize.value.width / (img.width || 1)
+          const scaleY = canvasSize.value.height / (img.height || 1)
+
+          img.set({
+            scaleX,
+            scaleY,
+            selectable: false,
+            evented: false,
+          })
+
+          canvas.value.backgroundImage = img
+          canvas.value.renderAll()
+          resolve()
+        })
+        .catch(reject)
     })
   }
 
-  /**
-   * Set up canvas event listeners for text interaction
-   */
-  const setupCanvasEvents = (): void => {
+  const setupEventHandlers = () => {
     if (!canvas.value) return
 
-    // Text selection events
-    canvas.value.on('selection:created', (e: TEvent) => {
+    // Selection events
+    canvas.value.on('selection:created', (e: any) => {
       const selected = e.selected?.[0]
       if (selected && selected.type === 'text') {
-        activeTextObject.value = selected as Text
-        console.log('📝 Text selected:', activeTextObject.value.text)
+        activeTextObject.value = selected
       }
     })
 
-    canvas.value.on('selection:updated', (e: TEvent) => {
+    canvas.value.on('selection:updated', (e: any) => {
       const selected = e.selected?.[0]
       if (selected && selected.type === 'text') {
-        activeTextObject.value = selected as Text
+        activeTextObject.value = selected
       }
     })
 
@@ -135,210 +131,132 @@ export function useTextOverlay() {
       activeTextObject.value = null
     })
 
-    // Text modification events
-    canvas.value.on('object:modified', (e: TEvent) => {
+    // Object modification events
+    canvas.value.on('object:modified', (e: any) => {
       const obj = e.target
       if (obj && obj.type === 'text') {
-        // Force coordinate update after modification
         obj.setCoords()
-        console.log('🔄 Text modified, coordinates updated')
-      }
-    })
-
-    canvas.value.on('text:changed', (e: TEvent) => {
-      const obj = e.target as Text
-      if (obj) {
-        console.log('✏️ Text content changed:', obj.text)
       }
     })
   }
 
   // ==================== TEXT OBJECT MANAGEMENT ====================
 
-  /**
-   * Add new text object to canvas
-   */
   const addTextObject = async (
-    text: string = 'New Text',
-    x?: number,
-    y?: number,
-    options?: Partial<Text>,
-  ): Promise<Text | null> => {
-    if (!canvas.value) return null
+    text: string = 'Sample Text',
+    left: number = 100,
+    top: number = 100,
+    options: any = {},
+  ): Promise<fabric.Text | null> => {
+    if (!canvas.value) {
+      console.error('❌ Canvas not initialized')
+      return null
+    }
 
-    const defaultX = x ?? canvasSize.value.width / 2
-    const defaultY = y ?? canvasSize.value.height / 2
+    try {
+      const textObj = new fabric.Text(text, {
+        left,
+        top,
+        fontFamily: options.fontFamily || 'Arial',
+        fontSize: options.fontSize || 24,
+        fill: options.fill || '#000000',
+        fontWeight: options.fontWeight || 'normal',
+        ...options,
+      })
 
-    const textObject = new Text(text, {
-      left: defaultX,
-      top: defaultY,
-      fontSize: 24,
-      fontFamily: 'Arial',
-      fill: '#ffffff',
-      textAlign: 'center',
-      originX: 'center',
-      originY: 'center',
-      editable: true,
-      ...options,
-    })
+      canvas.value.add(textObj)
+      canvas.value.setActiveObject(textObj)
+      canvas.value.renderAll()
 
-    canvas.value.add(textObject)
-    canvas.value.setActiveObject(textObject)
-    activeTextObject.value = textObject
+      activeTextObject.value = textObj
 
-    console.log('✅ Text object added:', text)
-    return textObject
+      console.log('✅ Text object added:', text)
+      return textObj
+    } catch (error) {
+      console.error('❌ Failed to add text object:', error)
+      return null
+    }
   }
 
-  /**
-   * Remove text object from canvas
-   */
-  const removeTextObject = (textObj?: Text): void => {
+  const removeTextObject = (textObj: fabric.Text) => {
     if (!canvas.value) return
 
-    const obj = textObj || activeTextObject.value
-    if (obj) {
-      canvas.value.remove(obj)
-      if (obj === activeTextObject.value) {
-        activeTextObject.value = null
-      }
-      console.log('🗑️ Text object removed')
-    }
-  }
-
-  /**
-   * Update text object properties
-   */
-  const updateTextProperty = (property: string, value: any, textObj?: Text): void => {
-    const obj = textObj || activeTextObject.value
-    if (!obj || !canvas.value) return
-
-    obj.set(property as keyof Text, value)
+    canvas.value.remove(textObj)
     canvas.value.renderAll()
 
-    console.log(`🎨 Text property updated: ${property} = ${value}`)
+    if (activeTextObject.value === textObj) {
+      activeTextObject.value = null
+    }
+
+    console.log('🗑️ Text object removed')
   }
 
-  /**
-   * Set text background color
-   */
-  const setTextBackground = (color: string | null): void => {
-    if (!activeTextObject.value || !canvas.value) return
+  const updateTextObject = (textObj: fabric.Text, properties: any) => {
+    if (!canvas.value) return
 
-    activeTextObject.value.set('backgroundColor', color)
+    textObj.set(properties)
     canvas.value.renderAll()
   }
 
-  /**
-   * Set text shadow
-   */
-  const setTextShadow = (
-    enabled: boolean,
-    options?: { color?: string; offsetX?: number; offsetY?: number; blur?: number },
-  ): void => {
-    if (!activeTextObject.value || !canvas.value) return
+  // ==================== CANVAS MANAGEMENT ====================
 
-    if (enabled && options) {
-      activeTextObject.value.set('shadow', {
-        color: options.color || '#000000',
-        offsetX: options.offsetX || 2,
-        offsetY: options.offsetY || 2,
-        blur: options.blur || 3,
-      })
-    } else {
-      activeTextObject.value.set('shadow', null)
-    }
+  const clearCanvas = () => {
+    if (!canvas.value) return
 
-    canvas.value.renderAll()
+    canvas.value.clear()
+    activeTextObject.value = null
   }
 
-  /**
-   * Set text stroke/outline
-   */
-  const setTextStroke = (enabled: boolean, options?: { color?: string; width?: number }): void => {
-    if (!activeTextObject.value || !canvas.value) return
-
-    if (enabled && options) {
-      activeTextObject.value.set({
-        stroke: options.color || '#000000',
-        strokeWidth: options.width || 2,
-      })
-    } else {
-      activeTextObject.value.set({
-        stroke: '',
-        strokeWidth: 0,
-      })
-    }
-
-    canvas.value.renderAll()
-  }
-
-  // ==================== COORDINATE EXTRACTION ====================
-
-  /**
-   * Extract coordinates from Fabric.js text object
-   */
-  const extractTextCoordinates = (textObj: Text) => {
-    textObj.setCoords()
-
-    return {
-      canvasX: textObj.left || 0,
-      canvasY: textObj.top || 0,
-      canvasWidth: textObj.width || 0,
-      canvasHeight: textObj.height || 0,
-      videoX: Math.round((textObj.left || 0) * scaleFactors.value.x),
-      videoY: Math.round((textObj.top || 0) * scaleFactors.value.y),
-      videoWidth: Math.round((textObj.width || 0) * scaleFactors.value.x),
-      videoHeight: Math.round((textObj.height || 0) * scaleFactors.value.y),
-    }
-  }
-
-  // ==================== CLEANUP ====================
-
-  /**
-   * Dispose of canvas and cleanup
-   */
-  const dispose = (): void => {
+  const dispose = () => {
     if (canvas.value) {
       canvas.value.dispose()
       canvas.value = null
     }
-    canvasElement.value = null
     activeTextObject.value = null
     isCanvasReady.value = false
-
     console.log('🧹 Canvas disposed')
   }
 
-  // Cleanup on unmount
-  onUnmounted(() => {
-    dispose()
-  })
+  // ==================== COORDINATE CONVERSION ====================
 
-  // ==================== PUBLIC API ====================
+  const canvasToVideoCoordinates = (canvasX: number, canvasY: number) => {
+    return {
+      x: canvasX * scaleFactors.value.x,
+      y: canvasY * scaleFactors.value.y,
+    }
+  }
+
+  const videoToCanvasCoordinates = (videoX: number, videoY: number) => {
+    return {
+      x: videoX / scaleFactors.value.x,
+      y: videoY / scaleFactors.value.y,
+    }
+  }
+
+  // ==================== EXPORT / RETURN ====================
 
   return {
     // State
-    canvas: readonly(canvas),
-    canvasElement: readonly(canvasElement),
-    isCanvasReady: readonly(isCanvasReady),
-    activeTextObject: readonly(activeTextObject),
-    canvasSize: readonly(canvasSize),
-    videoSize: readonly(videoSize),
-    scaleFactors: readonly(scaleFactors),
+    canvas,
+    canvasElement,
+    isCanvasReady,
+    activeTextObject,
+    canvasSize,
+    videoSize,
+    scaleFactors,
 
     // Computed
     hasActiveText,
+    textObjectCount,
 
     // Methods
     initializeCanvas,
     addTextObject,
     removeTextObject,
-    updateTextProperty,
-    setTextBackground,
-    setTextShadow,
-    setTextStroke,
-    extractTextCoordinates,
+    updateTextObject,
+    clearCanvas,
     dispose,
+    canvasToVideoCoordinates,
+    videoToCanvasCoordinates,
   }
 }
