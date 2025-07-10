@@ -2,7 +2,7 @@
 // This is the CORE composable that handles all text overlay functionality
 
 import { ref, computed, onUnmounted, readonly } from 'vue'
-import { fabric } from 'fabric'
+import { Canvas, Text, Image, IEvent } from 'fabric'
 import type {
   TextOverlay,
   FFmpegTextFilter,
