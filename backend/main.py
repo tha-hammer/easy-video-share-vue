@@ -1277,6 +1277,130 @@ async def get_segment_download_url(segment_id: str):
         raise HTTPException(status_code=500, detail=f"Failed to get segment download URL: {str(e)}")
 
 
+@router.post("/segments/{segment_id}/generate-thumbnail")
+async def generate_segment_thumbnail(segment_id: str):
+    """
+    Generate a thumbnail image for a video segment
+    """
+    try:
+        # Parse segment_id to extract video_id and segment number
+        if not segment_id.startswith("seg_"):
+            raise HTTPException(status_code=400, detail="Invalid segment ID format")
+        
+        # Remove "seg_" prefix
+        segment_id_without_prefix = segment_id[4:]
+        
+        # Find the last underscore to separate video_id from segment_number
+        last_underscore_index = segment_id_without_prefix.rfind("_")
+        if last_underscore_index == -1:
+            raise HTTPException(status_code=400, detail="Invalid segment ID format")
+        
+        video_id = segment_id_without_prefix[:last_underscore_index]
+        segment_number_str = segment_id_without_prefix[last_underscore_index + 1:]
+        
+        try:
+            segment_number = int(segment_number_str)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid segment number format")
+        
+        print(f"[DEBUG] Generating thumbnail for segment: {segment_id}")
+        print(f"[DEBUG] video_id: {video_id}")
+        print(f"[DEBUG] segment_number: {segment_number}")
+        
+        # Get the video record to find the segment
+        video_resp = table.get_item(Key={"video_id": video_id})
+        video_item = video_resp.get("Item")
+        
+        if not video_item:
+            print(f"[DEBUG] Video not found: {video_id}")
+            raise HTTPException(status_code=404, detail="Video not found")
+        
+        # Get the output_s3_urls array
+        output_s3_urls = video_item.get("output_s3_urls", [])
+        if not output_s3_urls:
+            print(f"[DEBUG] No output_s3_urls found for video: {video_id}")
+            raise HTTPException(status_code=404, detail="No segments found for this video")
+        
+        # Check if segment number is valid
+        if segment_number < 1 or segment_number > len(output_s3_urls):
+            print(f"[DEBUG] Invalid segment number: {segment_number}, max: {len(output_s3_urls)}")
+            raise HTTPException(status_code=404, detail="Segment not found")
+        
+        # Get the s3_key for this segment
+        s3_key = output_s3_urls[segment_number - 1]  # Convert to 0-based index
+        print(f"[DEBUG] Using s3_key for thumbnail: {s3_key}")
+        
+        # TODO: Implement actual thumbnail generation using ffmpeg
+        # For now, return a placeholder response that indicates thumbnail generation
+        # would happen here. In production, this would:
+        # 1. Download the video segment from S3
+        # 2. Use ffmpeg to extract a frame at the midpoint
+        # 3. Upload the thumbnail image to S3
+        # 4. Update the segment metadata with thumbnail_url
+        # 5. Return the thumbnail URL
+        
+        # Generate thumbnail S3 key
+        thumbnail_s3_key = f"thumbnails/{video_id}/segment_{segment_number}.jpg"
+        
+        # For demo purposes, create a presigned URL for the source video
+        # In production, this would be the actual thumbnail image URL
+        presigned_url = generate_presigned_url(
+            bucket_name=settings.AWS_BUCKET_NAME,
+            object_key=s3_key,
+            client_method='get_object',
+            expiration=3600  # 1 hour
+        )
+        
+        print(f"[DEBUG] Generated thumbnail URL (placeholder): {presigned_url[:50]}...")
+        
+        # TODO: Update segment metadata with thumbnail_url in DynamoDB
+        
+        return {
+            "segment_id": segment_id,
+            "thumbnail_url": presigned_url,  # In production, this would be the actual thumbnail URL
+            "thumbnail_s3_key": thumbnail_s3_key,
+            "status": "generated"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[ERROR] Failed to generate segment thumbnail: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to generate segment thumbnail: {str(e)}")
+
+
+@router.post("/segments/{segment_id}/text-overlays")
+async def save_segment_text_overlays(segment_id: str, request: dict):
+    """
+    Save text overlay data for a video segment
+    """
+    try:
+        overlays = request.get("overlays", [])
+        
+        print(f"[DEBUG] Saving text overlays for segment: {segment_id}")
+        print(f"[DEBUG] Number of overlays: {len(overlays)}")
+        
+        # TODO: Implement actual text overlay storage in DynamoDB
+        # For now, just log the data and return success
+        # In production, this would:
+        # 1. Validate the overlay data structure
+        # 2. Store the overlays in DynamoDB linked to the segment
+        # 3. Optionally trigger background processing to apply overlays
+        
+        for i, overlay in enumerate(overlays):
+            print(f"[DEBUG] Overlay {i+1}: {overlay.get('text', '')} at ({overlay.get('x', 0)}, {overlay.get('y', 0)})")
+        
+        return {
+            "segment_id": segment_id,
+            "overlays_saved": len(overlays),
+            "status": "success"
+        }
+    except Exception as e:
+        print(f"[ERROR] Failed to save text overlays: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to save text overlays: {str(e)}")
+
+
 @router.get("/segments/{segment_id}/play")
 async def get_segment_play_url(segment_id: str):
     """

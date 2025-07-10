@@ -288,7 +288,7 @@
 </template>
 
 <script lang="ts">
-import { defineComponent, ref, computed, onMounted, watch } from 'vue'
+import { defineComponent, ref, computed, onMounted } from 'vue'
 import { useTextOverlayStore } from '@/stores/textOverlays'
 import SegmentTextEditor from '@/components/video/SegmentTextEditor.vue'
 import type { TextOverlay, FFmpegTextFilter } from '@/types/textOverlay'
@@ -460,13 +460,17 @@ export default defineComponent({
           scaleX: 1,
           scaleY: 1,
           shadow: {
-            enabled: true,
+            enabled: false,
             color: '#000000',
-            offsetX: 2,
-            offsetY: 2,
-            blur: 3,
+            offsetX: 0,
+            offsetY: 0,
+            blur: 0,
           },
-          stroke: { enabled: false },
+          stroke: {
+            enabled: false,
+            color: '#000000',
+            width: 0,
+          },
           startTime: 0,
           endTime: 15,
           createdAt: new Date().toISOString(),
@@ -489,7 +493,13 @@ export default defineComponent({
           rotation: 0,
           scaleX: 1,
           scaleY: 1,
-          shadow: { enabled: false },
+          shadow: {
+            enabled: false,
+            color: '#000000',
+            offsetX: 0,
+            offsetY: 0,
+            blur: 0,
+          },
           stroke: {
             enabled: true,
             color: '#000000',

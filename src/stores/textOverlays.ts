@@ -385,17 +385,18 @@ export const useTextOverlayStore = defineStore('textOverlays', () => {
         if (operation.previousState) {
           if (operation.overlayId === 'multiple' || operation.overlayId === 'all') {
             // Handle bulk operations
-            const previousOverlays = (operation.previousState as any).overlays
-            if (previousOverlays) {
-              overlaysBySegment.value.set(operation.segmentId, previousOverlays)
+            if (isBulkOperation(operation.previousState)) {
+              overlaysBySegment.value.set(operation.segmentId, operation.previousState.overlays)
             }
           } else {
             // Handle single overlay update
-            updateOverlayFromHistory(
-              operation.segmentId,
-              operation.overlayId,
-              operation.previousState,
-            )
+            if (!isBulkOperation(operation.previousState)) {
+              updateOverlayFromHistory(
+                operation.segmentId,
+                operation.overlayId,
+                operation.previousState,
+              )
+            }
           }
         }
         break
@@ -405,13 +406,14 @@ export const useTextOverlayStore = defineStore('textOverlays', () => {
         if (operation.previousState) {
           if (operation.overlayId === 'all') {
             // Restore all overlays
-            const previousOverlays = (operation.previousState as any).overlays
-            if (previousOverlays) {
-              overlaysBySegment.value.set(operation.segmentId, previousOverlays)
+            if (isBulkOperation(operation.previousState)) {
+              overlaysBySegment.value.set(operation.segmentId, operation.previousState.overlays)
             }
           } else {
             // Restore single overlay
-            addOverlayFromHistory(operation.segmentId, operation.previousState as TextOverlay)
+            if (!isBulkOperation(operation.previousState)) {
+              addOverlayFromHistory(operation.segmentId, operation.previousState as TextOverlay)
+            }
           }
         }
         break
@@ -446,13 +448,14 @@ export const useTextOverlayStore = defineStore('textOverlays', () => {
         if (operation.newState) {
           if (operation.overlayId === 'multiple' || operation.overlayId === 'all') {
             // Handle bulk operations
-            const newOverlays = (operation.newState as any).overlays
-            if (newOverlays) {
-              overlaysBySegment.value.set(operation.segmentId, newOverlays)
+            if (isBulkOperation(operation.newState)) {
+              overlaysBySegment.value.set(operation.segmentId, operation.newState.overlays)
             }
           } else {
             // Handle single overlay update
-            updateOverlayFromHistory(operation.segmentId, operation.overlayId, operation.newState)
+            if (!isBulkOperation(operation.newState)) {
+              updateOverlayFromHistory(operation.segmentId, operation.overlayId, operation.newState)
+            }
           }
         }
         break
@@ -553,6 +556,15 @@ export const useTextOverlayStore = defineStore('textOverlays', () => {
   }
 
   /**
+   * Type guard to check if state is a bulk operation
+   */
+  const isBulkOperation = (
+    state: Partial<TextOverlay> | { overlays: TextOverlay[] },
+  ): state is { overlays: TextOverlay[] } => {
+    return 'overlays' in state
+  }
+
+  /**
    * Helper functions for undo/redo that don't trigger new operations
    */
   const addOverlayFromHistory = (segmentId: string, overlay: TextOverlay) => {
@@ -563,8 +575,15 @@ export const useTextOverlayStore = defineStore('textOverlays', () => {
   const updateOverlayFromHistory = (
     segmentId: string,
     overlayId: string,
-    updates: Partial<TextOverlay>,
+    updates: Partial<TextOverlay> | { overlays: TextOverlay[] },
   ) => {
+    // Handle bulk operation case
+    if (isBulkOperation(updates)) {
+      overlaysBySegment.value.set(segmentId, updates.overlays)
+      return
+    }
+
+    // Handle single overlay update case
     const currentOverlays = getOverlaysForSegment.value(segmentId)
     const overlayIndex = currentOverlays.findIndex((o) => o.id === overlayId)
 

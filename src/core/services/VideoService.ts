@@ -767,6 +767,70 @@ export class VideoService {
       throw error
     }
   }
+
+  /**
+   * Generate thumbnail for a video segment
+   */
+  static async generateSegmentThumbnail(segmentId: string): Promise<{ thumbnail_url: string }> {
+    try {
+      const baseUrl = API_CONFIG.aiVideoBackend.endsWith('/')
+        ? API_CONFIG.aiVideoBackend.slice(0, -1)
+        : API_CONFIG.aiVideoBackend
+      const thumbnailUrl = `${baseUrl}/api/segments/${segmentId}/generate-thumbnail`
+
+      console.log('🖼️ Generating thumbnail for segment:', segmentId)
+
+      const response = await fetch(thumbnailUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      })
+
+      if (!response.ok) {
+        throw new Error(`Failed to generate thumbnail: ${response.statusText}`)
+      }
+
+      const data = await response.json()
+      console.log('🖼️ Thumbnail generation response:', data)
+
+      return data
+    } catch (error) {
+      console.error('Error generating segment thumbnail:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Save text overlays for a video segment
+   */
+  static async saveTextOverlays(segmentId: string, overlays: object[]): Promise<void> {
+    try {
+      const baseUrl = API_CONFIG.aiVideoBackend.endsWith('/')
+        ? API_CONFIG.aiVideoBackend.slice(0, -1)
+        : API_CONFIG.aiVideoBackend
+      const saveUrl = `${baseUrl}/api/segments/${segmentId}/text-overlays`
+
+      console.log('💾 Saving text overlays for segment:', segmentId, overlays)
+
+      const response = await fetch(saveUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ overlays }),
+      })
+
+      if (!response.ok) {
+        throw new Error(`Failed to save text overlays: ${response.statusText}`)
+      }
+
+      console.log('💾 Text overlays saved successfully')
+    } catch (error) {
+      console.error('Error saving text overlays:', error)
+      throw error
+    }
+  }
 }
 
 export type {

@@ -484,9 +484,10 @@ export default defineComponent({
 
     // ==================== COMPUTED PROPERTIES ====================
 
+    // Computed properties
     const textObjectCount = computed(() => {
       if (!canvas.value) return 0
-      return canvas.value.getObjects().filter((obj) => obj.type === 'text').length
+      return canvas.value.getObjects().filter((obj: any) => obj.type === 'text').length
     })
 
     const debugCoords = computed(() => {
@@ -517,7 +518,7 @@ export default defineComponent({
 
       console.log('🎨 Initializing SegmentTextEditor')
 
-      initializeCanvas(
+      await initializeCanvas(
         fabricCanvasEl.value,
         props.thumbnailUrl,
         props.videoWidth,
@@ -537,8 +538,8 @@ export default defineComponent({
 
     // ==================== TEXT OBJECT MANAGEMENT ====================
 
-    const addNewText = () => {
-      const textObj = addTextObject(props.defaultText)
+    const addNewText = async () => {
+      const textObj = await addTextObject(props.defaultText)
       if (textObj) {
         // Update reactive properties to match new text
         updateReactivePropertiesFromText(textObj)
@@ -553,11 +554,11 @@ export default defineComponent({
       }
     }
 
-    const duplicateText = () => {
+    const duplicateText = async () => {
       if (!activeTextObject.value) return
 
       const originalText = activeTextObject.value
-      const newText = addTextObject(
+      const newText = await addTextObject(
         originalText.text || 'Duplicated Text',
         (originalText.left || 0) + 20,
         (originalText.top || 0) + 20,
@@ -702,7 +703,7 @@ export default defineComponent({
 
     // ==================== REACTIVE PROPERTY UPDATES ====================
 
-    const updateReactivePropertiesFromText = (textObj: fabric.Text) => {
+    const updateReactivePropertiesFromText = (textObj: any) => {
       currentFontFamily.value = textObj.fontFamily || 'Arial'
       currentFontSize.value = textObj.fontSize || 24
       isBold.value = textObj.fontWeight === 'bold'
@@ -742,9 +743,9 @@ export default defineComponent({
     const emitTextOverlaysChanged = () => {
       if (!canvas.value) return
 
-      const textObjects = canvas.value.getObjects().filter((obj) => obj.type === 'text')
-      const overlays = textObjects.map((obj, index) => {
-        const textObj = obj as fabric.Text
+      const textObjects = canvas.value.getObjects().filter((obj: any) => obj.type === 'text')
+      const overlays = textObjects.map((obj: any, index: number) => {
+        const textObj = obj as any
         const canvasCoords = extractTextCoordinates(textObj)
         const videoCoords = convertToVideoCoordinates(canvasCoords)
 
@@ -813,9 +814,9 @@ export default defineComponent({
     const exportFFmpegFilters = () => {
       if (!canvas.value) return
 
-      const textObjects = canvas.value.getObjects().filter((obj) => obj.type === 'text')
-      const filters: FFmpegTextFilter[] = textObjects.map((obj) => {
-        const textObj = obj as fabric.Text
+      const textObjects = canvas.value.getObjects().filter((obj: any) => obj.type === 'text')
+      const filters: FFmpegTextFilter[] = textObjects.map((obj: any) => {
+        const textObj = obj as any
         return convertToFFmpegFilter(textObj, 0, props.segmentDuration)
       })
 

@@ -1,6 +1,6 @@
 // Text Overlay Type Definitions for Video Segment Text Editing
 
-import { fabric } from 'fabric'
+import type { fabric } from 'fabric'
 
 // Temporary fix for fabric types
 declare module 'fabric' {
@@ -9,9 +9,20 @@ declare module 'fabric' {
       x: number
       y: number
     }
-    interface Shadow {}
-    interface Pattern {}
-    interface Gradient {}
+    interface Shadow {
+      color?: string
+      offsetX?: number
+      offsetY?: number
+      blur?: number
+    }
+    interface Pattern {
+      // Pattern properties - using object type instead of empty interface
+      [key: string]: unknown
+    }
+    interface Gradient {
+      // Gradient properties - using object type instead of empty interface
+      [key: string]: unknown
+    }
   }
 }
 
@@ -125,7 +136,12 @@ export interface FabricTextObject {
 
   // Methods for coordinate calculation
   setCoords(): void
-  calcACoords(): typeof this.aCoords
+  calcACoords(): {
+    tl: fabric.Point // top-left corner
+    tr: fabric.Point // top-right corner
+    bl: fabric.Point // bottom-left corner
+    br: fabric.Point // bottom-right corner
+  }
 }
 
 // FFmpeg drawtext filter representation
