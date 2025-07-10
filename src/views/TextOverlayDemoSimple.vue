@@ -195,7 +195,6 @@ import { useTextOverlay } from '@/composables/useTextOverlay'
 import { VideoService } from '@/core/services/VideoService'
 import { useAuthStore } from '@/stores/auth'
 import type { VideoSegment } from '@/stores/segments'
-import type { fabric } from 'fabric'
 
 export default defineComponent({
   name: 'TextOverlayDemoSimple',
@@ -377,28 +376,53 @@ export default defineComponent({
       if (!canvas.value || !selectedSegment.value) return
 
       try {
-        const textObjects = canvas.value.getObjects().filter((obj) => obj.type === 'text')
-        const overlays = textObjects.map((obj: any) => {
+        interface FabricTextObject {
+          type: string
+          text?: string
+          left?: number
+          top?: number
+          width?: number
+          height?: number
+          fontSize?: number
+          fontFamily?: string
+          fontWeight?: string
+          fontStyle?: string
+          fill?: string
+          backgroundColor?: string
+          opacity?: number
+          angle?: number
+          scaleX?: number
+          scaleY?: number
+          shadow?: { color?: string; offsetX?: number; offsetY?: number; blur?: number }
+          stroke?: string
+          strokeWidth?: number
+        }
+
+        const textObjects = canvas.value
+          .getObjects()
+          .filter((obj: unknown) => (obj as FabricTextObject).type === 'text')
+        const overlays = textObjects.map((obj: unknown) => {
+          const textObj = obj as FabricTextObject
           // Extract text overlay data from Fabric.js object
           // This would use the coordinate conversion system from the requirements
           return {
             id: `text_${Date.now()}_${Math.random()}`,
             segment_id: selectedSegment.value!.segment_id,
-            text: obj.text || '',
-            x: obj.left || 0,
-            y: obj.top || 0,
-            width: obj.width || 0,
-            height: obj.height || 0,
-            fontSize: obj.fontSize || 24,
-            fontFamily: obj.fontFamily || 'Arial',
-            fontWeight: obj.fontWeight || 'normal',
-            fontStyle: obj.fontStyle || 'normal',
-            color: obj.fill || '#ffffff',
-            backgroundColor: obj.backgroundColor || null,
-            opacity: obj.opacity || 1,
-            rotation: obj.angle || 0,
-            scaleX: obj.scaleX || 1,
-            scaleY: obj.scaleY || 1,
+            text: textObj.text || '',
+            x: textObj.left || 0,
+            y: textObj.top || 0,
+            width: textObj.width || 0,
+            height: textObj.height || 0,
+            fontSize: textObj.fontSize || 24,
+            fontFamily: textObj.fontFamily || 'Arial',
+            fontWeight: textObj.fontWeight || 'normal',
+            fontStyle: textObj.fontStyle || 'normal',
+            color: textObj.fill || '#ffffff',
+            backgroundColor: textObj.backgroundColor || null,
+            opacity: textObj.opacity || 1,
+            rotation: textObj.angle || 0,
+            scaleX: textObj.scaleX || 1,
+            scaleY: textObj.scaleY || 1,
             shadow: obj.shadow
               ? {
                   enabled: true,

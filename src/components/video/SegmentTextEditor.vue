@@ -3,384 +3,266 @@
     <!-- Canvas Container -->
     <div class="canvas-container" ref="canvasContainer">
       <canvas
-        ref="fabricCanvasEl"
-        :width="canvasSize.width"
-        :height="canvasSize.height"
+        ref="fabricCanvas"
+        :width="canvasWidth"
+        :height="canvasHeight"
         class="fabric-canvas"
       />
 
-      <!-- Canvas Overlay Controls -->
-      <div v-if="!isCanvasReady" class="canvas-loading">
+      <!-- Loading overlay -->
+      <div v-if="!isCanvasReady" class="loading-overlay">
         <div class="spinner-border text-primary" role="status">
           <span class="visually-hidden">Loading canvas...</span>
         </div>
-        <p class="mt-2 text-muted">Initializing text editor...</p>
+        <p class="text-muted mt-3">Initializing canvas...</p>
       </div>
     </div>
 
-    <!-- Text Editing Toolbar -->
-    <div class="text-toolbar" v-if="isCanvasReady">
-      <!-- Primary Actions -->
-      <div class="toolbar-section">
-        <h6 class="toolbar-title">Text Actions</h6>
-        <div class="btn-group" role="group">
-          <button @click="addNewText" class="btn btn-sm btn-primary" title="Add New Text">
-            <KTIcon icon-name="plus" icon-class="fs-5" />
-            Add Text
-          </button>
-          <button
-            @click="deleteSelectedText"
-            class="btn btn-sm btn-danger"
-            :disabled="!hasActiveText"
-            title="Delete Selected Text"
-          >
-            <KTIcon icon-name="trash" icon-class="fs-5" />
-            Delete
-          </button>
-          <button
-            @click="duplicateText"
-            class="btn btn-sm btn-info"
-            :disabled="!hasActiveText"
-            title="Duplicate Selected Text"
-          >
-            <KTIcon icon-name="copy" icon-class="fs-5" />
-            Duplicate
-          </button>
-        </div>
+    <!-- Text Toolbar -->
+    <div class="text-toolbar card mt-4">
+      <div class="card-header">
+        <h5 class="card-title mb-0">Text Controls</h5>
       </div>
-
-      <!-- Font Controls -->
-      <div class="toolbar-section" v-if="hasActiveText">
-        <h6 class="toolbar-title">Font Properties</h6>
-
-        <!-- Font Family -->
-        <div class="control-group">
-          <label class="control-label">Font:</label>
-          <select
-            v-model="currentFontFamily"
-            @change="updateFont"
-            class="form-select form-select-sm"
-          >
-            <option v-for="font in availableFonts" :key="font" :value="font">
-              {{ font }}
-            </option>
-          </select>
-        </div>
-
-        <!-- Font Size -->
-        <div class="control-group">
-          <label class="control-label">Size:</label>
-          <div class="range-input-group">
-            <input
-              type="range"
-              v-model="currentFontSize"
-              @input="updateFontSize"
-              min="12"
-              max="120"
-              step="1"
-              class="form-range"
-            />
-            <input
-              type="number"
-              v-model="currentFontSize"
-              @input="updateFontSize"
-              min="12"
-              max="120"
-              class="form-control form-control-sm size-input"
-            />
-            <span class="size-unit">px</span>
+      <div class="card-body">
+        <!-- Action Buttons Row -->
+        <div class="toolbar-row mb-3">
+          <div class="btn-group" role="group">
+            <button @click="addText" class="btn btn-primary" :disabled="!isCanvasReady">
+              <KTIcon icon-name="plus" icon-class="fs-5" />
+              Add Text
+            </button>
+            <button @click="deleteSelected" class="btn btn-danger" :disabled="!hasSelectedText">
+              <KTIcon icon-name="trash" icon-class="fs-5" />
+              Delete
+            </button>
+            <button @click="duplicateText" class="btn btn-info" :disabled="!hasSelectedText">
+              <KTIcon icon-name="copy" icon-class="fs-5" />
+              Duplicate
+            </button>
           </div>
         </div>
 
-        <!-- Font Style -->
-        <div class="control-group">
-          <label class="control-label">Style:</label>
-          <div class="btn-group btn-group-sm" role="group">
-            <input
-              type="checkbox"
-              class="btn-check"
-              id="font-bold"
-              v-model="isBold"
-              @change="updateFontWeight"
-            />
-            <label class="btn btn-outline-secondary" for="font-bold">
-              <KTIcon icon-name="text-bold" icon-class="fs-6" />
-            </label>
+        <!-- Text Properties (only show when text is selected) -->
+        <div v-if="hasSelectedText" class="text-properties">
+          <!-- Font Properties Row -->
+          <div class="toolbar-row mb-3">
+            <div class="property-group">
+              <label class="form-label">Font Family:</label>
+              <select v-model="selectedFont" @change="updateFont" class="form-select">
+                <option v-for="font in availableFonts" :key="font" :value="font">
+                  {{ font }}
+                </option>
+              </select>
+            </div>
 
-            <input
-              type="checkbox"
-              class="btn-check"
-              id="font-italic"
-              v-model="isItalic"
-              @change="updateFontStyle"
-            />
-            <label class="btn btn-outline-secondary" for="font-italic">
-              <KTIcon icon-name="text-italic" icon-class="fs-6" />
-            </label>
-          </div>
-        </div>
-      </div>
-
-      <!-- Color Controls -->
-      <div class="toolbar-section" v-if="hasActiveText">
-        <h6 class="toolbar-title">Colors</h6>
-
-        <!-- Text Color -->
-        <div class="control-group">
-          <label class="control-label">Text Color:</label>
-          <div class="color-input-group">
-            <input
-              type="color"
-              v-model="currentTextColor"
-              @input="updateTextColor"
-              class="form-control form-control-color"
-            />
-            <input
-              type="text"
-              v-model="currentTextColor"
-              @input="updateTextColor"
-              class="form-control form-control-sm color-text-input"
-              placeholder="#ffffff"
-            />
-          </div>
-        </div>
-
-        <!-- Background Color -->
-        <div class="control-group">
-          <label class="control-label">
-            <input
-              type="checkbox"
-              v-model="hasBackgroundColor"
-              @change="toggleBackgroundColor"
-              class="form-check-input me-2"
-            />
-            Background:
-          </label>
-          <div class="color-input-group" v-if="hasBackgroundColor">
-            <input
-              type="color"
-              v-model="currentBackgroundColor"
-              @input="updateBackgroundColor"
-              class="form-control form-control-color"
-            />
-            <input
-              type="text"
-              v-model="currentBackgroundColor"
-              @input="updateBackgroundColor"
-              class="form-control form-control-sm color-text-input"
-              placeholder="#000000"
-            />
-          </div>
-        </div>
-
-        <!-- Opacity -->
-        <div class="control-group">
-          <label class="control-label">Opacity:</label>
-          <div class="range-input-group">
-            <input
-              type="range"
-              v-model="currentOpacity"
-              @input="updateOpacity"
-              min="0"
-              max="1"
-              step="0.1"
-              class="form-range"
-            />
-            <span class="opacity-value">{{ Math.round(currentOpacity * 100) }}%</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Text Effects -->
-      <div class="toolbar-section" v-if="hasActiveText">
-        <h6 class="toolbar-title">Effects</h6>
-
-        <!-- Shadow -->
-        <div class="control-group">
-          <label class="control-label">
-            <input
-              type="checkbox"
-              v-model="hasShadow"
-              @change="toggleShadow"
-              class="form-check-input me-2"
-            />
-            Drop Shadow
-          </label>
-          <div v-if="hasShadow" class="effect-controls">
-            <div class="shadow-controls">
-              <input
-                type="color"
-                v-model="shadowColor"
-                @input="updateShadow"
-                class="form-control form-control-color"
-                title="Shadow Color"
-              />
+            <div class="property-group">
+              <label class="form-label">Font Size: {{ fontSize }}px</label>
               <input
                 type="range"
-                v-model="shadowOffsetX"
-                @input="updateShadow"
-                min="-10"
-                max="10"
-                step="1"
+                v-model="fontSize"
+                min="12"
+                max="120"
                 class="form-range"
-                title="Horizontal Offset"
+                @input="updateFontSize"
               />
+            </div>
+
+            <div class="property-group">
+              <label class="form-label">Font Weight:</label>
+              <select v-model="fontWeight" @change="updateFontWeight" class="form-select">
+                <option value="normal">Normal</option>
+                <option value="bold">Bold</option>
+                <option value="lighter">Lighter</option>
+                <option value="bolder">Bolder</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Color Properties Row -->
+          <div class="toolbar-row mb-3">
+            <div class="property-group">
+              <label class="form-label">Text Color:</label>
+              <div class="color-input-group">
+                <input
+                  type="color"
+                  v-model="textColor"
+                  @input="updateTextColor"
+                  class="form-control form-control-color"
+                />
+                <span class="color-value">{{ textColor }}</span>
+              </div>
+            </div>
+
+            <div class="property-group">
+              <label class="form-label">Background Color:</label>
+              <div class="background-controls">
+                <div class="form-check">
+                  <input
+                    class="form-check-input"
+                    type="checkbox"
+                    v-model="hasBackground"
+                    @change="toggleBackground"
+                    id="backgroundToggle"
+                  />
+                  <label class="form-check-label" for="backgroundToggle"> Enable Background </label>
+                </div>
+                <div v-if="hasBackground" class="color-input-group mt-2">
+                  <input
+                    type="color"
+                    v-model="backgroundColor"
+                    @input="updateBackgroundColor"
+                    class="form-control form-control-color"
+                  />
+                  <span class="color-value">{{ backgroundColor }}</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="property-group">
+              <label class="form-label">Opacity: {{ Math.round(opacity * 100) }}%</label>
               <input
                 type="range"
-                v-model="shadowOffsetY"
-                @input="updateShadow"
-                min="-10"
-                max="10"
-                step="1"
+                v-model="opacity"
+                min="0"
+                max="1"
+                step="0.1"
                 class="form-range"
-                title="Vertical Offset"
+                @input="updateOpacity"
               />
+            </div>
+          </div>
+
+          <!-- Text Effects Row -->
+          <div class="toolbar-row">
+            <!-- Shadow Controls -->
+            <div class="property-group">
+              <div class="form-check">
+                <input
+                  class="form-check-input"
+                  type="checkbox"
+                  v-model="hasShadow"
+                  @change="toggleShadow"
+                  id="shadowToggle"
+                />
+                <label class="form-check-label" for="shadowToggle"> Drop Shadow </label>
+              </div>
+              <div v-if="hasShadow" class="shadow-controls mt-2">
+                <div class="row g-2">
+                  <div class="col-4">
+                    <input
+                      type="color"
+                      v-model="shadowColor"
+                      @input="updateShadow"
+                      class="form-control form-control-color"
+                      title="Shadow Color"
+                    />
+                  </div>
+                  <div class="col-4">
+                    <input
+                      type="range"
+                      v-model="shadowOffsetX"
+                      min="-10"
+                      max="10"
+                      @input="updateShadow"
+                      class="form-range"
+                      title="Horizontal Offset"
+                    />
+                    <small>X: {{ shadowOffsetX }}</small>
+                  </div>
+                  <div class="col-4">
+                    <input
+                      type="range"
+                      v-model="shadowOffsetY"
+                      min="-10"
+                      max="10"
+                      @input="updateShadow"
+                      class="form-range"
+                      title="Vertical Offset"
+                    />
+                    <small>Y: {{ shadowOffsetY }}</small>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Stroke Controls -->
+            <div class="property-group">
+              <div class="form-check">
+                <input
+                  class="form-check-input"
+                  type="checkbox"
+                  v-model="hasStroke"
+                  @change="toggleStroke"
+                  id="strokeToggle"
+                />
+                <label class="form-check-label" for="strokeToggle"> Text Outline </label>
+              </div>
+              <div v-if="hasStroke" class="stroke-controls mt-2">
+                <div class="row g-2">
+                  <div class="col-6">
+                    <input
+                      type="color"
+                      v-model="strokeColor"
+                      @input="updateStroke"
+                      class="form-control form-control-color"
+                      title="Stroke Color"
+                    />
+                  </div>
+                  <div class="col-6">
+                    <input
+                      type="range"
+                      v-model="strokeWidth"
+                      min="1"
+                      max="10"
+                      @input="updateStroke"
+                      class="form-range"
+                      title="Stroke Width"
+                    />
+                    <small>Width: {{ strokeWidth }}</small>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
 
-        <!-- Stroke/Outline -->
-        <div class="control-group">
-          <label class="control-label">
-            <input
-              type="checkbox"
-              v-model="hasStroke"
-              @change="toggleStroke"
-              class="form-check-input me-2"
-            />
-            Text Outline
-          </label>
-          <div v-if="hasStroke" class="effect-controls">
-            <div class="stroke-controls">
-              <input
-                type="color"
-                v-model="strokeColor"
-                @input="updateStroke"
-                class="form-control form-control-color"
-                title="Outline Color"
-              />
-              <input
-                type="range"
-                v-model="strokeWidth"
-                @input="updateStroke"
-                min="1"
-                max="10"
-                step="1"
-                class="form-range"
-                title="Outline Width"
-              />
-              <span class="stroke-width-value">{{ strokeWidth }}px</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Position and Transform -->
-      <div class="toolbar-section" v-if="hasActiveText">
-        <h6 class="toolbar-title">Position & Transform</h6>
-
-        <!-- Position Controls -->
-        <div class="control-group">
-          <label class="control-label">Position:</label>
-          <div class="position-controls">
-            <button
-              @click="alignText('left')"
-              class="btn btn-sm btn-outline-secondary"
-              title="Align Left"
-            >
-              <KTIcon icon-name="text-align-left" icon-class="fs-6" />
-            </button>
-            <button
-              @click="alignText('center')"
-              class="btn btn-sm btn-outline-secondary"
-              title="Align Center"
-            >
-              <KTIcon icon-name="text-align-center" icon-class="fs-6" />
-            </button>
-            <button
-              @click="alignText('right')"
-              class="btn btn-sm btn-outline-secondary"
-              title="Align Right"
-            >
-              <KTIcon icon-name="text-align-right" icon-class="fs-6" />
-            </button>
-          </div>
-        </div>
-
-        <!-- Vertical Position -->
-        <div class="control-group">
-          <label class="control-label">Vertical:</label>
-          <div class="position-controls">
-            <button
-              @click="alignText('top')"
-              class="btn btn-sm btn-outline-secondary"
-              title="Align Top"
-            >
-              Top
-            </button>
-            <button
-              @click="alignText('middle')"
-              class="btn btn-sm btn-outline-secondary"
-              title="Align Middle"
-            >
-              Middle
-            </button>
-            <button
-              @click="alignText('bottom')"
-              class="btn btn-sm btn-outline-secondary"
-              title="Align Bottom"
-            >
-              Bottom
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Debug Information (Development Only) -->
-      <div class="toolbar-section" v-if="showDebugInfo && hasActiveText">
-        <h6 class="toolbar-title">Debug Info</h6>
-        <div class="debug-info">
-          <small class="text-muted">
-            Canvas: {{ Math.round(debugCoords.canvasX) }}, {{ Math.round(debugCoords.canvasY)
-            }}<br />
-            Video: {{ Math.round(debugCoords.videoX) }}, {{ Math.round(debugCoords.videoY) }}<br />
-            Scale: {{ scaleFactors.x.toFixed(2) }}x, {{ scaleFactors.y.toFixed(2) }}x
-          </small>
+        <!-- Help Text -->
+        <div v-if="!hasSelectedText" class="no-selection-help">
+          <KTIcon icon-name="information-5" icon-class="fs-2x text-muted mb-2" />
+          <p class="text-muted mb-0">
+            Click "Add Text" to create a new text element, or click on existing text to edit its
+            properties.
+          </p>
         </div>
       </div>
     </div>
 
-    <!-- Preview and Export -->
-    <div class="text-preview-section" v-if="isCanvasReady">
-      <div class="d-flex justify-content-between align-items-center">
-        <div class="preview-info">
-          <small class="text-muted">
-            Text objects: {{ textObjectCount }} | Canvas: {{ canvasSize.width }}×{{
-              canvasSize.height
-            }}
-            | Video: {{ videoSize.width }}×{{ videoSize.height }}
-          </small>
-        </div>
-        <div class="preview-actions">
-          <button
-            @click="generatePreview"
-            class="btn btn-sm btn-light me-2"
-            :disabled="generatingPreview"
-          >
-            <KTIcon
-              :icon-name="generatingPreview ? 'spinner' : 'eye'"
-              :icon-class="generatingPreview ? 'fs-5 fa-spin' : 'fs-5'"
-            />
-            Preview
-          </button>
-          <button
-            @click="exportFFmpegFilters"
-            class="btn btn-sm btn-success"
-            :disabled="textObjectCount === 0"
-          >
-            <KTIcon icon-name="code" icon-class="fs-5" />
-            Export FFmpeg
-          </button>
+    <!-- Text Objects List -->
+    <div v-if="textObjects.length > 0" class="text-objects-list card mt-4">
+      <div class="card-header">
+        <h5 class="card-title mb-0">Text Objects ({{ textObjects.length }})</h5>
+      </div>
+      <div class="card-body">
+        <div
+          class="text-object-item"
+          v-for="(textObj, index) in textObjects"
+          :key="index"
+          :class="{ active: textObj === selectedTextObject }"
+          @click="selectTextObject(textObj)"
+        >
+          <div class="text-preview">
+            <div class="text-content" :style="getTextPreviewStyle(textObj)">
+              {{ textObj.text || 'Empty Text' }}
+            </div>
+          </div>
+          <div class="text-actions">
+            <button @click.stop="selectTextObject(textObj)" class="btn btn-sm btn-outline-primary">
+              Edit
+            </button>
+            <button @click.stop="deleteTextObject(textObj)" class="btn btn-sm btn-outline-danger">
+              Delete
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -388,490 +270,530 @@
 </template>
 
 <script lang="ts">
-import { defineComponent, ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
-import { useTextOverlay } from '@/composables/useTextOverlay'
-import { AVAILABLE_FONTS } from '@/types/textOverlay'
-import type { FFmpegTextFilter } from '@/types/textOverlay'
+import { defineComponent, ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { Canvas, Text, Image } from 'fabric'
 
 export default defineComponent({
   name: 'SegmentTextEditor',
   props: {
-    segmentId: {
-      type: String,
-      required: true,
-    },
-    thumbnailUrl: {
-      type: String,
-      required: true,
-    },
-    videoWidth: {
-      type: Number,
-      required: true,
-    },
-    videoHeight: {
-      type: Number,
-      required: true,
-    },
-    defaultText: {
-      type: String,
-      default: 'Add your text here',
-    },
-    segmentDuration: {
-      type: Number,
-      default: 30,
-    },
-    existingOverlays: {
-      type: Array,
-      default: () => [],
-    },
-    showDebugInfo: {
-      type: Boolean,
-      default: false,
-    },
+    segmentId: { type: String, required: true },
+    thumbnailUrl: { type: String, required: true },
+    videoWidth: { type: Number, required: true },
+    videoHeight: { type: Number, required: true },
+    segmentDuration: { type: Number, default: 30 },
+    existingOverlays: { type: Array, default: () => [] },
   },
   emits: ['text-overlays-changed', 'ffmpeg-filters-generated'],
   setup(props, { emit }) {
-    // Fabric.js canvas element reference
-    const fabricCanvasEl = ref<HTMLCanvasElement | null>(null)
+    // Canvas refs
+    const fabricCanvas = ref<HTMLCanvasElement | null>(null)
     const canvasContainer = ref<HTMLDivElement | null>(null)
 
-    // Text overlay composable (CORE FUNCTIONALITY)
-    const {
-      canvas,
-      isCanvasReady,
-      activeTextObject,
-      hasActiveText,
-      canvasSize,
-      videoSize,
-      scaleFactors,
-      initializeCanvas,
-      addTextObject,
-      removeTextObject,
-      updateTextProperty,
-      extractTextCoordinates,
-      convertToVideoCoordinates,
-      convertToFFmpegFilter,
-      dispose,
-    } = useTextOverlay()
+    // Canvas state
+    const canvas = ref<Canvas | null>(null)
+    const isCanvasReady = ref(false)
+    const canvasWidth = ref(800)
+    const canvasHeight = ref(450)
 
-    // ==================== REACTIVE STATE ====================
+    // Text management
+    const selectedTextObject = ref<Text | null>(null)
+    const textObjects = ref<Text[]>([])
 
-    // Font properties
-    const currentFontFamily = ref('Arial')
-    const currentFontSize = ref(24)
-    const isBold = ref(false)
-    const isItalic = ref(false)
+    // Available fonts
+    const availableFonts = [
+      'Arial',
+      'Helvetica',
+      'Times New Roman',
+      'Courier New',
+      'Georgia',
+      'Verdana',
+      'Comic Sans MS',
+      'Impact',
+      'Trebuchet MS',
+      'Palatino',
+      'Garamond',
+      'Bookman',
+    ]
 
-    // Color properties
-    const currentTextColor = ref('#ffffff')
-    const currentBackgroundColor = ref('#000000')
-    const hasBackgroundColor = ref(false)
-    const currentOpacity = ref(1.0)
-
-    // Effect properties
+    // Text properties (reactive to selected object)
+    const selectedFont = ref('Arial')
+    const fontSize = ref(24)
+    const fontWeight = ref('normal')
+    const textColor = ref('#ffffff')
+    const hasBackground = ref(false)
+    const backgroundColor = ref('#000000')
+    const opacity = ref(1)
     const hasShadow = ref(false)
     const shadowColor = ref('#000000')
     const shadowOffsetX = ref(2)
     const shadowOffsetY = ref(2)
-
     const hasStroke = ref(false)
     const strokeColor = ref('#000000')
     const strokeWidth = ref(2)
 
-    // UI state
-    const generatingPreview = ref(false)
-    const availableFonts = AVAILABLE_FONTS.map((f) => f.fabricFont)
-
-    // ==================== COMPUTED PROPERTIES ====================
-
     // Computed properties
-    const textObjectCount = computed(() => {
-      if (!canvas.value) return 0
-      return canvas.value.getObjects().filter((obj: any) => obj.type === 'text').length
-    })
+    const hasSelectedText = computed(() => selectedTextObject.value !== null)
 
-    const debugCoords = computed(() => {
-      if (!activeTextObject.value) {
-        return { canvasX: 0, canvasY: 0, videoX: 0, videoY: 0 }
-      }
-
-      const canvasCoords = extractTextCoordinates(activeTextObject.value)
-      const videoCoords = convertToVideoCoordinates(canvasCoords)
-
-      return {
-        canvasX: canvasCoords.canvasX,
-        canvasY: canvasCoords.canvasY,
-        videoX: videoCoords.x,
-        videoY: videoCoords.y,
-      }
-    })
+    const scaleFactors = computed(() => ({
+      x: props.videoWidth / canvasWidth.value,
+      y: props.videoHeight / canvasHeight.value,
+    }))
 
     // ==================== CANVAS INITIALIZATION ====================
 
-    const initializeEditor = async () => {
-      await nextTick()
+    const initializeCanvas = async () => {
+      if (!fabricCanvas.value) return
 
-      if (!fabricCanvasEl.value) {
-        console.error('❌ Canvas element not found')
+      // Calculate canvas dimensions maintaining aspect ratio
+      const aspectRatio = props.videoWidth / props.videoHeight
+      const maxWidth = 800
+      const maxHeight = 450
+
+      if (aspectRatio > maxWidth / maxHeight) {
+        canvasWidth.value = maxWidth
+        canvasHeight.value = maxWidth / aspectRatio
+      } else {
+        canvasHeight.value = maxHeight
+        canvasWidth.value = maxHeight * aspectRatio
+      }
+
+      // Initialize Fabric.js canvas
+      canvas.value = new Canvas(fabricCanvas.value, {
+        width: canvasWidth.value,
+        height: canvasHeight.value,
+        backgroundColor: 'transparent',
+        selection: true,
+      })
+
+      // Load thumbnail background
+      await loadThumbnailBackground()
+
+      // Set up event listeners
+      setupCanvasEvents()
+
+      // Load existing overlays
+      loadExistingOverlays()
+
+      isCanvasReady.value = true
+      console.log('✅ Canvas initialized')
+    }
+
+    const loadThumbnailBackground = async () => {
+      if (!canvas.value) return
+
+      if (!props.thumbnailUrl || props.thumbnailUrl.trim() === '') {
+        canvas.value.backgroundColor = '#4A90E2'
+        canvas.value.renderAll()
         return
       }
 
-      console.log('🎨 Initializing SegmentTextEditor')
+      try {
+        const img = await Image.fromURL(props.thumbnailUrl, {})
+        img.set({
+          scaleX: canvasWidth.value / props.videoWidth,
+          scaleY: canvasHeight.value / props.videoHeight,
+          selectable: false,
+          evented: false,
+        })
 
-      await initializeCanvas(
-        fabricCanvasEl.value,
-        props.thumbnailUrl,
-        props.videoWidth,
-        props.videoHeight,
-      )
-
-      // Load existing overlays if provided
-      if (props.existingOverlays.length > 0) {
-        loadExistingOverlays()
+        canvas.value.backgroundImage = img
+        canvas.value.renderAll()
+      } catch (error) {
+        console.error('Failed to load thumbnail:', error)
+        canvas.value.backgroundColor = '#4A90E2'
+        canvas.value.renderAll()
       }
     }
 
-    const loadExistingOverlays = () => {
-      // TODO: Implement loading of existing text overlays
-      console.log('📂 Loading existing overlays:', props.existingOverlays.length)
+    const setupCanvasEvents = () => {
+      if (!canvas.value) return
+
+      // Use any type to avoid complex Fabric.js v6 type issues
+      canvas.value.on('selection:created', (options: any) => {
+        const selected = options.selected?.[0]
+        if (selected && selected.type === 'text') {
+          selectTextObject(selected as Text)
+        }
+      })
+
+      canvas.value.on('selection:updated', (options: any) => {
+        const selected = options.selected?.[0]
+        if (selected && selected.type === 'text') {
+          selectTextObject(selected as Text)
+        }
+      })
+
+      canvas.value.on('selection:cleared', () => {
+        selectedTextObject.value = null
+      })
+
+      canvas.value.on('object:modified', (options: any) => {
+        const obj = options.target
+        if (obj && obj.type === 'text') {
+          obj.setCoords()
+          emitTextOverlaysChanged()
+        }
+      })
+
+      canvas.value.on('text:changed', () => {
+        emitTextOverlaysChanged()
+      })
     }
 
-    // ==================== TEXT OBJECT MANAGEMENT ====================
+    // ==================== TEXT MANAGEMENT ====================
 
-    const addNewText = async () => {
-      const textObj = await addTextObject(props.defaultText)
-      if (textObj) {
-        // Update reactive properties to match new text
-        updateReactivePropertiesFromText(textObj)
-        emitTextOverlaysChanged()
+    const addText = () => {
+      if (!canvas.value) return
+
+      const textObject = new Text('New Text', {
+        left: canvasWidth.value / 2,
+        top: canvasHeight.value / 2,
+        fontSize: 24,
+        fontFamily: 'Arial',
+        fill: '#ffffff',
+        textAlign: 'center',
+        originX: 'center',
+        originY: 'center',
+        editable: true,
+      })
+
+      canvas.value.add(textObject)
+      canvas.value.setActiveObject(textObject)
+
+      textObjects.value.push(textObject)
+      selectTextObject(textObject)
+
+      emitTextOverlaysChanged()
+      console.log('✅ Text added')
+    }
+
+    const deleteSelected = () => {
+      if (!selectedTextObject.value || !canvas.value) return
+
+      deleteTextObject(selectedTextObject.value)
+    }
+
+    const deleteTextObject = (textObj: Text) => {
+      if (!canvas.value) return
+
+      canvas.value.remove(textObj)
+
+      const index = textObjects.value.indexOf(textObj)
+      if (index > -1) {
+        textObjects.value.splice(index, 1)
       }
-    }
 
-    const deleteSelectedText = () => {
-      if (activeTextObject.value) {
-        removeTextObject(activeTextObject.value)
-        emitTextOverlaysChanged()
+      if (selectedTextObject.value === textObj) {
+        selectedTextObject.value = null
       }
+
+      emitTextOverlaysChanged()
+      console.log('🗑️ Text deleted')
     }
 
-    const duplicateText = async () => {
-      if (!activeTextObject.value) return
+    const duplicateText = () => {
+      if (!selectedTextObject.value || !canvas.value) return
 
-      const originalText = activeTextObject.value
-      const newText = await addTextObject(
-        originalText.text || 'Duplicated Text',
-        (originalText.left || 0) + 20,
-        (originalText.top || 0) + 20,
-        {
-          fontSize: originalText.fontSize,
-          fontFamily: originalText.fontFamily,
-          fill: originalText.fill,
-          stroke: originalText.stroke,
-          strokeWidth: originalText.strokeWidth,
-          shadow: originalText.shadow,
-        },
-      )
+      const original = selectedTextObject.value
+      const duplicate = new Text(original.text, {
+        left: (original.left || 0) + 20,
+        top: (original.top || 0) + 20,
+        fontSize: original.fontSize,
+        fontFamily: original.fontFamily,
+        fill: original.fill,
+        backgroundColor: original.backgroundColor,
+        textAlign: original.textAlign,
+        fontWeight: original.fontWeight,
+        fontStyle: original.fontStyle,
+        opacity: original.opacity,
+        stroke: original.stroke,
+        strokeWidth: original.strokeWidth,
+        shadow: original.shadow,
+        originX: 'center',
+        originY: 'center',
+        editable: true,
+      })
 
-      if (newText) {
-        emitTextOverlaysChanged()
+      canvas.value.add(duplicate)
+      canvas.value.setActiveObject(duplicate)
+
+      textObjects.value.push(duplicate)
+      selectTextObject(duplicate)
+
+      emitTextOverlaysChanged()
+      console.log('📋 Text duplicated')
+    }
+
+    const selectTextObject = (textObj: Text) => {
+      selectedTextObject.value = textObj
+
+      // Update UI controls to match selected object
+      selectedFont.value = textObj.fontFamily || 'Arial'
+      fontSize.value = textObj.fontSize || 24
+      fontWeight.value = (textObj.fontWeight as string) || 'normal'
+      textColor.value = (textObj.fill as string) || '#ffffff'
+      hasBackground.value = !!textObj.backgroundColor
+      backgroundColor.value = (textObj.backgroundColor as string) || '#000000'
+      opacity.value = textObj.opacity || 1
+
+      // Shadow properties
+      if (textObj.shadow) {
+        hasShadow.value = true
+        const shadow = textObj.shadow as { color?: string; offsetX?: number; offsetY?: number }
+        shadowColor.value = shadow.color || '#000000'
+        shadowOffsetX.value = shadow.offsetX || 2
+        shadowOffsetY.value = shadow.offsetY || 2
+      } else {
+        hasShadow.value = false
+      }
+
+      // Stroke properties
+      if (textObj.stroke && textObj.strokeWidth) {
+        hasStroke.value = true
+        strokeColor.value = textObj.stroke as string
+        strokeWidth.value = textObj.strokeWidth
+      } else {
+        hasStroke.value = false
+      }
+
+      // Select on canvas
+      if (canvas.value) {
+        canvas.value.setActiveObject(textObj)
+        canvas.value.renderAll()
       }
     }
 
     // ==================== PROPERTY UPDATES ====================
 
     const updateFont = () => {
-      updateTextProperty('fontFamily', currentFontFamily.value)
+      if (!selectedTextObject.value || !canvas.value) return
+
+      selectedTextObject.value.set('fontFamily', selectedFont.value)
+      canvas.value.renderAll()
       emitTextOverlaysChanged()
     }
 
     const updateFontSize = () => {
-      updateTextProperty('fontSize', parseInt(currentFontSize.value.toString()))
+      if (!selectedTextObject.value || !canvas.value) return
+
+      selectedTextObject.value.set('fontSize', parseInt(fontSize.value.toString()))
+      canvas.value.renderAll()
       emitTextOverlaysChanged()
     }
 
     const updateFontWeight = () => {
-      updateTextProperty('fontWeight', isBold.value ? 'bold' : 'normal')
-      emitTextOverlaysChanged()
-    }
+      if (!selectedTextObject.value || !canvas.value) return
 
-    const updateFontStyle = () => {
-      updateTextProperty('fontStyle', isItalic.value ? 'italic' : 'normal')
+      selectedTextObject.value.set('fontWeight', fontWeight.value)
+      canvas.value.renderAll()
       emitTextOverlaysChanged()
     }
 
     const updateTextColor = () => {
-      updateTextProperty('fill', currentTextColor.value)
+      if (!selectedTextObject.value || !canvas.value) return
+
+      selectedTextObject.value.set('fill', textColor.value)
+      canvas.value.renderAll()
+      emitTextOverlaysChanged()
+    }
+
+    const toggleBackground = () => {
+      if (!selectedTextObject.value || !canvas.value) return
+
+      selectedTextObject.value.set(
+        'backgroundColor',
+        hasBackground.value ? backgroundColor.value : '',
+      )
+      canvas.value.renderAll()
       emitTextOverlaysChanged()
     }
 
     const updateBackgroundColor = () => {
-      if (hasBackgroundColor.value) {
-        updateTextProperty('backgroundColor', currentBackgroundColor.value)
-      } else {
-        updateTextProperty('backgroundColor', '')
-      }
-      emitTextOverlaysChanged()
-    }
+      if (!selectedTextObject.value || !canvas.value || !hasBackground.value) return
 
-    const toggleBackgroundColor = () => {
-      if (hasBackgroundColor.value) {
-        updateTextProperty('backgroundColor', currentBackgroundColor.value)
-      } else {
-        updateTextProperty('backgroundColor', '')
-      }
+      selectedTextObject.value.set('backgroundColor', backgroundColor.value)
+      canvas.value.renderAll()
       emitTextOverlaysChanged()
     }
 
     const updateOpacity = () => {
-      updateTextProperty('opacity', parseFloat(currentOpacity.value.toString()))
+      if (!selectedTextObject.value || !canvas.value) return
+
+      selectedTextObject.value.set('opacity', parseFloat(opacity.value.toString()))
+      canvas.value.renderAll()
       emitTextOverlaysChanged()
     }
 
-    // ==================== TEXT EFFECTS ====================
-
     const toggleShadow = () => {
+      if (!selectedTextObject.value || !canvas.value) return
+
       if (hasShadow.value) {
-        updateShadow()
+        selectedTextObject.value.set('shadow', {
+          color: shadowColor.value,
+          offsetX: shadowOffsetX.value,
+          offsetY: shadowOffsetY.value,
+          blur: 3,
+        })
       } else {
-        updateTextProperty('shadow', null)
+        selectedTextObject.value.set('shadow', null)
       }
+
+      canvas.value.renderAll()
       emitTextOverlaysChanged()
     }
 
     const updateShadow = () => {
-      if (hasShadow.value) {
-        updateTextProperty('shadow', {
-          color: shadowColor.value,
-          blur: 3,
-          offsetX: parseInt(shadowOffsetX.value.toString()),
-          offsetY: parseInt(shadowOffsetY.value.toString()),
-        })
-      }
+      if (!selectedTextObject.value || !canvas.value || !hasShadow.value) return
+
+      selectedTextObject.value.set('shadow', {
+        color: shadowColor.value,
+        offsetX: parseInt(shadowOffsetX.value.toString()),
+        offsetY: parseInt(shadowOffsetY.value.toString()),
+        blur: 3,
+      })
+
+      canvas.value.renderAll()
       emitTextOverlaysChanged()
     }
 
     const toggleStroke = () => {
+      if (!selectedTextObject.value || !canvas.value) return
+
       if (hasStroke.value) {
-        updateStroke()
+        selectedTextObject.value.set({
+          stroke: strokeColor.value,
+          strokeWidth: strokeWidth.value,
+        })
       } else {
-        updateTextProperty('stroke', null)
-        updateTextProperty('strokeWidth', 0)
+        selectedTextObject.value.set({
+          stroke: '',
+          strokeWidth: 0,
+        })
       }
+
+      canvas.value.renderAll()
       emitTextOverlaysChanged()
     }
 
     const updateStroke = () => {
-      if (hasStroke.value) {
-        updateTextProperty('stroke', strokeColor.value)
-        updateTextProperty('strokeWidth', parseInt(strokeWidth.value.toString()))
-      }
+      if (!selectedTextObject.value || !canvas.value || !hasStroke.value) return
+
+      selectedTextObject.value.set({
+        stroke: strokeColor.value,
+        strokeWidth: parseInt(strokeWidth.value.toString()),
+      })
+
+      canvas.value.renderAll()
       emitTextOverlaysChanged()
     }
 
-    // ==================== TEXT ALIGNMENT ====================
+    // ==================== HELPER FUNCTIONS ====================
 
-    const alignText = (alignment: string) => {
-      if (!activeTextObject.value || !canvas.value) return
-
-      const canvasWidth = canvas.value.width || 800
-      const canvasHeight = canvas.value.height || 450
-      const textObj = activeTextObject.value
-
-      switch (alignment) {
-        case 'left':
-          updateTextProperty('left', 50)
-          break
-        case 'center':
-          updateTextProperty('left', canvasWidth / 2)
-          break
-        case 'right':
-          updateTextProperty('left', canvasWidth - 50)
-          break
-        case 'top':
-          updateTextProperty('top', 50)
-          break
-        case 'middle':
-          updateTextProperty('top', canvasHeight / 2)
-          break
-        case 'bottom':
-          updateTextProperty('top', canvasHeight - 50)
-          break
-      }
-
-      emitTextOverlaysChanged()
-    }
-
-    // ==================== REACTIVE PROPERTY UPDATES ====================
-
-    const updateReactivePropertiesFromText = (textObj: any) => {
-      currentFontFamily.value = textObj.fontFamily || 'Arial'
-      currentFontSize.value = textObj.fontSize || 24
-      isBold.value = textObj.fontWeight === 'bold'
-      isItalic.value = textObj.fontStyle === 'italic'
-      currentTextColor.value = (textObj.fill as string) || '#ffffff'
-      currentOpacity.value = textObj.opacity || 1.0
-
-      hasBackgroundColor.value = !!textObj.backgroundColor
-      if (hasBackgroundColor.value) {
-        currentBackgroundColor.value = textObj.backgroundColor as string
-      }
-
-      hasShadow.value = !!textObj.shadow
-      if (hasShadow.value && textObj.shadow) {
-        const shadow = textObj.shadow as any
-        shadowColor.value = shadow.color || '#000000'
-        shadowOffsetX.value = shadow.offsetX || 2
-        shadowOffsetY.value = shadow.offsetY || 2
-      }
-
-      hasStroke.value = !!(textObj.stroke && textObj.strokeWidth)
-      if (hasStroke.value) {
-        strokeColor.value = textObj.stroke as string
-        strokeWidth.value = textObj.strokeWidth || 2
+    const getTextPreviewStyle = (textObj: Text) => {
+      return {
+        color: (textObj.fill as string) || '#ffffff',
+        fontFamily: textObj.fontFamily || 'Arial',
+        fontSize: '14px',
+        fontWeight: textObj.fontWeight || 'normal',
+        backgroundColor: textObj.backgroundColor || 'transparent',
+        padding: '2px 6px',
+        borderRadius: '3px',
+        maxWidth: '200px',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap',
       }
     }
 
-    // Watch for active text changes to update reactive properties
-    watch(activeTextObject, (newText) => {
-      if (newText) {
-        updateReactivePropertiesFromText(newText)
-      }
-    })
-
-    // ==================== EVENT HANDLING ====================
+    const loadExistingOverlays = () => {
+      // TODO: Load existing overlays from props
+      console.log('Loading existing overlays:', props.existingOverlays)
+    }
 
     const emitTextOverlaysChanged = () => {
       if (!canvas.value) return
 
-      const textObjects = canvas.value.getObjects().filter((obj: any) => obj.type === 'text')
-      const overlays = textObjects.map((obj: any, index: number) => {
-        const textObj = obj as any
-        const canvasCoords = extractTextCoordinates(textObj)
-        const videoCoords = convertToVideoCoordinates(canvasCoords)
-
-        return {
-          id: `text_${props.segmentId}_${index}`,
-          segmentId: props.segmentId,
-          text: textObj.text || '',
-          x: videoCoords.x,
-          y: videoCoords.y,
-          width: videoCoords.width,
-          height: videoCoords.height,
-          fontSize: videoCoords.fontSize,
-          fontFamily: textObj.fontFamily || 'Arial',
-          fontWeight: textObj.fontWeight || 'normal',
-          fontStyle: textObj.fontStyle || 'normal',
-          color: (textObj.fill as string) || '#ffffff',
-          backgroundColor: textObj.backgroundColor as string,
-          opacity: textObj.opacity || 1.0,
-          rotation: videoCoords.rotation * (180 / Math.PI), // Convert back to degrees
-          scaleX: textObj.scaleX || 1,
-          scaleY: textObj.scaleY || 1,
-          shadow: textObj.shadow
-            ? {
-                enabled: true,
-                color: (textObj.shadow as any).color || '#000000',
-                offsetX: (textObj.shadow as any).offsetX || 2,
-                offsetY: (textObj.shadow as any).offsetY || 2,
-                blur: (textObj.shadow as any).blur || 3,
-              }
-            : { enabled: false },
-          stroke: textObj.stroke
+      const overlays = textObjects.value.map((textObj, index) => ({
+        id: `text_${index}_${Date.now()}`,
+        segmentId: props.segmentId,
+        text: textObj.text || '',
+        x: Math.round((textObj.left || 0) * scaleFactors.value.x),
+        y: Math.round((textObj.top || 0) * scaleFactors.value.y),
+        width: Math.round((textObj.width || 0) * scaleFactors.value.x),
+        height: Math.round((textObj.height || 0) * scaleFactors.value.y),
+        fontSize: Math.round(
+          (textObj.fontSize || 24) * Math.min(scaleFactors.value.x, scaleFactors.value.y),
+        ),
+        fontFamily: textObj.fontFamily || 'Arial',
+        fontWeight: (textObj.fontWeight as string) || 'normal',
+        fontStyle: 'normal',
+        color: (textObj.fill as string) || '#ffffff',
+        backgroundColor: (textObj.backgroundColor as string) || null,
+        opacity: textObj.opacity || 1,
+        rotation: textObj.angle || 0,
+        scaleX: textObj.scaleX || 1,
+        scaleY: textObj.scaleY || 1,
+        shadow: textObj.shadow
+          ? {
+              enabled: true,
+              color: (textObj.shadow as { color?: string }).color || '#000000',
+              offsetX: (textObj.shadow as { offsetX?: number }).offsetX || 0,
+              offsetY: (textObj.shadow as { offsetY?: number }).offsetY || 0,
+              blur: (textObj.shadow as { blur?: number }).blur || 0,
+            }
+          : { enabled: false },
+        stroke:
+          textObj.stroke && textObj.strokeWidth
             ? {
                 enabled: true,
                 color: textObj.stroke as string,
-                width: textObj.strokeWidth || 2,
+                width: textObj.strokeWidth,
               }
             : { enabled: false },
-          startTime: 0,
-          endTime: props.segmentDuration,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        }
-      })
+        startTime: 0,
+        endTime: props.segmentDuration,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }))
 
       emit('text-overlays-changed', overlays)
     }
 
-    // ==================== EXPORT FUNCTIONALITY ====================
-
-    const generatePreview = async () => {
-      generatingPreview.value = true
-      try {
-        // Generate preview image of canvas
-        if (canvas.value) {
-          const dataURL = canvas.value.toDataURL('image/png')
-          console.log('🖼️ Generated preview image')
-          // Could emit preview data or save to store
-        }
-      } catch (error) {
-        console.error('❌ Failed to generate preview:', error)
-      } finally {
-        generatingPreview.value = false
-      }
-    }
-
-    const exportFFmpegFilters = () => {
-      if (!canvas.value) return
-
-      const textObjects = canvas.value.getObjects().filter((obj: any) => obj.type === 'text')
-      const filters: FFmpegTextFilter[] = textObjects.map((obj: any) => {
-        const textObj = obj as any
-        return convertToFFmpegFilter(textObj, 0, props.segmentDuration)
-      })
-
-      console.log('🎬 Generated FFmpeg filters:', filters)
-      emit('ffmpeg-filters-generated', filters)
-    }
-
     // ==================== LIFECYCLE ====================
 
-    onMounted(() => {
-      initializeEditor()
+    onMounted(async () => {
+      await nextTick()
+      await initializeCanvas()
     })
 
     onUnmounted(() => {
-      dispose()
+      if (canvas.value) {
+        canvas.value.dispose()
+      }
     })
-
-    // Watch for thumbnail URL changes
-    watch(
-      () => props.thumbnailUrl,
-      () => {
-        if (isCanvasReady.value) {
-          initializeEditor()
-        }
-      },
-    )
 
     return {
       // Refs
-      fabricCanvasEl,
+      fabricCanvas,
       canvasContainer,
 
-      // Canvas state
-      canvas,
+      // State
       isCanvasReady,
-      activeTextObject,
-      hasActiveText,
-      canvasSize,
-      videoSize,
-      scaleFactors,
+      canvasWidth,
+      canvasHeight,
+      selectedTextObject,
+      textObjects,
+      hasSelectedText,
 
-      // Font properties
-      currentFontFamily,
-      currentFontSize,
-      isBold,
-      isItalic,
+      // Properties
       availableFonts,
-
-      // Color properties
-      currentTextColor,
-      currentBackgroundColor,
-      hasBackgroundColor,
-      currentOpacity,
-
-      // Effect properties
+      selectedFont,
+      fontSize,
+      fontWeight,
+      textColor,
+      hasBackground,
+      backgroundColor,
+      opacity,
       hasShadow,
       shadowColor,
       shadowOffsetX,
@@ -880,30 +802,24 @@ export default defineComponent({
       strokeColor,
       strokeWidth,
 
-      // UI state
-      generatingPreview,
-      textObjectCount,
-      debugCoords,
-
       // Methods
-      addNewText,
-      deleteSelectedText,
+      addText,
+      deleteSelected,
+      deleteTextObject,
       duplicateText,
+      selectTextObject,
       updateFont,
       updateFontSize,
       updateFontWeight,
-      updateFontStyle,
       updateTextColor,
+      toggleBackground,
       updateBackgroundColor,
-      toggleBackgroundColor,
       updateOpacity,
       toggleShadow,
       updateShadow,
       toggleStroke,
       updateStroke,
-      alignText,
-      generatePreview,
-      exportFFmpegFilters,
+      getTextPreviewStyle,
     }
   },
 })
@@ -911,173 +827,149 @@ export default defineComponent({
 
 <style scoped>
 .segment-text-editor {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  padding: 16px;
-  background: #f8f9fa;
-  border-radius: 8px;
+  max-width: 1200px;
+  margin: 0 auto;
 }
 
-/* Canvas Container */
 .canvas-container {
   position: relative;
-  border: 2px solid #dee2e6;
-  border-radius: 8px;
-  overflow: hidden;
-  background: #ffffff;
   display: flex;
   justify-content: center;
   align-items: center;
+  background: #f8f9fa;
+  border: 2px solid #dee2e6;
+  border-radius: 8px;
+  padding: 20px;
+  min-height: 400px;
 }
 
 .fabric-canvas {
-  display: block;
-}
-
-.canvas-loading {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  text-align: center;
-}
-
-/* Toolbar Styles */
-.text-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 20px;
-  padding: 16px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
   background: white;
-  border-radius: 8px;
-  border: 1px solid #dee2e6;
 }
 
-.toolbar-section {
-  flex: 1;
-  min-width: 200px;
-}
-
-.toolbar-title {
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: #495057;
-  margin-bottom: 12px;
-  padding-bottom: 4px;
-  border-bottom: 1px solid #dee2e6;
-}
-
-.control-group {
-  margin-bottom: 12px;
-}
-
-.control-label {
-  display: block;
-  font-size: 0.75rem;
-  font-weight: 500;
-  color: #6c757d;
-  margin-bottom: 4px;
-}
-
-/* Input Groups */
-.range-input-group {
+.loading-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
   display: flex;
+  flex-direction: column;
+  justify-content: center;
   align-items: center;
-  gap: 8px;
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 8px;
+  z-index: 10;
 }
 
-.size-input {
-  width: 60px;
+.text-toolbar {
+  background: white;
 }
 
-.size-unit {
-  font-size: 0.75rem;
-  color: #6c757d;
+.toolbar-row {
+  display: flex;
+  gap: 24px;
+  align-items: flex-start;
+  flex-wrap: wrap;
 }
 
-.opacity-value {
-  font-size: 0.75rem;
-  color: #6c757d;
-  min-width: 35px;
+.property-group {
+  min-width: 200px;
+  flex: 1;
+}
+
+.property-group label {
+  font-weight: 600;
+  font-size: 0.875rem;
+  margin-bottom: 4px;
+  display: block;
 }
 
 .color-input-group {
   display: flex;
-  gap: 8px;
   align-items: center;
+  gap: 8px;
 }
 
-.color-text-input {
-  width: 80px;
-  font-size: 0.75rem;
-}
-
-/* Position Controls */
-.position-controls {
-  display: flex;
-  gap: 4px;
-}
-
-/* Effect Controls */
-.effect-controls {
-  margin-top: 8px;
-  padding: 8px;
-  background: #f8f9fa;
+.form-control-color {
+  width: 50px;
+  height: 38px;
   border-radius: 4px;
+  border: 1px solid #ced4da;
+  cursor: pointer;
 }
 
+.color-value {
+  font-family: monospace;
+  font-size: 0.875rem;
+  color: #6c757d;
+}
+
+.background-controls,
 .shadow-controls,
 .stroke-controls {
-  display: flex;
-  gap: 8px;
-  align-items: center;
+  padding: 12px;
+  background: #f8f9fa;
+  border-radius: 6px;
+  border: 1px solid #e9ecef;
 }
 
-.stroke-width-value {
-  font-size: 0.75rem;
-  color: #6c757d;
-  min-width: 30px;
+.no-selection-help {
+  text-align: center;
+  padding: 40px 20px;
 }
 
-/* Preview Section */
-.text-preview-section {
-  padding: 12px 16px;
+.text-objects-list {
   background: white;
-  border-radius: 8px;
-  border: 1px solid #dee2e6;
 }
 
-.preview-info {
+.text-object-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid #e9ecef;
+  border-radius: 6px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.text-object-item:hover {
+  background: #f8f9fa;
+  border-color: #007bff;
+}
+
+.text-object-item.active {
+  background: #e3f2fd;
+  border-color: #007bff;
+}
+
+.text-preview {
   flex: 1;
 }
 
-.preview-actions {
+.text-content {
+  display: inline-block;
+}
+
+.text-actions {
   display: flex;
   gap: 8px;
 }
 
-/* Debug Info */
-.debug-info {
-  padding: 8px;
-  background: #f8f9fa;
-  border-radius: 4px;
-  font-family: monospace;
-}
-
-/* Responsive Design */
+/* Responsive adjustments */
 @media (max-width: 768px) {
-  .text-toolbar {
+  .toolbar-row {
     flex-direction: column;
+    gap: 16px;
   }
 
-  .toolbar-section {
+  .property-group {
     min-width: unset;
-  }
-
-  .range-input-group,
-  .color-input-group {
-    flex-wrap: wrap;
+    width: 100%;
   }
 }
 </style>
