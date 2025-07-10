@@ -1,24 +1,35 @@
 // Text Overlay Management Composable
 // This is the CORE composable that handles all text overlay functionality
 
-import { ref, computed, onUnmounted } from 'vue'
-import { fabric } from 'fabric'
+import { ref, computed, onUnmounted, readonly } from 'vue'
 import type {
   TextOverlay,
   FFmpegTextFilter,
   CanvasVideoMapping,
   ExtractedCoordinates,
   VideoCoordinates,
-  AVAILABLE_FONTS,
 } from '@/types/textOverlay'
+
+// Import AVAILABLE_FONTS as a value, not a type
+import { AVAILABLE_FONTS } from '@/types/textOverlay'
+
+// Dynamic fabric import to avoid TypeScript issues
+let fabric: typeof import('fabric') | null = null
+
+const loadFabric = async () => {
+  if (!fabric) {
+    fabric = await import('fabric')
+  }
+  return fabric
+}
 
 export function useTextOverlay() {
   // ==================== STATE MANAGEMENT ====================
 
-  const canvas = ref<fabric.Canvas | null>(null)
+  const canvas = ref<any>(null)
   const canvasElement = ref<HTMLCanvasElement | null>(null)
   const isCanvasReady = ref(false)
-  const activeTextObject = ref<fabric.Text | null>(null)
+  const activeTextObject = ref<any>(null)
 
   // Canvas and video dimensions
   const canvasVideoMapping = ref<CanvasVideoMapping>({
@@ -43,7 +54,7 @@ export function useTextOverlay() {
    * Initialize Fabric.js canvas with video thumbnail background
    * Requirement 2.01 - Create SegmentTextEditor Component
    */
-  const initializeCanvas = (
+  const initializeCanvas = async (
     canvasEl: HTMLCanvasElement,
     thumbnailUrl: string,
     videoWidth: number,
@@ -52,6 +63,9 @@ export function useTextOverlay() {
     maxCanvasHeight: number = 450,
   ) => {
     canvasElement.value = canvasEl
+
+    // Load fabric.js
+    const fabricModule = await loadFabric()
 
     // Calculate optimal canvas dimensions maintaining aspect ratio
     const aspectRatio = videoWidth / videoHeight
@@ -81,7 +95,7 @@ export function useTextOverlay() {
     }
 
     // Initialize Fabric.js canvas
-    canvas.value = new fabric.Canvas(canvasEl, {
+    canvas.value = new fabricModule.Canvas(canvasEl, {
       width: canvasWidth,
       height: canvasHeight,
       backgroundColor: 'transparent',
@@ -90,7 +104,7 @@ export function useTextOverlay() {
     })
 
     // Load thumbnail as background
-    loadThumbnailBackground(thumbnailUrl)
+    await loadThumbnailBackground(thumbnailUrl)
 
     // Set up canvas event listeners
     setupCanvasEvents()
@@ -107,10 +121,18 @@ export function useTextOverlay() {
   /**
    * Load video thumbnail as canvas background
    */
-  const loadThumbnailBackground = (thumbnailUrl: string) => {
+  const loadThumbnailBackground = async (thumbnailUrl: string) => {
     if (!canvas.value) return
 
-    fabric.Image.fromURL(thumbnailUrl, (img) => {
+    // If no thumbnail URL provided, use a solid color background
+    if (!thumbnailUrl || thumbnailUrl.trim() === '') {
+      canvas.value.setBackgroundColor('#4A90E2', canvas.value.renderAll.bind(canvas.value))
+      return
+    }
+
+    const fabricModule = await loadFabric()
+
+    fabricModule.Image.fromURL(thumbnailUrl, (img: any) => {
       img.set({
         scaleX: canvasVideoMapping.value.canvasWidth / canvasVideoMapping.value.videoWidth,
         scaleY: canvasVideoMapping.value.canvasHeight / canvasVideoMapping.value.videoHeight,
@@ -131,18 +153,18 @@ export function useTextOverlay() {
     if (!canvas.value) return
 
     // Text selection events
-    canvas.value.on('selection:created', (e) => {
+    canvas.value.on('selection:created', (e: any) => {
       const selected = e.selected?.[0]
       if (selected && selected.type === 'text') {
-        activeTextObject.value = selected as fabric.Text
+        activeTextObject.value = selected
         console.log('📝 Text selected:', activeTextObject.value.text)
       }
     })
 
-    canvas.value.on('selection:updated', (e) => {
+    canvas.value.on('selection:updated', (e: any) => {
       const selected = e.selected?.[0]
       if (selected && selected.type === 'text') {
-        activeTextObject.value = selected as fabric.Text
+        activeTextObject.value = selected
       }
     })
 
@@ -151,8 +173,8 @@ export function useTextOverlay() {
     })
 
     // Text modification events
-    canvas.value.on('object:modified', (e) => {
-      const obj = e.target as fabric.Text
+    canvas.value.on('object:modified', (e: any) => {
+      const obj = e.target
       if (obj && obj.type === 'text') {
         // Force coordinate update after modification
         obj.setCoords()
@@ -160,8 +182,8 @@ export function useTextOverlay() {
       }
     })
 
-    canvas.value.on('text:changed', (e) => {
-      const obj = e.target as fabric.Text
+    canvas.value.on('text:changed', (e: any) => {
+      const obj = e.target
       if (obj) {
         console.log('✏️ Text content changed:', obj.text)
       }
@@ -177,7 +199,7 @@ export function useTextOverlay() {
    * This is the CRITICAL function that makes coordinate translation work.
    * aCoords provides the actual corner positions after all transformations.
    */
-  const extractTextCoordinates = (textObj: fabric.Text): ExtractedCoordinates => {
+  const extractTextCoordinates = (textObj: any): ExtractedCoordinates => {
     // Force coordinate calculation if needed
     textObj.setCoords()
 
@@ -225,7 +247,7 @@ export function useTextOverlay() {
   /**
    * Fallback coordinate extraction for calculated coordinates
    */
-  const extractFromCalculatedCoords = (textObj: fabric.Text, coords: any): ExtractedCoordinates => {
+  const extractFromCalculatedCoords = (textObj: any, coords: any): ExtractedCoordinates => {
     const topLeft = { x: coords.tl.x, y: coords.tl.y }
     const topRight = { x: coords.tr.x, y: coords.tr.y }
     const bottomLeft = { x: coords.bl.x, y: coords.bl.y }
@@ -303,7 +325,7 @@ export function useTextOverlay() {
    * Convert Fabric.js color format to FFmpeg-compatible format
    * Requirement 4.03 - Build Color Format Converter
    */
-  const convertColorToFFmpeg = (fabricColor: string | fabric.Pattern | fabric.Gradient): string => {
+  const convertColorToFFmpeg = (fabricColor: string | any | any): string => {
     // Handle simple string colors
     if (typeof fabricColor === 'string') {
       // Already hex format
@@ -374,7 +396,7 @@ export function useTextOverlay() {
    * Requirement 1.04 - Implement Coordinate Translation System
    */
   const convertToFFmpegFilter = (
-    textObj: fabric.Text,
+    textObj: any,
     startTime: number = 0,
     endTime: number = 30,
   ): FFmpegTextFilter => {
@@ -412,7 +434,7 @@ export function useTextOverlay() {
 
     // Add shadow if present
     if (textObj.shadow) {
-      const shadow = textObj.shadow as fabric.Shadow
+      const shadow = textObj.shadow as any
       const shadowColor = convertColorToFFmpeg(shadow.color || '#000000')
       const shadowX = Math.round((shadow.offsetX || 2) * canvasVideoMapping.value.scaleX)
       const shadowY = Math.round((shadow.offsetY || 2) * canvasVideoMapping.value.scaleY)
@@ -464,43 +486,44 @@ export function useTextOverlay() {
    * Add new text object to canvas
    * Requirement 2.02 - Implement Text Object Creation
    */
-  const addTextObject = (
+  const addTextObject = async (
     text: string = 'New Text',
     x?: number,
     y?: number,
-    options?: Partial<fabric.ITextOptions>,
-  ): fabric.Text | null => {
+    options?: Partial<any>,
+  ): Promise<any | null> => {
     if (!canvas.value) return null
+
+    const fabricModule = await loadFabric()
 
     const defaultX = x ?? canvasVideoMapping.value.canvasWidth / 2
     const defaultY = y ?? canvasVideoMapping.value.canvasHeight / 2
 
-    const textObject = new fabric.Text(text, {
+    const textObject = new fabricModule.Text(text, {
       left: defaultX,
       top: defaultY,
       fontSize: 24,
       fontFamily: 'Arial',
       fill: '#ffffff',
-      originX: 'center',
-      originY: 'center',
-      editable: true,
+      stroke: '#000000',
+      strokeWidth: 0,
       selectable: true,
-      evented: true,
+      editable: true,
       ...options,
     })
 
     canvas.value.add(textObject)
     canvas.value.setActiveObject(textObject)
-    activeTextObject.value = textObject
+    canvas.value.renderAll()
 
-    console.log('➕ Added text object:', text)
+    console.log('✅ Text object added:', textObject.text)
     return textObject
   }
 
   /**
    * Remove text object from canvas
    */
-  const removeTextObject = (textObj?: fabric.Text): void => {
+  const removeTextObject = (textObj?: any): void => {
     if (!canvas.value) return
 
     const objToRemove = textObj || activeTextObject.value
@@ -517,11 +540,11 @@ export function useTextOverlay() {
    * Update text object properties
    * Requirement 2.04 - Add Text Property Controls
    */
-  const updateTextProperty = (property: string, value: any, textObj?: fabric.Text): void => {
+  const updateTextProperty = (property: string, value: any, textObj?: any): void => {
     const obj = textObj || activeTextObject.value
     if (!obj || !canvas.value) return
 
-    obj.set(property as keyof fabric.Text, value)
+    obj.set(property as keyof any, value)
     canvas.value.renderAll()
 
     console.log(`🔧 Updated ${property}:`, value)
