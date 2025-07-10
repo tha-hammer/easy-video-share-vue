@@ -2,6 +2,7 @@
 // This is the CORE composable that handles all text overlay functionality
 
 import { ref, computed, onUnmounted, readonly } from 'vue'
+import { fabric } from 'fabric'
 import type {
   TextOverlay,
   FFmpegTextFilter,
@@ -13,23 +14,13 @@ import type {
 // Import AVAILABLE_FONTS as a value, not a type
 import { AVAILABLE_FONTS } from '@/types/textOverlay'
 
-// Dynamic fabric import to avoid TypeScript issues
-let fabric: typeof import('fabric') | null = null
-
-const loadFabric = async () => {
-  if (!fabric) {
-    fabric = await import('fabric')
-  }
-  return fabric
-}
-
 export function useTextOverlay() {
   // ==================== STATE MANAGEMENT ====================
 
-  const canvas = ref<any>(null)
+  const canvas = ref<fabric.Canvas | null>(null)
   const canvasElement = ref<HTMLCanvasElement | null>(null)
   const isCanvasReady = ref(false)
-  const activeTextObject = ref<any>(null)
+  const activeTextObject = ref<fabric.Text | null>(null)
 
   // Canvas and video dimensions
   const canvasVideoMapping = ref<CanvasVideoMapping>({
@@ -48,6 +39,25 @@ export function useTextOverlay() {
   // Text overlays collection
   const textOverlays = ref<Map<string, TextOverlay>>(new Map())
 
+  // ==================== COMPUTED PROPERTIES ====================
+
+  const hasActiveText = computed(() => activeTextObject.value !== null)
+
+  const canvasSize = computed(() => ({
+    width: canvasVideoMapping.value.canvasWidth,
+    height: canvasVideoMapping.value.canvasHeight,
+  }))
+
+  const videoSize = computed(() => ({
+    width: canvasVideoMapping.value.videoWidth,
+    height: canvasVideoMapping.value.videoHeight,
+  }))
+
+  const scaleFactors = computed(() => ({
+    x: canvasVideoMapping.value.scaleX,
+    y: canvasVideoMapping.value.scaleY,
+  }))
+
   // ==================== CANVAS LIFECYCLE ====================
 
   /**
@@ -61,11 +71,8 @@ export function useTextOverlay() {
     videoHeight: number,
     maxCanvasWidth: number = 800,
     maxCanvasHeight: number = 450,
-  ) => {
+  ): Promise<void> => {
     canvasElement.value = canvasEl
-
-    // Load fabric.js
-    const fabricModule = await loadFabric()
 
     // Calculate optimal canvas dimensions maintaining aspect ratio
     const aspectRatio = videoWidth / videoHeight
@@ -95,7 +102,7 @@ export function useTextOverlay() {
     }
 
     // Initialize Fabric.js canvas
-    canvas.value = new fabricModule.Canvas(canvasEl, {
+    canvas.value = new fabric.Canvas(canvasEl, {
       width: canvasWidth,
       height: canvasHeight,
       backgroundColor: 'transparent',
@@ -121,7 +128,7 @@ export function useTextOverlay() {
   /**
    * Load video thumbnail as canvas background
    */
-  const loadThumbnailBackground = async (thumbnailUrl: string) => {
+  const loadThumbnailBackground = async (thumbnailUrl: string): Promise<void> => {
     if (!canvas.value) return
 
     // If no thumbnail URL provided, use a solid color background
@@ -130,18 +137,19 @@ export function useTextOverlay() {
       return
     }
 
-    const fabricModule = await loadFabric()
+    return new Promise((resolve) => {
+      fabric.Image.fromURL(thumbnailUrl, (img: fabric.Image) => {
+        img.set({
+          scaleX: canvasVideoMapping.value.canvasWidth / canvasVideoMapping.value.videoWidth,
+          scaleY: canvasVideoMapping.value.canvasHeight / canvasVideoMapping.value.videoHeight,
+          selectable: false,
+          evented: false,
+          excludeFromExport: true,
+        })
 
-    fabricModule.Image.fromURL(thumbnailUrl, (img: any) => {
-      img.set({
-        scaleX: canvasVideoMapping.value.canvasWidth / canvasVideoMapping.value.videoWidth,
-        scaleY: canvasVideoMapping.value.canvasHeight / canvasVideoMapping.value.videoHeight,
-        selectable: false,
-        evented: false,
-        excludeFromExport: true,
+        canvas.value?.setBackgroundImage(img, canvas.value.renderAll.bind(canvas.value))
+        resolve()
       })
-
-      canvas.value?.setBackgroundImage(img, canvas.value.renderAll.bind(canvas.value))
     })
   }
 
@@ -149,22 +157,22 @@ export function useTextOverlay() {
    * Set up canvas event listeners for text interaction
    * Requirement 2.03 - Enable Text Selection and Editing
    */
-  const setupCanvasEvents = () => {
+  const setupCanvasEvents = (): void => {
     if (!canvas.value) return
 
     // Text selection events
-    canvas.value.on('selection:created', (e: any) => {
+    canvas.value.on('selection:created', (e: fabric.IEvent) => {
       const selected = e.selected?.[0]
       if (selected && selected.type === 'text') {
-        activeTextObject.value = selected
+        activeTextObject.value = selected as fabric.Text
         console.log('📝 Text selected:', activeTextObject.value.text)
       }
     })
 
-    canvas.value.on('selection:updated', (e: any) => {
+    canvas.value.on('selection:updated', (e: fabric.IEvent) => {
       const selected = e.selected?.[0]
       if (selected && selected.type === 'text') {
-        activeTextObject.value = selected
+        activeTextObject.value = selected as fabric.Text
       }
     })
 
@@ -173,7 +181,7 @@ export function useTextOverlay() {
     })
 
     // Text modification events
-    canvas.value.on('object:modified', (e: any) => {
+    canvas.value.on('object:modified', (e: fabric.IEvent) => {
       const obj = e.target
       if (obj && obj.type === 'text') {
         // Force coordinate update after modification
@@ -182,8 +190,8 @@ export function useTextOverlay() {
       }
     })
 
-    canvas.value.on('text:changed', (e: any) => {
-      const obj = e.target
+    canvas.value.on('text:changed', (e: fabric.IEvent) => {
+      const obj = e.target as fabric.Text
       if (obj) {
         console.log('✏️ Text content changed:', obj.text)
       }
@@ -195,49 +203,43 @@ export function useTextOverlay() {
   /**
    * Extract precise coordinates from Fabric.js text object using aCoords
    * Requirement 3.02 - Create aCoords Extraction Function
-   *
-   * This is the CRITICAL function that makes coordinate translation work.
-   * aCoords provides the actual corner positions after all transformations.
    */
-  const extractTextCoordinates = (textObj: any): ExtractedCoordinates => {
-    // Force coordinate calculation if needed
+  const extractTextCoordinates = (textObj: fabric.Text): ExtractedCoordinates => {
+    // Force update of aCoords if needed
     textObj.setCoords()
 
-    // Get absolute coordinates (aCoords) which include all transformations
+    // Get current aCoords (absolute coordinates)
     const aCoords = textObj.aCoords
+
     if (!aCoords) {
-      // Fallback to calculated coordinates
+      // Fallback to calcACoords if aCoords not available
       const calculatedCoords = textObj.calcACoords()
       return extractFromCalculatedCoords(textObj, calculatedCoords)
     }
 
-    // Extract corner positions
-    const topLeft = { x: aCoords.tl.x, y: aCoords.tl.y }
-    const topRight = { x: aCoords.tr.x, y: aCoords.tr.y }
-    const bottomLeft = { x: aCoords.bl.x, y: aCoords.bl.y }
-    const bottomRight = { x: aCoords.br.x, y: aCoords.br.y }
+    // Extract bounding box from aCoords
+    const topLeft = aCoords.tl
+    const topRight = aCoords.tr
+    const bottomLeft = aCoords.bl
+    const bottomRight = aCoords.br
 
-    // Calculate bounding box
+    // Calculate bounding box dimensions
     const minX = Math.min(topLeft.x, topRight.x, bottomLeft.x, bottomRight.x)
     const maxX = Math.max(topLeft.x, topRight.x, bottomLeft.x, bottomRight.x)
     const minY = Math.min(topLeft.y, topRight.y, bottomLeft.y, bottomRight.y)
     const maxY = Math.max(topLeft.y, topRight.y, bottomLeft.y, bottomRight.y)
-
-    // Calculate center point
-    const centerX = (minX + maxX) / 2
-    const centerY = (minY + maxY) / 2
 
     return {
       canvasX: minX,
       canvasY: minY,
       canvasWidth: maxX - minX,
       canvasHeight: maxY - minY,
-      topLeft,
-      topRight,
-      bottomLeft,
-      bottomRight,
-      centerX,
-      centerY,
+      topLeft: { x: topLeft.x, y: topLeft.y },
+      topRight: { x: topRight.x, y: topRight.y },
+      bottomLeft: { x: bottomLeft.x, y: bottomLeft.y },
+      bottomRight: { x: bottomRight.x, y: bottomRight.y },
+      centerX: (minX + maxX) / 2,
+      centerY: (minY + maxY) / 2,
       rotation: textObj.angle || 0,
       scaleX: textObj.scaleX || 1,
       scaleY: textObj.scaleY || 1,
@@ -245,13 +247,13 @@ export function useTextOverlay() {
   }
 
   /**
-   * Fallback coordinate extraction for calculated coordinates
+   * Fallback coordinate extraction from calculated coords
    */
-  const extractFromCalculatedCoords = (textObj: any, coords: any): ExtractedCoordinates => {
-    const topLeft = { x: coords.tl.x, y: coords.tl.y }
-    const topRight = { x: coords.tr.x, y: coords.tr.y }
-    const bottomLeft = { x: coords.bl.x, y: coords.bl.y }
-    const bottomRight = { x: coords.br.x, y: coords.br.y }
+  const extractFromCalculatedCoords = (textObj: fabric.Text, coords: any): ExtractedCoordinates => {
+    const topLeft = coords.tl
+    const topRight = coords.tr
+    const bottomLeft = coords.bl
+    const bottomRight = coords.br
 
     const minX = Math.min(topLeft.x, topRight.x, bottomLeft.x, bottomRight.x)
     const maxX = Math.max(topLeft.x, topRight.x, bottomLeft.x, bottomRight.x)
@@ -263,10 +265,10 @@ export function useTextOverlay() {
       canvasY: minY,
       canvasWidth: maxX - minX,
       canvasHeight: maxY - minY,
-      topLeft,
-      topRight,
-      bottomLeft,
-      bottomRight,
+      topLeft: { x: topLeft.x, y: topLeft.y },
+      topRight: { x: topRight.x, y: topRight.y },
+      bottomLeft: { x: bottomLeft.x, y: bottomLeft.y },
+      bottomRight: { x: bottomRight.x, y: bottomRight.y },
       centerX: (minX + maxX) / 2,
       centerY: (minY + maxY) / 2,
       rotation: textObj.angle || 0,
@@ -396,7 +398,7 @@ export function useTextOverlay() {
    * Requirement 1.04 - Implement Coordinate Translation System
    */
   const convertToFFmpegFilter = (
-    textObj: any,
+    textObj: fabric.Text,
     startTime: number = 0,
     endTime: number = 30,
   ): FFmpegTextFilter => {
@@ -490,16 +492,14 @@ export function useTextOverlay() {
     text: string = 'New Text',
     x?: number,
     y?: number,
-    options?: Partial<any>,
-  ): Promise<any | null> => {
+    options?: Partial<fabric.Text>,
+  ): Promise<fabric.Text | null> => {
     if (!canvas.value) return null
-
-    const fabricModule = await loadFabric()
 
     const defaultX = x ?? canvasVideoMapping.value.canvasWidth / 2
     const defaultY = y ?? canvasVideoMapping.value.canvasHeight / 2
 
-    const textObject = new fabricModule.Text(text, {
+    const textObject = new fabric.Text(text, {
       left: defaultX,
       top: defaultY,
       fontSize: 24,
@@ -523,7 +523,7 @@ export function useTextOverlay() {
   /**
    * Remove text object from canvas
    */
-  const removeTextObject = (textObj?: any): void => {
+  const removeTextObject = (textObj?: fabric.Text): void => {
     if (!canvas.value) return
 
     const objToRemove = textObj || activeTextObject.value
@@ -540,11 +540,11 @@ export function useTextOverlay() {
    * Update text object properties
    * Requirement 2.04 - Add Text Property Controls
    */
-  const updateTextProperty = (property: string, value: any, textObj?: any): void => {
+  const updateTextProperty = (property: string, value: any, textObj?: fabric.Text): void => {
     const obj = textObj || activeTextObject.value
     if (!obj || !canvas.value) return
 
-    obj.set(property as keyof any, value)
+    obj.set(property as keyof fabric.Text, value)
     canvas.value.renderAll()
 
     console.log(`🔧 Updated ${property}:`, value)
@@ -572,22 +572,6 @@ export function useTextOverlay() {
   onUnmounted(() => {
     dispose()
   })
-
-  // ==================== COMPUTED PROPERTIES ====================
-
-  const hasActiveText = computed(() => activeTextObject.value !== null)
-  const canvasSize = computed(() => ({
-    width: canvasVideoMapping.value.canvasWidth,
-    height: canvasVideoMapping.value.canvasHeight,
-  }))
-  const videoSize = computed(() => ({
-    width: canvasVideoMapping.value.videoWidth,
-    height: canvasVideoMapping.value.videoHeight,
-  }))
-  const scaleFactors = computed(() => ({
-    x: canvasVideoMapping.value.scaleX,
-    y: canvasVideoMapping.value.scaleY,
-  }))
 
   // ==================== PUBLIC API ====================
 
