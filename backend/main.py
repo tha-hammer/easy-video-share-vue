@@ -1250,7 +1250,17 @@ async def get_segment_download_url(segment_id: str):
             raise HTTPException(status_code=404, detail="Segment not found")
         
         # Get the s3_key for this segment
-        s3_key = output_s3_urls[segment_number - 1]  # Convert to 0-based index
+        s3_key_or_url = output_s3_urls[segment_number - 1]  # Convert to 0-based index
+        
+        # Extract object key from URL if it's a full URL
+        if s3_key_or_url.startswith('http'):
+            # It's a full URL, extract the object key
+            from urllib.parse import urlparse, unquote
+            parsed_url = urlparse(s3_key_or_url)
+            s3_key = unquote(parsed_url.path.lstrip('/'))
+        else:
+            # It's already an object key
+            s3_key = s3_key_or_url
         
         # Generate presigned URL for download
         presigned_url = generate_presigned_url(
@@ -1327,8 +1337,23 @@ async def generate_segment_thumbnail(segment_id: str):
             raise HTTPException(status_code=404, detail="Segment not found")
         
         # Get the s3_key for this segment
-        s3_key = output_s3_urls[segment_number - 1]  # Convert to 0-based index
-        print(f"[DEBUG] Using s3_key for thumbnail: {s3_key}")
+        s3_key_or_url = output_s3_urls[segment_number - 1]  # Convert to 0-based index
+        print(f"[DEBUG] Raw s3_key_or_url for thumbnail: {s3_key_or_url}")
+        
+        # Extract object key from URL if it's a full URL
+        # Handle both object keys (e.g., "processed/video_id/segment.mp4") 
+        # and full URLs (e.g., "https://bucket.s3.amazonaws.com/processed/video_id/segment.mp4")
+        if s3_key_or_url.startswith('http'):
+            # It's a full URL, extract the object key
+            from urllib.parse import urlparse, unquote
+            parsed_url = urlparse(s3_key_or_url)
+            # Remove leading slash and decode URL encoding
+            s3_key = unquote(parsed_url.path.lstrip('/'))
+            print(f"[DEBUG] Extracted object key from URL: {s3_key}")
+        else:
+            # It's already an object key
+            s3_key = s3_key_or_url
+            print(f"[DEBUG] Using s3_key directly: {s3_key}")
         
         # TODO: Implement actual thumbnail generation using ffmpeg
         # For now, return a placeholder response that indicates thumbnail generation
@@ -1455,7 +1480,18 @@ async def get_segment_play_url(segment_id: str):
             raise HTTPException(status_code=404, detail="Segment not found")
         
         # Get the s3_key for this segment
-        s3_key = output_s3_urls[segment_number - 1]  # Convert to 0-based index
+        s3_key_or_url = output_s3_urls[segment_number - 1]  # Convert to 0-based index
+        
+        # Extract object key from URL if it's a full URL
+        if s3_key_or_url.startswith('http'):
+            # It's a full URL, extract the object key
+            from urllib.parse import urlparse, unquote
+            parsed_url = urlparse(s3_key_or_url)
+            s3_key = unquote(parsed_url.path.lstrip('/'))
+        else:
+            # It's already an object key
+            s3_key = s3_key_or_url
+        
         print(f"[DEBUG] Using s3_key: {s3_key}")
         
         # Generate presigned URL for streaming/playback (not download)
@@ -1807,7 +1843,17 @@ async def debug_test_segment_play():
         if segment_number < 1 or segment_number > len(output_s3_urls):
             return {"error": f"Invalid segment number: {segment_number}, max: {len(output_s3_urls)}"}
         
-        s3_key = output_s3_urls[segment_number - 1]
+        s3_key_or_url = output_s3_urls[segment_number - 1]
+        
+        # Extract object key from URL if it's a full URL
+        if s3_key_or_url.startswith('http'):
+            # It's a full URL, extract the object key
+            from urllib.parse import urlparse, unquote
+            parsed_url = urlparse(s3_key_or_url)
+            s3_key = unquote(parsed_url.path.lstrip('/'))
+        else:
+            # It's already an object key
+            s3_key = s3_key_or_url
         
         # Test S3 URL generation
         try:
