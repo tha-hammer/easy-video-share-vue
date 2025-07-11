@@ -1432,10 +1432,17 @@ async def process_segment_with_text_overlays(segment_id: str, request: dict):
     Process a video segment with text overlays applied
     """
     try:
+        # Handle both request formats - overlays array or ffmpeg_filters array
         overlays = request.get("overlays", [])
+        ffmpeg_filters = request.get("ffmpeg_filters", [])
+        ffmpeg_command = request.get("ffmpeg_command", "")
+        processing_type = request.get("processing_type", "text_overlays")
         
         print(f"[DEBUG] Processing segment with text overlays: {segment_id}")
-        print(f"[DEBUG] Number of overlays to apply: {len(overlays)}")
+        print(f"[DEBUG] Request data: {request}")
+        print(f"[DEBUG] Number of overlays: {len(overlays)}")
+        print(f"[DEBUG] Number of ffmpeg_filters: {len(ffmpeg_filters)}")
+        print(f"[DEBUG] Processing type: {processing_type}")
         
         # Parse segment_id to extract video_id and segment number
         if not segment_id.startswith("seg_"):
@@ -1488,21 +1495,28 @@ async def process_segment_with_text_overlays(segment_id: str, request: dict):
         
         print(f"[DEBUG] Source segment S3 key: {s3_key}")
         
-        # Convert text overlays to FFmpeg format
-        ffmpeg_filters = []
-        for overlay in overlays:
-            try:
-                # Basic FFmpeg drawtext filter generation
-                # This is a simplified version - in production you'd use the full coordinate translation
-                filter_str = f"drawtext=text='{overlay.get('text', '')}':x={overlay.get('x', 0)}:y={overlay.get('y', 0)}:fontsize={overlay.get('fontSize', 24)}:fontcolor={overlay.get('color', '#ffffff')}:enable='between(t,0,30)'"
-                ffmpeg_filters.append(filter_str)
-                print(f"[DEBUG] Generated FFmpeg filter: {filter_str}")
-            except Exception as filter_error:
-                print(f"[ERROR] Failed to generate FFmpeg filter for overlay: {filter_error}")
-                continue
+        # Use provided ffmpeg_filters or generate them from overlays
+        final_ffmpeg_filters = []
         
-        if not ffmpeg_filters:
-            raise HTTPException(status_code=400, detail="No valid text overlays to apply")
+        if ffmpeg_filters:
+            # Use the provided ffmpeg filters
+            final_ffmpeg_filters = ffmpeg_filters
+            print(f"[DEBUG] Using provided FFmpeg filters: {final_ffmpeg_filters}")
+        elif overlays:
+            # Generate FFmpeg filters from overlays
+            for overlay in overlays:
+                try:
+                    # Basic FFmpeg drawtext filter generation
+                    # This is a simplified version - in production you'd use the full coordinate translation
+                    filter_str = f"drawtext=text='{overlay.get('text', '')}':x={overlay.get('x', 0)}:y={overlay.get('y', 0)}:fontsize={overlay.get('fontSize', 24)}:fontcolor={overlay.get('color', '#ffffff')}:enable='between(t,0,30)'"
+                    final_ffmpeg_filters.append(filter_str)
+                    print(f"[DEBUG] Generated FFmpeg filter: {filter_str}")
+                except Exception as filter_error:
+                    print(f"[ERROR] Failed to generate FFmpeg filter for overlay: {filter_error}")
+                    continue
+        
+        if not final_ffmpeg_filters:
+            raise HTTPException(status_code=400, detail="No valid text overlays or FFmpeg filters to apply")
         
         # For now, simulate processing by returning success
         # In production, this would:
@@ -1511,7 +1525,7 @@ async def process_segment_with_text_overlays(segment_id: str, request: dict):
         # 3. Upload the processed segment back to S3
         # 4. Update the video record with the new segment URL
         
-        print(f"[DEBUG] Would apply {len(ffmpeg_filters)} FFmpeg filters to segment")
+        print(f"[DEBUG] Would apply {len(final_ffmpeg_filters)} FFmpeg filters to segment")
         
         # Generate a new S3 key for the processed segment
         processed_s3_key = f"processed-with-text/{video_id}/segment_{segment_number}_with_text.mp4"
@@ -1524,14 +1538,18 @@ async def process_segment_with_text_overlays(segment_id: str, request: dict):
             expiration=3600
         )
         
+        # Generate a mock job_id for the response
+        job_id = f"job_{video_id}_{segment_number}_{uuid.uuid4().hex[:8]}"
+        
         return {
+            "job_id": job_id,
+            "status": "processing",
             "segment_id": segment_id,
-            "status": "processed",
-            "overlays_applied": len(overlays),
-            "ffmpeg_filters": ffmpeg_filters,
+            "overlays_applied": len(overlays) if overlays else 0,
+            "ffmpeg_filters": final_ffmpeg_filters,
             "processed_url": processed_url,
             "processed_s3_key": processed_s3_key,
-            "message": f"Successfully processed segment with {len(overlays)} text overlays"
+            "message": f"Successfully started processing segment with {len(final_ffmpeg_filters)} text overlay filters"
         }
         
     except HTTPException:
