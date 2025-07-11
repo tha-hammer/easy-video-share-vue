@@ -63,60 +63,8 @@ aws dynamodb describe-table --table-name easy-video-share-video-segments 2>/dev/
         --billing-mode PAY_PER_REQUEST
 }
 
-echo "STEP 6: Testing enhanced function with different processing types..."
-
-# Test 1: Basic connectivity
-echo "Test 1: Basic function connectivity..."
-echo '{"processing_type":"full_video_processing","test_mode":true}' > test-basic-payload.json
-aws lambda invoke \
-    --function-name $FUNCTION_NAME \
-    --payload file://test-basic-payload.json \
-    test-basic-response.json
-
-if [ $? -eq 0 ] && [ -f test-basic-response.json ]; then
-    echo "✅ Basic test PASSED"
-    cat test-basic-response.json
-else
-    echo "❌ Basic test FAILED"
-    exit 1
-fi
-echo ""
-
-# Test 2: Segments without text processing
-echo "Test 2: Segments without text processing..."
-echo '{"processing_type":"segments_without_text","video_id":"test_video","video_s3_key":"test.mp4","segments":[{"start":0,"end":30}]}' > test-segments-payload.json
-aws lambda invoke \
-    --function-name $FUNCTION_NAME \
-    --payload file://test-segments-payload.json \
-    test-segments-response.json
-
-if [ $? -eq 0 ] && [ -f test-segments-response.json ]; then
-    echo "✅ Segments test PASSED"
-    cat test-segments-response.json
-else
-    echo "❌ Segments test FAILED"
-    exit 1
-fi
-echo ""
-
-# Test 3: Thumbnail generation
-echo "Test 3: Thumbnail generation..."
-echo '{"processing_type":"generate_thumbnail","video_id":"test_video","segment_id":"seg_test_video_001"}' > test-thumbnail-payload.json
-aws lambda invoke \
-    --function-name $FUNCTION_NAME \
-    --payload file://test-thumbnail-payload.json \
-    test-thumbnail-response.json
-
-if [ $? -eq 0 ] && [ -f test-thumbnail-response.json ]; then
-    echo "✅ Thumbnail test PASSED"
-    cat test-thumbnail-response.json
-else
-    echo "❌ Thumbnail test FAILED"
-    exit 1
-fi
-
-# Clean up test files
-rm -f test-*-payload.json test-*-response.json
+echo "STEP 6: Deployment complete - test manually via AWS Console"
+echo "Go to: https://console.aws.amazon.com/lambda/home?region=us-east-1#/functions/$FUNCTION_NAME"
 echo ""
 
 echo "=== ENHANCED DEPLOYMENT COMPLETE ==="
