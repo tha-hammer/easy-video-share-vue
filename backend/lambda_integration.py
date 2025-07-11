@@ -8,8 +8,9 @@ for video processing, including feature flags and Lambda invocation.
 import boto3
 import json
 import logging
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from config import settings
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +72,7 @@ async def trigger_lambda_processing(request_data: Dict[str, Any]) -> Dict[str, A
             'segment_duration': request_data.get('segment_duration', 30),
             'cutting_options': request_data.get('cutting_options'),
             'text_input': request_data.get('text_input'),
+            'processing_type': 'full_video_processing',
             'source': 'railway'
         }
         
@@ -99,6 +101,162 @@ async def trigger_lambda_processing(request_data: Dict[str, Any]) -> Dict[str, A
     except Exception as e:
         logger.error(f"Failed to trigger Lambda processing: {str(e)}")
         raise Exception(f"Lambda invocation failed: {str(e)}")
+
+async def trigger_segment_processing_without_text(video_id: str, video_s3_key: str, segments: List[Dict], job_id: str = None) -> Dict[str, Any]:
+    """
+    Trigger Phase 1: Process video segments WITHOUT text overlays
+    
+    Args:
+        video_id: The video ID
+        video_s3_key: S3 key of the source video
+        segments: List of segment definitions with start/end times
+        job_id: Optional job ID for tracking
+        
+    Returns:
+        Dict containing Lambda invocation response
+    """
+    try:
+        logger.info(f"Triggering segment processing without text for video: {video_id}")
+        
+        # Prepare payload for Lambda
+        payload = {
+            'processing_type': 'segments_without_text',
+            'video_id': video_id,
+            'video_s3_key': video_s3_key,
+            'segments': segments,
+            'job_id': job_id or f"job_{video_id}_{int(time.time())}",
+            'source': 'railway'
+        }
+        
+        # Get Lambda function name from settings
+        function_name = getattr(settings, 'LAMBDA_FUNCTION_NAME', 'easy-video-share-video-processor')
+        
+        logger.info(f"Invoking Lambda function: {function_name}")
+        logger.info(f"Payload: {json.dumps(payload, default=str)}")
+        
+        # Invoke Lambda function asynchronously
+        response = lambda_client.invoke(
+            FunctionName=function_name,
+            InvocationType='Event',  # Asynchronous invocation
+            Payload=json.dumps(payload)
+        )
+        
+        logger.info(f"Lambda segment processing invocation successful: {response}")
+        
+        return {
+            'status': 'success',
+            'lambda_response': response,
+            'function_name': function_name,
+            'invocation_type': 'async',
+            'processing_type': 'segments_without_text'
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to trigger segment processing: {str(e)}")
+        raise Exception(f"Lambda segment processing invocation failed: {str(e)}")
+
+async def trigger_text_overlay_processing(video_id: str, text_overlays: List[Dict], job_id: str = None) -> Dict[str, Any]:
+    """
+    Trigger Phase 2: Apply text overlays to processed segments
+    
+    Args:
+        video_id: The video ID
+        text_overlays: List of text overlay definitions from Fabric.js
+        job_id: Optional job ID for tracking
+        
+    Returns:
+        Dict containing Lambda invocation response
+    """
+    try:
+        logger.info(f"Triggering text overlay processing for video: {video_id}")
+        
+        # Prepare payload for Lambda
+        payload = {
+            'processing_type': 'apply_text_overlays',
+            'video_id': video_id,
+            'text_overlays': text_overlays,
+            'job_id': job_id or f"job_{video_id}_{int(time.time())}",
+            'source': 'railway'
+        }
+        
+        # Get Lambda function name from settings
+        function_name = getattr(settings, 'LAMBDA_FUNCTION_NAME', 'easy-video-share-video-processor')
+        
+        logger.info(f"Invoking Lambda function: {function_name}")
+        logger.info(f"Payload: {json.dumps(payload, default=str)}")
+        
+        # Invoke Lambda function asynchronously
+        response = lambda_client.invoke(
+            FunctionName=function_name,
+            InvocationType='Event',  # Asynchronous invocation
+            Payload=json.dumps(payload)
+        )
+        
+        logger.info(f"Lambda text overlay processing invocation successful: {response}")
+        
+        return {
+            'status': 'success',
+            'lambda_response': response,
+            'function_name': function_name,
+            'invocation_type': 'async',
+            'processing_type': 'apply_text_overlays'
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to trigger text overlay processing: {str(e)}")
+        raise Exception(f"Lambda text overlay processing invocation failed: {str(e)}")
+
+async def trigger_thumbnail_generation(video_id: str, segment_id: str) -> Dict[str, Any]:
+    """
+    Trigger thumbnail generation for a video segment
+    
+    Args:
+        video_id: The video ID
+        segment_id: The segment ID
+        
+    Returns:
+        Dict containing Lambda invocation response
+    """
+    try:
+        logger.info(f"Triggering thumbnail generation for segment: {segment_id}")
+        
+        # Prepare payload for Lambda
+        payload = {
+            'processing_type': 'generate_thumbnail',
+            'video_id': video_id,
+            'segment_id': segment_id,
+            'source': 'railway'
+        }
+        
+        # Get Lambda function name from settings
+        function_name = getattr(settings, 'LAMBDA_FUNCTION_NAME', 'easy-video-share-video-processor')
+        
+        logger.info(f"Invoking Lambda function: {function_name}")
+        logger.info(f"Payload: {json.dumps(payload, default=str)}")
+        
+        # Invoke Lambda function synchronously for thumbnail generation
+        response = lambda_client.invoke(
+            FunctionName=function_name,
+            InvocationType='RequestResponse',  # Synchronous invocation
+            Payload=json.dumps(payload)
+        )
+        
+        # Parse the response payload
+        response_payload = json.loads(response['Payload'].read())
+        
+        logger.info(f"Lambda thumbnail generation invocation successful: {response_payload}")
+        
+        return {
+            'status': 'success',
+            'lambda_response': response_payload,
+            'function_name': function_name,
+            'invocation_type': 'sync',
+            'processing_type': 'generate_thumbnail'
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to trigger thumbnail generation: {str(e)}")
+        raise Exception(f"Lambda thumbnail generation invocation failed: {str(e)}")
 
 def get_lambda_function_status(function_name: str) -> Dict[str, Any]:
     """
