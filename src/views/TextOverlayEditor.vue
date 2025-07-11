@@ -727,11 +727,18 @@ export default defineComponent({
         currentTextContent.value = newTextObj.text || ''
         currentFontFamily.value = newTextObj.fontFamily || 'Arial'
         currentFontSize.value = newTextObj.fontSize || 24
-        currentFontColor.value = newTextObj.fill || '#000000'
-        currentFontWeight.value = newTextObj.fontWeight || 'normal'
+        currentFontColor.value =
+          (typeof newTextObj.fill === 'string' ? newTextObj.fill : '#000000') || '#000000'
+        currentFontWeight.value =
+          (typeof newTextObj.fontWeight === 'string'
+            ? newTextObj.fontWeight
+            : String(newTextObj.fontWeight)) || 'normal'
         currentFontStyle.value = newTextObj.fontStyle || 'normal'
         hasTextBackground.value = !!newTextObj.backgroundColor
-        currentBackgroundColor.value = newTextObj.backgroundColor || '#ffffff'
+        currentBackgroundColor.value =
+          (typeof newTextObj.backgroundColor === 'string'
+            ? newTextObj.backgroundColor
+            : '#ffffff') || '#ffffff'
         currentOpacity.value = newTextObj.opacity || 1
       }
     })
