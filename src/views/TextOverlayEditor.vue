@@ -1,7 +1,7 @@
 <template>
-  <div class="text-overlay-demo-simple">
+  <div class="text-overlay-editor">
     <!-- Header -->
-    <div class="demo-header mb-6">
+    <div class="editor-header mb-6">
       <h1 class="display-6 fw-bold text-gray-900 mb-2">Text Overlay Editor</h1>
       <p class="text-muted fs-5 mb-0">
         Design text overlays for your video segments using Fabric.js canvas editor
@@ -126,6 +126,78 @@
       </div>
     </div>
 
+    <!-- Video Processing Status -->
+    <div v-if="processingVideo" class="processing-status card mb-6">
+      <div class="card-header">
+        <h3 class="card-title">
+          <KTIcon icon-name="hourglass" icon-class="fs-2x text-primary me-2" />
+          Processing Video with Text Overlays
+        </h3>
+      </div>
+      <div class="card-body">
+        <div class="d-flex align-items-center mb-4">
+          <div class="spinner-border text-primary me-3" role="status">
+            <span class="visually-hidden">Processing...</span>
+          </div>
+          <div class="flex-grow-1">
+            <h6 class="mb-1">{{ processingStatus }}</h6>
+            <div class="progress">
+              <div
+                class="progress-bar progress-bar-striped progress-bar-animated"
+                role="progressbar"
+                :style="{ width: `${processingProgress}%` }"
+                :aria-valuenow="processingProgress"
+                aria-valuemin="0"
+                aria-valuemax="100"
+              >
+                {{ processingProgress }}%
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="alert alert-info">
+          <KTIcon icon-name="information" icon-class="fs-4 me-2" />
+          <strong>Processing your video...</strong>
+          <p class="mb-0 mt-2">
+            This process applies your text overlays to the video using FFmpeg. Processing time
+            depends on video length and complexity of text overlays.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Final Video Player -->
+    <div v-if="processedVideoUrl && !processingVideo" class="final-video card mb-6">
+      <div class="card-header">
+        <h3 class="card-title">
+          <KTIcon icon-name="video" icon-class="fs-2x text-success me-2" />
+          Final Video with Text Overlays
+        </h3>
+        <div class="card-toolbar">
+          <button @click="downloadProcessedVideo" class="btn btn-sm btn-success">
+            <KTIcon icon-name="download" icon-class="fs-5" />
+            Download Video
+          </button>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="final-video-container">
+          <video :src="processedVideoUrl" controls preload="metadata" class="final-video-player">
+            Your browser does not support the video tag.
+          </video>
+        </div>
+        <div class="mt-4 alert alert-success">
+          <KTIcon icon-name="check-circle" icon-class="fs-4 me-2" />
+          <strong>Success!</strong> Your video has been processed with text overlays.
+          <ul class="mt-2 mb-0">
+            <li>Text overlays have been permanently applied to the video</li>
+            <li>The video is ready for download or sharing</li>
+            <li>All text positioning and styling has been preserved</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
     <!-- Main Editor Area -->
     <div v-if="selectedSegment && thumbnailUrl" class="editor-area card">
       <div class="card-header">
@@ -156,10 +228,13 @@
             <button
               @click="saveTextOverlays"
               class="btn btn-sm btn-success"
-              :disabled="!isCanvasReady || textObjectCount === 0"
+              :disabled="!isCanvasReady || textObjectCount === 0 || processingVideo"
             >
-              <KTIcon icon-name="document-save" icon-class="fs-5" />
-              Save Overlays
+              <KTIcon
+                :icon-name="processingVideo ? 'hourglass' : 'document-save'"
+                icon-class="fs-5"
+              />
+              {{ processingVideo ? 'Processing...' : 'Save & Process' }}
             </button>
           </div>
         </div>
@@ -375,7 +450,7 @@ import { useAuthStore } from '@/stores/auth'
 import type { VideoSegment } from '@/stores/segments'
 
 export default defineComponent({
-  name: 'TextOverlayDemoSimple',
+  name: 'TextOverlayEditor',
   setup() {
     // Canvas element reference
     const fabricCanvasEl = ref<HTMLCanvasElement | null>(null)
@@ -386,6 +461,14 @@ export default defineComponent({
     const loadingSegments = ref(true)
     const generatingThumbnail = ref(false)
     const thumbnailUrl = ref<string>('')
+
+    // Video processing state
+    const processingVideo = ref(false)
+    const processingStatus = ref<string>('')
+    const processingJobId = ref<string>('')
+    const processingProgress = ref(0)
+    const processedVideoUrl = ref<string>('')
+    const processingError = ref<string>('')
 
     // Text overlay composable with FFmpeg functions
     const {
@@ -526,8 +609,8 @@ export default defineComponent({
         thumbnailUrl.value,
         1080, // Default video width - could be enhanced to get from segment metadata
         1920, // Default video height - could be enhanced to get from segment metadata
-        1080, // max canvas width
-        1920, // max canvas height
+        540, // max canvas width (scaled down for display)
+        960, // max canvas height (scaled down for display)
       )
     }
 
@@ -653,6 +736,87 @@ export default defineComponent({
       }
     })
 
+    // Poll processing status until complete
+    const pollProcessingStatus = async (jobId: string) => {
+      const maxAttempts = 60 // 5 minutes with 5-second intervals
+      let attempts = 0
+
+      const poll = async () => {
+        try {
+          attempts++
+          const status = await VideoService.getVideoProcessingStatus(jobId)
+
+          console.log(`📊 Processing status check ${attempts}/${maxAttempts}:`, status)
+
+          processingStatus.value = status.status
+          processingProgress.value = status.progress || 0
+
+          if (status.status === 'COMPLETED') {
+            console.log('✅ Video processing completed successfully!')
+            processingVideo.value = false
+
+            // Get the processed video URL
+            try {
+              const videoResult = await VideoService.getProcessedVideoUrl(
+                selectedSegment.value!.segment_id,
+              )
+              processedVideoUrl.value = videoResult.video_url
+
+              console.log('🎥 Processed video URL:', processedVideoUrl.value)
+
+              // Show success notification
+              alert(
+                `🎉 Video Processing Complete!\n\n` +
+                  `✅ Text overlays applied successfully\n` +
+                  `🎥 Final video is ready for preview\n` +
+                  `⏱️ Processing time: ${Math.round((attempts * 5) / 60)} minutes\n\n` +
+                  `You can now preview or download the final video!`,
+              )
+            } catch (urlError) {
+              console.error('❌ Failed to get processed video URL:', urlError)
+              processingError.value = 'Failed to get processed video URL'
+            }
+          } else if (status.status === 'FAILED') {
+            console.error('❌ Video processing failed:', status.error_message)
+            processingVideo.value = false
+            processingError.value = status.error_message || 'Video processing failed'
+
+            alert(
+              `❌ Video Processing Failed\n\n` +
+                `Error: ${status.error_message || 'Unknown error'}\n` +
+                `Please try again or contact support.`,
+            )
+          } else if (attempts >= maxAttempts) {
+            console.error('❌ Processing timeout - exceeded maximum attempts')
+            processingVideo.value = false
+            processingError.value = 'Processing timeout'
+
+            alert(
+              `⏰ Processing Timeout\n\n` +
+                `Video processing is taking longer than expected.\n` +
+                `Please check back later or contact support.`,
+            )
+          } else {
+            // Continue polling
+            setTimeout(poll, 5000) // Poll every 5 seconds
+          }
+        } catch (error) {
+          console.error('❌ Error checking processing status:', error)
+          attempts++
+
+          if (attempts < maxAttempts) {
+            setTimeout(poll, 5000) // Retry after 5 seconds
+          } else {
+            processingVideo.value = false
+            processingError.value = 'Failed to check processing status'
+          }
+        }
+      }
+
+      // Start polling
+      poll()
+    }
+
     // Save text overlays to backend with FFmpeg filter generation
     const saveTextOverlays = async () => {
       if (!canvas.value || !selectedSegment.value) return
@@ -671,7 +835,7 @@ export default defineComponent({
           console.log(`  Filter ${index + 1}: ${filter}`)
         })
 
-        // 🎯 STEP 2: Generate complete FFmpeg command for demonstration
+        // 🎯 STEP 2: Generate complete FFmpeg command for processing
         const ffmpegCommand = generateFFmpegCommand(
           `input_segment_${selectedSegment.value.segment_id}.mp4`,
           `output_segment_${selectedSegment.value.segment_id}.mp4`,
@@ -682,10 +846,8 @@ export default defineComponent({
         console.log(ffmpegCommand)
 
         // 🎯 STEP 3: Extract detailed overlay data for storage
-        const textObjects = canvas.value
-          .getObjects()
-          .filter((obj: object) => (obj as any).type === 'text')
-        const overlays = textObjects.map((obj: object, index: number) => {
+        const textObjects = canvas.value.getObjects().filter((obj: any) => obj.type === 'text')
+        const overlays = textObjects.map((obj: any, index: number) => {
           const textObj = obj
 
           // Use precise coordinate extraction from aCoords
@@ -779,15 +941,41 @@ export default defineComponent({
         console.log('✅ Text overlays and FFmpeg filters saved successfully!')
         console.log('🎯 Ready for video processing with precise coordinate translation')
 
-        // Show success notification with detail
-        alert(
-          `✅ Text Overlays Saved Successfully!\n\n` +
-            `Generated ${ffmpegFilters.length} FFmpeg filter(s)\n` +
-            `Canvas: ${canvasSize.value.width}×${canvasSize.value.height}\n` +
-            `Video: ${videoSize.value.width}×${videoSize.value.height}\n` +
-            `Scale: ${scaleFactors.value.x.toFixed(2)}×${scaleFactors.value.y.toFixed(2)}\n\n` +
-            `Check console for complete FFmpeg commands!`,
-        )
+        // 🎯 STEP 5: Process the video with text overlays
+        console.log('🎬 Starting video processing with text overlays...')
+        processingVideo.value = true
+        processingStatus.value = 'Processing video with text overlays...'
+
+        try {
+          const processResult = await VideoService.processSegmentWithTextOverlays(
+            selectedSegment.value.segment_id,
+            ffmpegFilters,
+            ffmpegCommand,
+          )
+
+          console.log('🎬 Video processing job started:', processResult)
+          processingJobId.value = processResult.job_id
+
+          // Start polling for processing status
+          await pollProcessingStatus(processResult.job_id)
+        } catch (error) {
+          console.error('❌ Video processing failed:', error)
+          processingStatus.value = 'Video processing failed'
+          processingVideo.value = false
+
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+
+          // Show error but also success for overlay saving
+          alert(
+            `✅ Text Overlays Saved Successfully!\n` +
+              `❌ Video Processing Failed: ${errorMessage}\n\n` +
+              `Generated ${ffmpegFilters.length} FFmpeg filter(s)\n` +
+              `Canvas: ${canvasSize.value.width}×${canvasSize.value.height}\n` +
+              `Video: ${videoSize.value.width}×${videoSize.value.height}\n` +
+              `Scale: ${scaleFactors.value.x.toFixed(2)}×${scaleFactors.value.y.toFixed(2)}\n\n` +
+              `Check console for complete FFmpeg commands!`,
+          )
+        }
       } catch (error) {
         console.error('❌ Failed to save text overlays:', error)
         alert('❌ Failed to save text overlays. Check console for details.')
@@ -818,6 +1006,32 @@ export default defineComponent({
       dispose()
     })
 
+    // Download processed video
+    const downloadProcessedVideo = async () => {
+      if (!selectedSegment.value) return
+
+      try {
+        console.log('📥 Downloading processed video...')
+
+        const downloadInfo = await VideoService.downloadProcessedSegment(
+          selectedSegment.value.segment_id,
+        )
+
+        // Create download link
+        const link = document.createElement('a')
+        link.href = downloadInfo.download_url
+        link.download = downloadInfo.filename
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+
+        console.log('📥 Download initiated:', downloadInfo.filename)
+      } catch (error) {
+        console.error('❌ Download failed:', error)
+        alert('Failed to download video. Please try again.')
+      }
+    }
+
     return {
       // Refs
       fabricCanvasEl,
@@ -829,6 +1043,14 @@ export default defineComponent({
       loadingSegments,
       generatingThumbnail,
       thumbnailUrl,
+
+      // Video processing state
+      processingVideo,
+      processingStatus,
+      processingJobId,
+      processingProgress,
+      processedVideoUrl,
+      processingError,
 
       // Canvas state
       canvas,
@@ -860,6 +1082,7 @@ export default defineComponent({
       deleteSelectedText,
       duplicateText,
       saveTextOverlays,
+      downloadProcessedVideo,
       formatDuration,
       formatFileSize,
 
@@ -879,7 +1102,7 @@ export default defineComponent({
 </script>
 
 <style scoped>
-.text-overlay-demo-simple {
+.text-overlay-editor {
   padding: 20px;
 }
 
@@ -987,5 +1210,94 @@ export default defineComponent({
   height: 38px;
   padding: 4px;
   border-radius: 6px;
+}
+
+/* Video processing styles */
+.processing-status {
+  border-left: 4px solid #007bff;
+}
+
+.processing-status .progress {
+  height: 20px;
+  background-color: #f8f9fa;
+}
+
+.processing-status .progress-bar {
+  font-size: 12px;
+  line-height: 20px;
+}
+
+/* Final video player styles */
+.final-video {
+  border-left: 4px solid #28a745;
+}
+
+.final-video-container {
+  display: flex;
+  justify-content: center;
+  background: #000;
+  border-radius: 8px;
+  padding: 20px;
+}
+
+.final-video-player {
+  max-width: 100%;
+  max-height: 500px;
+  border-radius: 8px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+/* Processing status animations */
+.processing-status .spinner-border {
+  width: 24px;
+  height: 24px;
+}
+
+.processing-status .alert {
+  border-left: 4px solid #17a2b8;
+}
+
+/* Success alert styling */
+.final-video .alert-success {
+  border-left: 4px solid #28a745;
+}
+
+.final-video .alert-success ul {
+  padding-left: 20px;
+}
+
+.final-video .alert-success li {
+  margin-bottom: 4px;
+}
+
+/* Button state styles */
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn.processing {
+  position: relative;
+  overflow: hidden;
+}
+
+.btn.processing::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+  animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    left: -100%;
+  }
+  100% {
+    left: 100%;
+  }
 }
 </style>

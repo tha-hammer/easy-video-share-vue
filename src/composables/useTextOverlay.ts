@@ -12,9 +12,9 @@ export function useTextOverlay() {
   const isCanvasReady = ref(false)
   const activeTextObject = ref<FabricText | null>(null)
 
-  // Canvas and video dimensions
-  const canvasSize = ref({ width: 800, height: 450 })
-  const videoSize = ref({ width: 1920, height: 1080 })
+  // Canvas and video dimensions (vertical format)
+  const canvasSize = ref({ width: 540, height: 960 })
+  const videoSize = ref({ width: 1080, height: 1920 })
   const scaleFactors = computed(() => ({
     x: videoSize.value.width / canvasSize.value.width,
     y: videoSize.value.height / canvasSize.value.height,
@@ -36,10 +36,10 @@ export function useTextOverlay() {
   const initializeCanvas = async (
     canvasEl: HTMLCanvasElement,
     backgroundImageUrl: string,
-    videoWidth: number = 1920,
-    videoHeight: number = 1080,
-    maxCanvasWidth: number = 800,
-    maxCanvasHeight: number = 450,
+    videoWidth: number = 1080,
+    videoHeight: number = 1920,
+    maxCanvasWidth: number = 540,
+    maxCanvasHeight: number = 960,
   ) => {
     // Prevent multiple simultaneous initializations
     if (isInitializing.value) {

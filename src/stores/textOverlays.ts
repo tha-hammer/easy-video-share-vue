@@ -314,8 +314,8 @@ export const useTextOverlayStore = defineStore('textOverlays', () => {
       id: `overlay_${Date.now()}`,
       segmentId,
       text,
-      x: Math.round(template.defaultX * 1920), // Assume 1920px width
-      y: Math.round(template.defaultY * 1080), // Assume 1080px height
+      x: Math.round(template.defaultX * 1080), // Assume 1920px width
+      y: Math.round(template.defaultY * 1920), // Assume 1080px height
       width: 200,
       height: 50,
       fontSize: template.fontSize,

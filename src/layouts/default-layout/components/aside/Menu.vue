@@ -52,11 +52,11 @@
       </div>
 
       <div class="menu-item">
-        <router-link to="/text-overlay-demo" class="menu-link" active-class="active">
+        <router-link to="/text-overlay-editor" class="menu-link" active-class="active">
           <span class="menu-icon">
             <KTIcon icon-name="text" icon-class="fs-2" />
           </span>
-          <span class="menu-title">Text Overlay Demo</span>
+          <span class="menu-title">Text Overlay Editor</span>
         </router-link>
       </div>
 
