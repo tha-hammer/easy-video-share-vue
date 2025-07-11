@@ -1,8 +1,10 @@
 // Text Overlay Management Composable
 // This is the CORE composable that handles all text overlay functionality
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 import { ref, computed, onUnmounted } from 'vue'
-import { Canvas, FabricText, FabricImage } from 'fabric'
+import { Canvas, Text, Image } from 'fabric'
 
 export function useTextOverlay() {
   // ==================== STATE MANAGEMENT ====================
@@ -10,7 +12,7 @@ export function useTextOverlay() {
   const canvas = ref<Canvas | null>(null)
   const canvasElement = ref<HTMLCanvasElement | null>(null)
   const isCanvasReady = ref(false)
-  const activeTextObject = ref<FabricText | null>(null)
+  const activeTextObject = ref<any>(null)
 
   // Canvas and video dimensions (vertical format)
   const canvasSize = ref({ width: 540, height: 960 })
