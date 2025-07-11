@@ -1,17 +1,17 @@
 <template>
-  <div class="text-overlay-demo">
+  <div class="text-overlay-architecture">
     <!-- Header Section -->
-    <div class="demo-header mb-8">
+    <div class="architecture-header mb-8">
       <div class="row align-items-center">
         <div class="col-lg-8">
-          <h1 class="display-6 fw-bold text-gray-900 mb-2">Text Overlay Editor Demo</h1>
+          <h1 class="display-6 fw-bold text-gray-900 mb-2">Text Overlay System Architecture</h1>
           <p class="text-muted fs-5 mb-0">
             Interactive text overlay system for video segments using Fabric.js and FFmpeg
             integration
           </p>
         </div>
         <div class="col-lg-4 text-end">
-          <div class="demo-stats">
+          <div class="system-stats">
             <div class="stat-item">
               <span class="stat-value">{{ totalOverlayCount }}</span>
               <span class="stat-label">Total Overlays</span>
@@ -28,7 +28,7 @@
     <!-- Control Panel -->
     <div class="control-panel card mb-6">
       <div class="card-header">
-        <h3 class="card-title">Demo Controls</h3>
+        <h3 class="card-title">System Controls</h3>
         <div class="card-toolbar">
           <button
             @click="loadSampleData"
@@ -303,7 +303,7 @@ interface VideoSegment {
 }
 
 export default defineComponent({
-  name: 'TextOverlayDemo',
+  name: 'TextOverlayArchitecture',
   components: {
     SegmentTextEditor,
   },
@@ -318,7 +318,7 @@ export default defineComponent({
     const exportedFilters = ref<FFmpegTextFilter[]>([])
     const statusMessage = ref<string>('')
 
-    // Sample data for demo
+    // Sample data for architecture
     const availableSegments = ref<VideoSegment[]>([
       {
         id: 'segment_1',
@@ -439,12 +439,12 @@ export default defineComponent({
     }
 
     const loadSampleData = () => {
-      // Load some sample text overlays for demo
+      // Load some sample text overlays for architecture
       const sampleOverlays: TextOverlay[] = [
         {
           id: 'sample_1',
           segmentId: 'segment_1',
-          text: 'Welcome to our demo!',
+          text: 'Welcome to our system!',
           x: 100,
           y: 100,
           width: 200,
@@ -594,7 +594,7 @@ export default defineComponent({
     // ==================== LIFECYCLE ====================
 
     onMounted(() => {
-      // Load sample data on mount for demo purposes
+      // Load sample data on mount for architecture
       loadSampleData()
     })
 
@@ -662,11 +662,11 @@ export default defineComponent({
 </script>
 
 <style scoped>
-.text-overlay-demo {
+.text-overlay-architecture {
   padding: 24px;
 }
 
-.demo-header {
+.architecture-header {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
   padding: 32px;
@@ -674,7 +674,7 @@ export default defineComponent({
   margin-bottom: 24px;
 }
 
-.demo-stats {
+.system-stats {
   display: flex;
   gap: 24px;
 }
@@ -749,11 +749,11 @@ export default defineComponent({
 
 /* Responsive adjustments */
 @media (max-width: 768px) {
-  .text-overlay-demo {
+  .text-overlay-architecture {
     padding: 16px;
   }
 
-  .demo-stats {
+  .system-stats {
     flex-direction: column;
     gap: 12px;
   }

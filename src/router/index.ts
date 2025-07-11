@@ -107,12 +107,12 @@ const routes: Array<RouteRecordRaw> = [
         },
       },
       {
-        path: '/text-overlay-demo',
-        name: 'text-overlay-demo',
-        component: () => import('@/views/TextOverlayDemoSimple.vue'),
+        path: '/text-overlay-editor',
+        name: 'text-overlay-editor',
+        component: () => import('@/views/TextOverlayEditor.vue'),
         meta: {
-          pageTitle: 'Text Overlay Demo',
-          breadcrumbs: ['Videos', 'Text Overlay Demo'],
+          pageTitle: 'Text Overlay Editor',
+          breadcrumbs: ['Videos', 'Text Overlay'],
         },
       },
     ],

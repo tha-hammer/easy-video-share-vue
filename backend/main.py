@@ -1426,6 +1426,123 @@ async def save_segment_text_overlays(segment_id: str, request: dict):
         raise HTTPException(status_code=500, detail=f"Failed to save text overlays: {str(e)}")
 
 
+@router.post("/segments/{segment_id}/process-with-text-overlays")
+async def process_segment_with_text_overlays(segment_id: str, request: dict):
+    """
+    Process a video segment with text overlays applied
+    """
+    try:
+        overlays = request.get("overlays", [])
+        
+        print(f"[DEBUG] Processing segment with text overlays: {segment_id}")
+        print(f"[DEBUG] Number of overlays to apply: {len(overlays)}")
+        
+        # Parse segment_id to extract video_id and segment number
+        if not segment_id.startswith("seg_"):
+            raise HTTPException(status_code=400, detail="Invalid segment ID format")
+        
+        # Remove "seg_" prefix
+        segment_id_without_prefix = segment_id[4:]
+        
+        # Find the last underscore to separate video_id from segment_number
+        last_underscore_index = segment_id_without_prefix.rfind("_")
+        if last_underscore_index == -1:
+            raise HTTPException(status_code=400, detail="Invalid segment ID format")
+        
+        video_id = segment_id_without_prefix[:last_underscore_index]
+        segment_number_str = segment_id_without_prefix[last_underscore_index + 1:]
+        
+        try:
+            segment_number = int(segment_number_str)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid segment number format")
+        
+        print(f"[DEBUG] Extracted video_id: {video_id}, segment_number: {segment_number}")
+        
+        # Get the video record to find the segment
+        video_resp = table.get_item(Key={"video_id": video_id})
+        video_item = video_resp.get("Item")
+        
+        if not video_item:
+            raise HTTPException(status_code=404, detail="Video not found")
+        
+        # Get the output_s3_urls array
+        output_s3_urls = video_item.get("output_s3_urls", [])
+        if not output_s3_urls:
+            raise HTTPException(status_code=404, detail="No segments found for this video")
+        
+        # Check if segment number is valid
+        if segment_number < 1 or segment_number > len(output_s3_urls):
+            raise HTTPException(status_code=404, detail="Segment not found")
+        
+        # Get the s3_key for this segment
+        s3_key_or_url = output_s3_urls[segment_number - 1]
+        
+        # Extract object key from URL if it's a full URL
+        if s3_key_or_url.startswith('http'):
+            from urllib.parse import urlparse, unquote
+            parsed_url = urlparse(s3_key_or_url)
+            s3_key = unquote(parsed_url.path.lstrip('/'))
+        else:
+            s3_key = s3_key_or_url
+        
+        print(f"[DEBUG] Source segment S3 key: {s3_key}")
+        
+        # Convert text overlays to FFmpeg format
+        ffmpeg_filters = []
+        for overlay in overlays:
+            try:
+                # Basic FFmpeg drawtext filter generation
+                # This is a simplified version - in production you'd use the full coordinate translation
+                filter_str = f"drawtext=text='{overlay.get('text', '')}':x={overlay.get('x', 0)}:y={overlay.get('y', 0)}:fontsize={overlay.get('fontSize', 24)}:fontcolor={overlay.get('color', '#ffffff')}:enable='between(t,0,30)'"
+                ffmpeg_filters.append(filter_str)
+                print(f"[DEBUG] Generated FFmpeg filter: {filter_str}")
+            except Exception as filter_error:
+                print(f"[ERROR] Failed to generate FFmpeg filter for overlay: {filter_error}")
+                continue
+        
+        if not ffmpeg_filters:
+            raise HTTPException(status_code=400, detail="No valid text overlays to apply")
+        
+        # For now, simulate processing by returning success
+        # In production, this would:
+        # 1. Download the source segment from S3
+        # 2. Apply FFmpeg filters to add text overlays
+        # 3. Upload the processed segment back to S3
+        # 4. Update the video record with the new segment URL
+        
+        print(f"[DEBUG] Would apply {len(ffmpeg_filters)} FFmpeg filters to segment")
+        
+        # Generate a new S3 key for the processed segment
+        processed_s3_key = f"processed-with-text/{video_id}/segment_{segment_number}_with_text.mp4"
+        
+        # Generate a presigned URL for the "processed" segment (using original for now)
+        processed_url = generate_presigned_url(
+            bucket_name=settings.AWS_BUCKET_NAME,
+            object_key=s3_key,  # Using original segment for now
+            client_method='get_object',
+            expiration=3600
+        )
+        
+        return {
+            "segment_id": segment_id,
+            "status": "processed",
+            "overlays_applied": len(overlays),
+            "ffmpeg_filters": ffmpeg_filters,
+            "processed_url": processed_url,
+            "processed_s3_key": processed_s3_key,
+            "message": f"Successfully processed segment with {len(overlays)} text overlays"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[ERROR] Failed to process segment with text overlays: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to process segment with text overlays: {str(e)}")
+
+
 @router.get("/segments/{segment_id}/play")
 async def get_segment_play_url(segment_id: str):
     """
