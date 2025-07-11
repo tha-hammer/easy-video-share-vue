@@ -8,6 +8,8 @@ import shutil
 import time
 from datetime import datetime, timezone
 from decimal import Decimal
+from typing import List, Dict, Optional
+import uuid
 
 # Configure logging for CloudWatch
 logging.basicConfig(level=logging.INFO)
@@ -15,58 +17,570 @@ logger = logging.getLogger(__name__)
 
 def lambda_handler(event, context):
     """
-    Production Lambda handler for video processing
+    Enhanced Lambda handler for two-phase video processing
     """
     logger.info("=== VIDEO PROCESSING LAMBDA STARTED ===")
     logger.info(f"Lambda invoked with event: {json.dumps(event)}")
     
     try:
-        # Extract parameters from event
-        s3_bucket = event.get('s3_bucket')
-        s3_key = event.get('s3_key')
-        job_id = event.get('job_id')
-        cutting_options = event.get('cutting_options')
-        text_input = event.get('text_input')
-        user_id = event.get('user_id', 'anonymous')
-        segment_duration = event.get('segment_duration', 30)
-
-        if not all([s3_bucket, s3_key, job_id]):
-            raise ValueError("Missing required parameters: s3_bucket, s3_key, job_id")
-
-        # Update job status to PROCESSING
-        update_job_status(job_id, "PROCESSING", "downloading_video", 5.0)
-
-        # Process video
-        result = process_video(s3_bucket, s3_key, job_id, cutting_options, text_input, user_id, segment_duration)
-
-        # Update job status to COMPLETED
-        update_job_status(job_id, "COMPLETED", "completed", 100.0, 
-                         output_s3_keys=result['output_s3_keys'],
-                         segments_created=len(result['output_s3_keys']),
-                         processing_duration=result['processing_duration'])
-
-        return {
-            'statusCode': 200,
-            'body': json.dumps({
-                'message': 'Video processing completed successfully',
-                'job_id': job_id,
-                'segments_created': len(result['output_s3_keys']),
-                'processing_duration': result['processing_duration']
-            })
-        }
-
+        # Determine processing type
+        processing_type = event.get('processing_type', 'full_video_processing')
+        
+        if processing_type == 'segments_without_text':
+            return process_segments_without_text(event, context)
+        elif processing_type == 'apply_text_overlays':
+            return apply_text_overlays_to_segments(event, context)
+        elif processing_type == 'generate_thumbnail':
+            return generate_thumbnail(event, context)
+        elif processing_type == 'full_video_processing':
+            return process_full_video(event, context)
+        else:
+            raise ValueError(f"Unknown processing type: {processing_type}")
+            
     except Exception as e:
         logger.error(f"Error processing video: {str(e)}")
-        if 'job_id' in locals():
-            update_job_status(job_id, "FAILED", "failed", 0.0, error_message=str(e))
+        if 'job_id' in event:
+            update_job_status(event['job_id'], "FAILED", "failed", 0.0, error_message=str(e))
 
         return {
             'statusCode': 500,
             'body': json.dumps({
                 'error': str(e),
-                'job_id': job_id if 'job_id' in locals() else None
+                'job_id': event.get('job_id')
             })
         }
+
+def process_segments_without_text(event, context):
+    """
+    Phase 1: Process video segments WITHOUT text overlays
+    """
+    logger.info("=== PROCESSING SEGMENTS WITHOUT TEXT OVERLAYS ===")
+    
+    try:
+        video_s3_key = event['video_s3_key']
+        segments = event['segments']
+        video_id = event['video_id']
+        job_id = event.get('job_id', f"job_{video_id}_{int(time.time())}")
+        
+        # Download original video
+        local_video = download_from_s3(video_s3_key)
+        
+        processed_segments = []
+        temp_storage_paths = []
+        
+        # Update job status
+        update_job_status(job_id, "PROCESSING", "processing_segments", 10.0)
+        
+        total_segments = len(segments)
+        for i, segment in enumerate(segments):
+            logger.info(f"Processing segment {i+1}/{total_segments}")
+            
+            start_time = segment['start']
+            duration = segment['end'] - segment['start']
+            
+            # Process segment without text
+            temp_output = f"/tmp/segment_{i}_{video_id}.mp4"
+            
+            success = process_video_segment(local_video, temp_output, start_time, duration)
+            
+            if not success:
+                logger.error(f"Failed to process segment {i+1}")
+                continue
+            
+            # Check remaining execution time
+            remaining_time = context.get_remaining_time_in_millis()
+            
+            if remaining_time < 60000:  # Less than 1 minute remaining
+                # Upload to S3 for later processing
+                s3_key = f"temp-segments/{video_id}/segment_{i}.mp4"
+                upload_url = upload_to_s3(temp_output, s3_key)
+                
+                processed_segments.append({
+                    'segment_id': f"seg_{video_id}_{i+1:03d}",
+                    'segment_number': i + 1,
+                    'start_time': start_time,
+                    'duration': duration,
+                    'storage_type': 's3',
+                    'location': s3_key,
+                    'temp_segment_path': None,
+                    'raw_segment_ready': True,
+                    'thumbnail_generated': False
+                })
+                
+                # Clean up temp file
+                os.remove(temp_output)
+            else:
+                # Keep in Lambda temp storage
+                processed_segments.append({
+                    'segment_id': f"seg_{video_id}_{i+1:03d}",
+                    'segment_number': i + 1,
+                    'start_time': start_time,
+                    'duration': duration,
+                    'storage_type': 'lambda_temp',
+                    'location': None,
+                    'temp_segment_path': temp_output,
+                    'raw_segment_ready': True,
+                    'thumbnail_generated': False
+                })
+                temp_storage_paths.append(temp_output)
+            
+            # Update progress
+            progress = 10.0 + (i + 1) / total_segments * 80.0
+            update_job_status(job_id, "PROCESSING", "processing_segments", progress)
+        
+        # Update DynamoDB with segment status
+        update_segments_in_dynamodb(video_id, processed_segments)
+        
+        # Final status update
+        update_job_status(job_id, "SEGMENTS_READY", "segments_ready", 90.0)
+        
+        return {
+            'statusCode': 200,
+            'body': json.dumps({
+                'message': 'Segments processed successfully',
+                'job_id': job_id,
+                'segments': processed_segments,
+                'temp_storage_count': len(temp_storage_paths),
+                's3_storage_count': len([s for s in processed_segments if s['storage_type'] == 's3'])
+            })
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in segment processing: {str(e)}")
+        raise e
+
+def apply_text_overlays_to_segments(event, context):
+    """
+    Phase 2: Apply text overlays to processed segments
+    """
+    logger.info("=== APPLYING TEXT OVERLAYS TO SEGMENTS ===")
+    
+    try:
+        video_id = event['video_id']
+        text_overlays = event['text_overlays']  # From Fabric.js
+        job_id = event.get('job_id', f"job_{video_id}_{int(time.time())}")
+        
+        # Get all segments for this video
+        segments = get_segments_from_dynamodb(video_id)
+        
+        processed_segments = []
+        
+        update_job_status(job_id, "PROCESSING", "applying_text_overlays", 10.0)
+        
+        total_segments = len(segments)
+        for i, segment in enumerate(segments):
+            segment_id = segment['segment_id']
+            segment_overlays = [o for o in text_overlays if o['segment_id'] == segment_id]
+            
+            if not segment_overlays:
+                logger.info(f"No text overlays for segment {segment_id}")
+                continue
+            
+            # Get segment video
+            if segment['storage_type'] == 'lambda_temp':
+                input_path = segment['temp_segment_path']
+            else:
+                input_path = download_from_s3(segment['location'])
+            
+            # Apply text overlays
+            output_path = f"/tmp/final_segment_{segment_id}.mp4"
+            success = apply_text_overlays_ffmpeg(input_path, output_path, segment_overlays)
+            
+            if success:
+                # Upload final segment
+                final_s3_key = f"processed/{video_id}/segment_{segment['segment_number']}_final.mp4"
+                final_url = upload_to_s3(output_path, final_s3_key)
+                
+                processed_segments.append({
+                    'segment_id': segment_id,
+                    'final_url': final_url,
+                    'text_overlays_applied': True
+                })
+                
+                # Clean up temp file
+                os.remove(output_path)
+            
+            # Update progress
+            progress = 10.0 + (i + 1) / total_segments * 80.0
+            update_job_status(job_id, "PROCESSING", "applying_text_overlays", progress)
+        
+        # Final status update
+        update_job_status(job_id, "COMPLETED", "text_overlays_applied", 100.0)
+        
+        return {
+            'statusCode': 200,
+            'body': json.dumps({
+                'message': 'Text overlays applied successfully',
+                'job_id': job_id,
+                'processed_segments': processed_segments
+            })
+        }
+        
+    except Exception as e:
+        logger.error(f"Error applying text overlays: {str(e)}")
+        raise e
+
+def generate_thumbnail(event, context):
+    """
+    Generate thumbnail from segment for text overlay design
+    """
+    logger.info("=== GENERATING SEGMENT THUMBNAIL ===")
+    
+    try:
+        segment_id = event['segment_id']
+        video_id = event['video_id']
+        
+        # Get segment info from DynamoDB
+        segment_info = get_segment_from_dynamodb(segment_id)
+        
+        if not segment_info:
+            raise Exception(f"Segment {segment_id} not found")
+        
+        # Get video path
+        if segment_info['storage_type'] == 'lambda_temp':
+            video_path = segment_info['temp_segment_path']
+        else:
+            video_path = download_from_s3(segment_info['location'])
+        
+        # Generate thumbnail at midpoint
+        thumbnail_path = f"/tmp/thumbnail_{segment_id}.jpg"
+        
+        ffmpeg_path, ffprobe_path = find_ffmpeg_binaries()
+        if not ffmpeg_path:
+            raise Exception("FFmpeg not found")
+        
+        # Extract frame at midpoint
+        midpoint = segment_info['duration'] / 2
+        cmd = [
+            ffmpeg_path, '-i', video_path,
+            '-ss', str(midpoint),
+            '-vframes', '1',
+            '-q:v', '2',
+            '-y', thumbnail_path
+        ]
+        
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            raise Exception(f"Thumbnail generation failed: {result.stderr}")
+        
+        # Upload thumbnail to S3
+        thumbnail_s3_key = f"thumbnails/{video_id}/segment_{segment_info['segment_number']}.jpg"
+        thumbnail_url = upload_to_s3(thumbnail_path, thumbnail_s3_key)
+        
+        # Update segment metadata
+        update_segment_thumbnail_in_dynamodb(segment_id, thumbnail_s3_key)
+        
+        # Clean up temp file
+        os.remove(thumbnail_path)
+        
+        return {
+            'statusCode': 200,
+            'body': json.dumps({
+                'thumbnail_url': thumbnail_url,
+                'segment_id': segment_id,
+                'thumbnail_s3_key': thumbnail_s3_key
+            })
+        }
+        
+    except Exception as e:
+        logger.error(f"Error generating thumbnail: {str(e)}")
+        raise e
+
+def process_full_video(event, context):
+    """
+    Original full video processing functionality (for backward compatibility)
+    """
+    logger.info("=== PROCESSING FULL VIDEO (LEGACY) ===")
+    
+    # Extract parameters from event
+    s3_bucket = event.get('s3_bucket')
+    s3_key = event.get('s3_key')
+    job_id = event.get('job_id')
+    cutting_options = event.get('cutting_options')
+    text_input = event.get('text_input')
+    user_id = event.get('user_id', 'anonymous')
+    segment_duration = event.get('segment_duration', 30)
+
+    if not all([s3_bucket, s3_key, job_id]):
+        raise ValueError("Missing required parameters: s3_bucket, s3_key, job_id")
+
+    # Update job status to PROCESSING
+    update_job_status(job_id, "PROCESSING", "downloading_video", 5.0)
+
+    # Process video
+    result = process_video(s3_bucket, s3_key, job_id, cutting_options, text_input, user_id, segment_duration)
+
+    # Update job status to COMPLETED
+    update_job_status(job_id, "COMPLETED", "completed", 100.0, 
+                     output_s3_keys=result['output_s3_keys'],
+                     segments_created=len(result['output_s3_keys']),
+                     processing_duration=result['processing_duration'])
+
+    return {
+        'statusCode': 200,
+        'body': json.dumps({
+            'message': 'Video processing completed successfully',
+            'job_id': job_id,
+            'segments_created': len(result['output_s3_keys']),
+            'processing_duration': result['processing_duration']
+        })
+    }
+
+def apply_text_overlays_ffmpeg(input_path: str, output_path: str, text_overlays: List[dict]) -> bool:
+    """
+    Apply text overlays using FFmpeg with proper filter chaining
+    """
+    logger.info(f"Applying {len(text_overlays)} text overlays")
+    
+    try:
+        if not text_overlays:
+            # No text overlays, just copy file
+            shutil.copy2(input_path, output_path)
+            return True
+        
+        ffmpeg_path, _ = find_ffmpeg_binaries()
+        if not ffmpeg_path:
+            raise Exception("FFmpeg not found")
+        
+        # Build filter complex for multiple text overlays
+        filters = []
+        for i, overlay in enumerate(text_overlays):
+            # Convert overlay to FFmpeg drawtext filter
+            filter_str = convert_overlay_to_ffmpeg(overlay)
+            if i == 0:
+                filters.append(f"[0:v]{filter_str}[v{i+1}]")
+            else:
+                filters.append(f"[v{i}]{filter_str}[v{i+1}]")
+        
+        # Use the last video stream as output
+        final_output = f"[v{len(text_overlays)}]"
+        
+        cmd = [
+            ffmpeg_path, '-i', input_path,
+            '-filter_complex', ';'.join(filters),
+            '-map', final_output,
+            '-map', '0:a',
+            '-c:a', 'copy',
+            '-y', output_path
+        ]
+        
+        logger.info(f"Running FFmpeg command: {' '.join(cmd)}")
+        
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            logger.error(f"FFmpeg text overlay failed: {result.stderr}")
+            return False
+        
+        return True
+        
+    except Exception as e:
+        logger.error(f"Error applying text overlays: {str(e)}")
+        return False
+
+def convert_overlay_to_ffmpeg(overlay: dict) -> str:
+    """
+    Convert text overlay object to FFmpeg drawtext filter
+    """
+    # Extract overlay properties
+    text = overlay.get('text', '').replace("'", "\\'").replace(":", "\\:")
+    x = overlay.get('x', 0)
+    y = overlay.get('y', 0)
+    font_size = overlay.get('fontSize', 24)
+    color = overlay.get('color', '#ffffff')
+    
+    # Build drawtext filter
+    filter_parts = [
+        f"drawtext=text='{text}'",
+        f"x={x}",
+        f"y={y}",
+        f"fontsize={font_size}",
+        f"fontcolor={color}",
+        "enable='between(t,0,30)'"
+    ]
+    
+    return ':'.join(filter_parts)
+
+def download_from_s3(s3_key: str) -> str:
+    """
+    Download file from S3 to local temp directory
+    """
+    logger.info(f"Downloading from S3: {s3_key}")
+    
+    s3_client = boto3.client('s3')
+    local_path = f"/tmp/{os.path.basename(s3_key)}"
+    
+    try:
+        s3_client.download_file(
+            Bucket=os.environ.get('S3_BUCKET', 'easy-video-share-bucket'),
+            Key=s3_key,
+            Filename=local_path
+        )
+        logger.info(f"Downloaded to: {local_path}")
+        return local_path
+    except Exception as e:
+        logger.error(f"Error downloading from S3: {str(e)}")
+        raise e
+
+def upload_to_s3(local_path: str, s3_key: str) -> str:
+    """
+    Upload file to S3 and return presigned URL
+    """
+    logger.info(f"Uploading to S3: {s3_key}")
+    
+    s3_client = boto3.client('s3')
+    bucket = os.environ.get('S3_BUCKET', 'easy-video-share-bucket')
+    
+    try:
+        s3_client.upload_file(local_path, bucket, s3_key)
+        
+        # Generate presigned URL
+        url = s3_client.generate_presigned_url(
+            'get_object',
+            Params={'Bucket': bucket, 'Key': s3_key},
+            ExpiresIn=3600
+        )
+        
+        logger.info(f"Uploaded successfully, URL: {url}")
+        return url
+    except Exception as e:
+        logger.error(f"Error uploading to S3: {str(e)}")
+        raise e
+
+def update_segments_in_dynamodb(video_id: str, segments: List[dict]):
+    """
+    Update segment metadata in DynamoDB
+    """
+    logger.info(f"Updating segments in DynamoDB for video: {video_id}")
+    
+    try:
+        dynamodb = boto3.resource('dynamodb')
+        table = dynamodb.Table('video_segments')
+        
+        for segment in segments:
+            table.put_item(Item={
+                'video_id': video_id,
+                'segment_id': segment['segment_id'],
+                'segment_number': segment['segment_number'],
+                'start_time': Decimal(str(segment['start_time'])),
+                'duration': Decimal(str(segment['duration'])),
+                'storage_type': segment['storage_type'],
+                'location': segment.get('location'),
+                'temp_segment_path': segment.get('temp_segment_path'),
+                'raw_segment_ready': segment['raw_segment_ready'],
+                'thumbnail_generated': segment['thumbnail_generated'],
+                'created_at': datetime.now(timezone.utc).isoformat()
+            })
+        
+        logger.info(f"Updated {len(segments)} segments in DynamoDB")
+        
+    except Exception as e:
+        logger.error(f"Error updating segments in DynamoDB: {str(e)}")
+        raise e
+
+def get_segments_from_dynamodb(video_id: str) -> List[dict]:
+    """
+    Get segments from DynamoDB for a video
+    """
+    logger.info(f"Getting segments from DynamoDB for video: {video_id}")
+    
+    try:
+        dynamodb = boto3.resource('dynamodb')
+        table = dynamodb.Table('video_segments')
+        
+        response = table.scan(
+            FilterExpression='video_id = :video_id',
+            ExpressionAttributeValues={':video_id': video_id}
+        )
+        
+        segments = response.get('Items', [])
+        logger.info(f"Found {len(segments)} segments")
+        return segments
+        
+    except Exception as e:
+        logger.error(f"Error getting segments from DynamoDB: {str(e)}")
+        raise e
+
+def get_segment_from_dynamodb(segment_id: str) -> Optional[dict]:
+    """
+    Get a specific segment from DynamoDB
+    """
+    logger.info(f"Getting segment from DynamoDB: {segment_id}")
+    
+    try:
+        dynamodb = boto3.resource('dynamodb')
+        table = dynamodb.Table('video_segments')
+        
+        response = table.get_item(Key={'segment_id': segment_id})
+        
+        segment = response.get('Item')
+        if segment:
+            logger.info(f"Found segment: {segment_id}")
+        else:
+            logger.warning(f"Segment not found: {segment_id}")
+        
+        return segment
+        
+    except Exception as e:
+        logger.error(f"Error getting segment from DynamoDB: {str(e)}")
+        raise e
+
+def update_segment_thumbnail_in_dynamodb(segment_id: str, thumbnail_s3_key: str):
+    """
+    Update segment thumbnail info in DynamoDB
+    """
+    logger.info(f"Updating thumbnail for segment: {segment_id}")
+    
+    try:
+        dynamodb = boto3.resource('dynamodb')
+        table = dynamodb.Table('video_segments')
+        
+        table.update_item(
+            Key={'segment_id': segment_id},
+            UpdateExpression='SET thumbnail_s3_key = :thumbnail_s3_key, thumbnail_generated = :thumbnail_generated',
+            ExpressionAttributeValues={
+                ':thumbnail_s3_key': thumbnail_s3_key,
+                ':thumbnail_generated': True
+            }
+        )
+        
+        logger.info(f"Updated thumbnail for segment: {segment_id}")
+        
+    except Exception as e:
+        logger.error(f"Error updating segment thumbnail: {str(e)}")
+        raise e
+
+def process_video_segment(input_path: str, output_path: str, start_time: float, duration: float) -> bool:
+    """
+    Process a single video segment without text overlays
+    """
+    logger.info(f"Processing segment: {start_time}s for {duration}s")
+    
+    try:
+        ffmpeg_path, _ = find_ffmpeg_binaries()
+        if not ffmpeg_path:
+            raise Exception("FFmpeg not found")
+        
+        cmd = [
+            ffmpeg_path, '-i', input_path,
+            '-ss', str(start_time),
+            '-t', str(duration),
+            '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '30',
+            '-c:a', 'aac', '-b:a', '64k',
+            '-movflags', '+faststart',
+            '-y', output_path
+        ]
+        
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            logger.error(f"FFmpeg segment processing failed: {result.stderr}")
+            return False
+        
+        logger.info(f"Segment processed successfully: {output_path}")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Error processing segment: {str(e)}")
+        return False
 
 def find_ffmpeg_binaries():
     """
@@ -194,36 +708,6 @@ def get_video_duration(video_path, ffprobe_path=None, ffmpeg_path=None):
     
     raise Exception("Could not determine video duration")
 
-def process_video_segment(input_path, output_path, start_time, duration, ffmpeg_path):
-    """
-    Process a single video segment with optimized settings
-    """
-    logger.info(f"Processing segment: {start_time}s to {start_time + duration}s")
-    
-    # Use optimized settings for faster processing
-    cmd = [
-        ffmpeg_path, '-i', input_path,
-        '-ss', str(start_time), '-t', str(duration),
-        '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '30',  # Faster, lower quality
-        '-c:a', 'aac', '-b:a', '64k',  # Lower audio bitrate
-        '-movflags', '+faststart',  # Optimize for streaming
-        '-y', output_path
-    ]
-    
-    logger.info(f"Running FFmpeg: {' '.join(cmd)}")
-    
-    # Use longer timeout for video processing
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)  # 5 minutes per segment
-    
-    if result.returncode == 0 and os.path.exists(output_path):
-        file_size = os.path.getsize(output_path)
-        logger.info(f"✅ Segment created: {output_path} ({file_size} bytes)")
-        return True
-    else:
-        logger.error(f"❌ FFmpeg failed: return code {result.returncode}")
-        logger.error(f"FFmpeg stderr: {result.stderr}")
-        return False
-
 def update_job_status(job_id, status, stage, progress, output_s3_keys=None, segments_created=None, processing_duration=None, error_message=None):
     """
     Update job status in DynamoDB
@@ -325,7 +809,7 @@ def process_video(s3_bucket, s3_key, job_id, cutting_options, text_input, user_i
             segment_path = os.path.join(temp_dir, f'segment_{i:03d}.mp4')
             
             # Process segment
-            if process_video_segment(input_video_path, segment_path, start_time, segment_duration, ffmpeg_path):
+            if process_video_segment(input_video_path, segment_path, start_time, segment_duration):
                 # Upload segment to S3
                 segment_s3_key = f"processed/{job_id}/segment_{i:03d}.mp4"
                 logger.info(f"Uploading to S3: {segment_s3_key}")

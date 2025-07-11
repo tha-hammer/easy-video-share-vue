@@ -147,7 +147,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "video_bucket_lifecycle" {
 
 # IAM user and permissions moved to s3-permissions.tf
 
-# DynamoDB table for video metadata and segments
+# DynamoDB table for video metadata
 resource "aws_dynamodb_table" "video_metadata" {
   name           = "${var.project_name}-video-metadata"
   billing_mode   = "PAY_PER_REQUEST"
@@ -229,6 +229,54 @@ resource "aws_dynamodb_table" "video_metadata" {
   }
 }
 
+# DynamoDB table for video segments metadata
+resource "aws_dynamodb_table" "video_segments" {
+  name           = "${var.project_name}-video-segments"
+  billing_mode   = "PAY_PER_REQUEST"
+  hash_key       = "segment_id"
+
+  attribute {
+    name = "segment_id"
+    type = "S"
+  }
+
+  attribute {
+    name = "video_id"
+    type = "S"
+  }
+
+  attribute {
+    name = "segment_number"
+    type = "N"
+  }
+
+  attribute {
+    name = "created_at"
+    type = "S"
+  }
+
+  # Global secondary index for querying segments by video_id
+  global_secondary_index {
+    name     = "VideoIndex"
+    hash_key = "video_id"
+    range_key = "segment_number"
+    projection_type = "ALL"
+  }
+
+  # Global secondary index for querying segments by creation time
+  global_secondary_index {
+    name     = "CreatedAtIndex"
+    hash_key = "video_id"
+    range_key = "created_at"
+    projection_type = "ALL"
+  }
+
+  tags = {
+    Name = "${var.project_name}-video-segments"
+    Environment = var.environment
+  }
+}
+
 # Lambda execution role
 resource "aws_iam_role" "lambda_execution_role" {
   name = "${var.project_name}-lambda-execution-role"
@@ -252,7 +300,7 @@ resource "aws_iam_role" "lambda_execution_role" {
   }
 }
 
-# Lambda policy for DynamoDB and CloudWatch
+# IAM policy for Lambda execution
 resource "aws_iam_role_policy" "lambda_policy" {
   name = "${var.project_name}-lambda-policy"
   role = aws_iam_role.lambda_execution_role.id
@@ -272,50 +320,38 @@ resource "aws_iam_role_policy" "lambda_policy" {
       {
         Effect = "Allow"
         Action = [
-          "dynamodb:PutItem",
+          "s3:GetObject",
+          "s3:PutObject",
+          "s3:DeleteObject"
+        ]
+        Resource = "${aws_s3_bucket.video_bucket.arn}/*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
           "dynamodb:GetItem",
-          "dynamodb:Query",
-          "dynamodb:Scan",
+          "dynamodb:PutItem",
           "dynamodb:UpdateItem",
-          "dynamodb:DeleteItem"
+          "dynamodb:DeleteItem",
+          "dynamodb:Query",
+          "dynamodb:Scan"
         ]
         Resource = [
           aws_dynamodb_table.video_metadata.arn,
-          "${aws_dynamodb_table.video_metadata.arn}/index/*"
+          "${aws_dynamodb_table.video_metadata.arn}/*",
+          aws_dynamodb_table.video_segments.arn,
+          "${aws_dynamodb_table.video_segments.arn}/*"
         ]
       },
       {
         Effect = "Allow"
         Action = [
-          "cognito-idp:ListUsers",
           "cognito-idp:AdminGetUser",
-          "cognito-idp:AdminDeleteUser",
-          "cognito-idp:AdminDisableUser",
-          "cognito-idp:AdminEnableUser",
-          "cognito-idp:AdminAddUserToGroup",
-          "cognito-idp:AdminRemoveUserFromGroup",
           "cognito-idp:AdminListGroupsForUser",
+          "cognito-idp:ListUsers",
           "cognito-idp:ListUsersInGroup"
         ]
-        Resource = aws_cognito_user_pool.video_app_users.arn
-      },
-      {
-        Effect = "Allow"
-        Action = [
-          "s3:PutObject",
-          "s3:PutObjectAcl",
-          "s3:GetObject",
-          "s3:DeleteObject",
-          "s3:CreateMultipartUpload",
-          "s3:UploadPart",
-          "s3:CompleteMultipartUpload",
-          "s3:AbortMultipartUpload",
-          "s3:ListMultipartUploadParts"
-        ]
-        Resource = [
-          aws_s3_bucket.video_bucket.arn,
-          "${aws_s3_bucket.video_bucket.arn}/*"
-        ]
+        Resource = "${aws_cognito_user_pool.video_app_users.arn}"
       }
     ]
   })
@@ -502,7 +538,7 @@ data "archive_file" "s3_test_zip" {
 
 # === Video Processor Lambda (Python) ===
 resource "aws_lambda_function" "video_processor" {
-  filename         = "production-lambda.zip"
+  filename         = "lambda/video-processor/production-lambda.zip"
   function_name    = "${var.project_name}-video-processor"
   role             = aws_iam_role.lambda_execution_role.arn
   handler          = "lambda_function.lambda_handler"
@@ -512,7 +548,7 @@ resource "aws_lambda_function" "video_processor" {
   ephemeral_storage {
     size = 10240
   }
-  source_code_hash = filebase64sha256("production-lambda.zip")
+  source_code_hash = filebase64sha256("lambda/video-processor/production-lambda.zip")
   environment {
     variables = {
       ENVIRONMENT = "production"

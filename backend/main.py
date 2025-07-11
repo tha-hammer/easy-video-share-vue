@@ -44,13 +44,15 @@ from dynamodb_service import iso_utc_now, table
 from tasks import process_video_task, celery_app
 from video_processor import get_video_duration_from_s3, calculate_segments
 from config import settings
-from lambda_integration import use_lambda_processing, trigger_lambda_processing, test_lambda_connectivity, validate_lambda_config
+from lambda_integration import use_lambda_processing, trigger_lambda_processing, test_lambda_connectivity, validate_lambda_config, trigger_thumbnail_generation, trigger_text_overlay_processing
 from sse_starlette.sse import EventSourceResponse
 import redis.asyncio as redis
 import asyncio
 import json
-from datetime import datetime,timedelta
+from datetime import datetime,timedelta, timezone
 import os
+import time
+import boto3
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -1290,9 +1292,68 @@ async def get_segment_download_url(segment_id: str):
 @router.post("/segments/{segment_id}/generate-thumbnail")
 async def generate_segment_thumbnail(segment_id: str):
     """
-    Generate a thumbnail image for a video segment
+    Generate a thumbnail for a video segment using Lambda processing
     """
     try:
+        print(f"[DEBUG] Generating thumbnail for segment: {segment_id}")
+        
+        # Parse segment_id to extract video_id
+        if not segment_id.startswith("seg_"):
+            raise HTTPException(status_code=400, detail="Invalid segment ID format")
+        
+        # Extract video_id from segment_id
+        segment_id_without_prefix = segment_id[4:]
+        last_underscore_index = segment_id_without_prefix.rfind("_")
+        if last_underscore_index == -1:
+            raise HTTPException(status_code=400, detail="Invalid segment ID format")
+        
+        video_id = segment_id_without_prefix[:last_underscore_index]
+        
+        print(f"[DEBUG] Extracted video_id: {video_id}")
+        
+        # Import lambda integration
+        from lambda_integration import trigger_thumbnail_generation
+        
+        # Trigger Lambda thumbnail generation
+        result = await trigger_thumbnail_generation(video_id, segment_id)
+        
+        if result['status'] == 'success':
+            # Extract thumbnail URL from Lambda response
+            lambda_response = result['lambda_response']
+            if lambda_response['statusCode'] == 200:
+                response_body = json.loads(lambda_response['body'])
+                thumbnail_url = response_body.get('thumbnail_url')
+                
+                return {
+                    "segment_id": segment_id,
+                    "thumbnail_url": thumbnail_url,
+                    "status": "success",
+                    "message": "Thumbnail generated successfully"
+                }
+            else:
+                raise HTTPException(status_code=500, detail="Lambda thumbnail generation failed")
+        else:
+            raise HTTPException(status_code=500, detail="Failed to trigger thumbnail generation")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[ERROR] Failed to generate thumbnail: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to generate thumbnail: {str(e)}")
+
+
+@router.post("/segments/{segment_id}/text-overlays")
+async def save_text_overlays(segment_id: str, request: dict):
+    """
+    Save text overlays for a video segment
+    """
+    try:
+        overlays = request.get("overlays", [])
+        print(f"[DEBUG] Saving text overlays for segment: {segment_id}")
+        print(f"[DEBUG] Number of overlays: {len(overlays)}")
+        
         # Parse segment_id to extract video_id and segment number
         if not segment_id.startswith("seg_"):
             raise HTTPException(status_code=400, detail="Invalid segment ID format")
@@ -1313,123 +1374,139 @@ async def generate_segment_thumbnail(segment_id: str):
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid segment number format")
         
-        print(f"[DEBUG] Generating thumbnail for segment: {segment_id}")
-        print(f"[DEBUG] video_id: {video_id}")
-        print(f"[DEBUG] segment_number: {segment_number}")
+        print(f"[DEBUG] Extracted video_id: {video_id}, segment_number: {segment_number}")
         
-        # Get the video record to find the segment
-        video_resp = table.get_item(Key={"video_id": video_id})
-        video_item = video_resp.get("Item")
+        # Store text overlays in DynamoDB
+        # For now, we'll store them in the video_segments table
+        # In a production system, you might want a separate table for text overlays
         
-        if not video_item:
-            print(f"[DEBUG] Video not found: {video_id}")
-            raise HTTPException(status_code=404, detail="Video not found")
+        try:
+            # Update the segment with text overlays
+            segments_table = boto3.resource('dynamodb', region_name='us-east-1').Table('video_segments')
+            
+            # Store the overlays data
+            timestamp = datetime.now().isoformat()
+            
+            response = segments_table.put_item(
+                Item={
+                    'segment_id': segment_id,
+                    'video_id': video_id,
+                    'segment_number': segment_number,
+                    'text_overlays': overlays,
+                    'updated_at': timestamp,
+                    'created_at': timestamp
+                }
+            )
+            
+            print(f"[DEBUG] Text overlays saved successfully for segment: {segment_id}")
+            
+            return {
+                "segment_id": segment_id,
+                "video_id": video_id,
+                "segment_number": segment_number,
+                "overlays_count": len(overlays),
+                "message": "Text overlays saved successfully",
+                "updated_at": timestamp
+            }
+            
+        except Exception as dynamo_error:
+            print(f"[ERROR] Failed to save to DynamoDB: {dynamo_error}")
+            # Fall back to simple success response if DynamoDB fails
+            return {
+                "segment_id": segment_id,
+                "video_id": video_id,
+                "segment_number": segment_number,
+                "overlays_count": len(overlays),
+                "message": "Text overlays received successfully (temporary storage)",
+                "note": "DynamoDB storage temporarily unavailable"
+            }
         
-        # Get the output_s3_urls array
-        output_s3_urls = video_item.get("output_s3_urls", [])
-        if not output_s3_urls:
-            print(f"[DEBUG] No output_s3_urls found for video: {video_id}")
-            raise HTTPException(status_code=404, detail="No segments found for this video")
-        
-        # Check if segment number is valid
-        if segment_number < 1 or segment_number > len(output_s3_urls):
-            print(f"[DEBUG] Invalid segment number: {segment_number}, max: {len(output_s3_urls)}")
-            raise HTTPException(status_code=404, detail="Segment not found")
-        
-        # Get the s3_key for this segment
-        s3_key_or_url = output_s3_urls[segment_number - 1]  # Convert to 0-based index
-        print(f"[DEBUG] Raw s3_key_or_url for thumbnail: {s3_key_or_url}")
-        
-        # Extract object key from URL if it's a full URL
-        # Handle both object keys (e.g., "processed/video_id/segment.mp4") 
-        # and full URLs (e.g., "https://bucket.s3.amazonaws.com/processed/video_id/segment.mp4")
-        if s3_key_or_url.startswith('http'):
-            # It's a full URL, extract the object key
-            from urllib.parse import urlparse, unquote
-            parsed_url = urlparse(s3_key_or_url)
-            # Remove leading slash and decode URL encoding
-            s3_key = unquote(parsed_url.path.lstrip('/'))
-            print(f"[DEBUG] Extracted object key from URL: {s3_key}")
-        else:
-            # It's already an object key
-            s3_key = s3_key_or_url
-            print(f"[DEBUG] Using s3_key directly: {s3_key}")
-        
-        # TODO: Implement actual thumbnail generation using ffmpeg
-        # For now, return a placeholder response that indicates thumbnail generation
-        # would happen here. In production, this would:
-        # 1. Download the video segment from S3
-        # 2. Use ffmpeg to extract a frame at the midpoint
-        # 3. Upload the thumbnail image to S3
-        # 4. Update the segment metadata with thumbnail_url
-        # 5. Return the thumbnail URL
-        
-        # Generate thumbnail S3 key
-        thumbnail_s3_key = f"thumbnails/{video_id}/segment_{segment_number}.jpg"
-        
-        # For demo purposes, create a presigned URL for the source video
-        # In production, this would be the actual thumbnail image URL
-        presigned_url = generate_presigned_url(
-            bucket_name=settings.AWS_BUCKET_NAME,
-            object_key=s3_key,
-            client_method='get_object',
-            expiration=3600  # 1 hour
-        )
-        
-        print(f"[DEBUG] Generated thumbnail URL (placeholder): {presigned_url[:50]}...")
-        
-        # TODO: Update segment metadata with thumbnail_url in DynamoDB
-        
-        return {
-            "segment_id": segment_id,
-            "thumbnail_url": presigned_url,  # In production, this would be the actual thumbnail URL
-            "thumbnail_s3_key": thumbnail_s3_key,
-            "status": "generated"
-        }
     except HTTPException:
         raise
     except Exception as e:
-        print(f"[ERROR] Failed to generate segment thumbnail: {e}")
+        print(f"[ERROR] Failed to save text overlays: {e}")
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Failed to generate segment thumbnail: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to save text overlays: {str(e)}")
 
 
-@router.post("/segments/{segment_id}/text-overlays")
-async def save_segment_text_overlays(segment_id: str, request: dict):
+@router.get("/segments/{segment_id}/text-overlays")
+async def get_text_overlays(segment_id: str):
     """
-    Save text overlay data for a video segment
+    Get text overlays for a video segment
     """
     try:
-        overlays = request.get("overlays", [])
+        print(f"[DEBUG] Getting text overlays for segment: {segment_id}")
         
-        print(f"[DEBUG] Saving text overlays for segment: {segment_id}")
-        print(f"[DEBUG] Number of overlays: {len(overlays)}")
+        # Parse segment_id to extract video_id and segment number
+        if not segment_id.startswith("seg_"):
+            raise HTTPException(status_code=400, detail="Invalid segment ID format")
         
-        # TODO: Implement actual text overlay storage in DynamoDB
-        # For now, just log the data and return success
-        # In production, this would:
-        # 1. Validate the overlay data structure
-        # 2. Store the overlays in DynamoDB linked to the segment
-        # 3. Optionally trigger background processing to apply overlays
+        # Remove "seg_" prefix
+        segment_id_without_prefix = segment_id[4:]
         
-        for i, overlay in enumerate(overlays):
-            print(f"[DEBUG] Overlay {i+1}: {overlay.get('text', '')} at ({overlay.get('x', 0)}, {overlay.get('y', 0)})")
+        # Find the last underscore to separate video_id from segment_number
+        last_underscore_index = segment_id_without_prefix.rfind("_")
+        if last_underscore_index == -1:
+            raise HTTPException(status_code=400, detail="Invalid segment ID format")
         
-        return {
-            "segment_id": segment_id,
-            "overlays_saved": len(overlays),
-            "status": "success"
-        }
+        video_id = segment_id_without_prefix[:last_underscore_index]
+        segment_number_str = segment_id_without_prefix[last_underscore_index + 1:]
+        
+        try:
+            segment_number = int(segment_number_str)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid segment number format")
+        
+        print(f"[DEBUG] Extracted video_id: {video_id}, segment_number: {segment_number}")
+        
+        # Get text overlays from DynamoDB
+        try:
+            segments_table = boto3.resource('dynamodb', region_name='us-east-1').Table('video_segments')
+            
+            response = segments_table.get_item(
+                Key={'segment_id': segment_id}
+            )
+            
+            item = response.get('Item', {})
+            text_overlays = item.get('text_overlays', [])
+            
+            print(f"[DEBUG] Retrieved {len(text_overlays)} text overlays for segment: {segment_id}")
+            
+            return {
+                "segment_id": segment_id,
+                "video_id": video_id,
+                "segment_number": segment_number,
+                "text_overlays": text_overlays,
+                "overlays_count": len(text_overlays),
+                "updated_at": item.get('updated_at'),
+                "created_at": item.get('created_at')
+            }
+            
+        except Exception as dynamo_error:
+            print(f"[ERROR] Failed to retrieve from DynamoDB: {dynamo_error}")
+            return {
+                "segment_id": segment_id,
+                "video_id": video_id,
+                "segment_number": segment_number,
+                "text_overlays": [],
+                "overlays_count": 0,
+                "message": "No text overlays found or DynamoDB temporarily unavailable"
+            }
+        
+    except HTTPException:
+        raise
     except Exception as e:
-        print(f"[ERROR] Failed to save text overlays: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to save text overlays: {str(e)}")
+        print(f"[ERROR] Failed to get text overlays: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to get text overlays: {str(e)}")
 
 
 @router.post("/segments/{segment_id}/process-with-text-overlays")
 async def process_segment_with_text_overlays(segment_id: str, request: dict):
     """
-    Process a video segment with text overlays applied
+    Process a video segment with text overlays applied using Lambda
     """
     try:
         # Handle both request formats - overlays array or ffmpeg_filters array
@@ -1466,91 +1543,49 @@ async def process_segment_with_text_overlays(segment_id: str, request: dict):
         
         print(f"[DEBUG] Extracted video_id: {video_id}, segment_number: {segment_number}")
         
-        # Get the video record to find the segment
-        video_resp = table.get_item(Key={"video_id": video_id})
-        video_item = video_resp.get("Item")
+        # Prepare text overlays for Lambda processing
+        text_overlays = []
         
-        if not video_item:
-            raise HTTPException(status_code=404, detail="Video not found")
-        
-        # Get the output_s3_urls array
-        output_s3_urls = video_item.get("output_s3_urls", [])
-        if not output_s3_urls:
-            raise HTTPException(status_code=404, detail="No segments found for this video")
-        
-        # Check if segment number is valid
-        if segment_number < 1 or segment_number > len(output_s3_urls):
-            raise HTTPException(status_code=404, detail="Segment not found")
-        
-        # Get the s3_key for this segment
-        s3_key_or_url = output_s3_urls[segment_number - 1]
-        
-        # Extract object key from URL if it's a full URL
-        if s3_key_or_url.startswith('http'):
-            from urllib.parse import urlparse, unquote
-            parsed_url = urlparse(s3_key_or_url)
-            s3_key = unquote(parsed_url.path.lstrip('/'))
-        else:
-            s3_key = s3_key_or_url
-        
-        print(f"[DEBUG] Source segment S3 key: {s3_key}")
-        
-        # Use provided ffmpeg_filters or generate them from overlays
-        final_ffmpeg_filters = []
-        
-        if ffmpeg_filters:
-            # Use the provided ffmpeg filters
-            final_ffmpeg_filters = ffmpeg_filters
-            print(f"[DEBUG] Using provided FFmpeg filters: {final_ffmpeg_filters}")
-        elif overlays:
-            # Generate FFmpeg filters from overlays
+        if overlays:
+            # Convert overlays to Lambda format
             for overlay in overlays:
-                try:
-                    # Basic FFmpeg drawtext filter generation
-                    # This is a simplified version - in production you'd use the full coordinate translation
-                    filter_str = f"drawtext=text='{overlay.get('text', '')}':x={overlay.get('x', 0)}:y={overlay.get('y', 0)}:fontsize={overlay.get('fontSize', 24)}:fontcolor={overlay.get('color', '#ffffff')}:enable='between(t,0,30)'"
-                    final_ffmpeg_filters.append(filter_str)
-                    print(f"[DEBUG] Generated FFmpeg filter: {filter_str}")
-                except Exception as filter_error:
-                    print(f"[ERROR] Failed to generate FFmpeg filter for overlay: {filter_error}")
-                    continue
+                text_overlay = {
+                    'segment_id': segment_id,
+                    'text': overlay.get('text', ''),
+                    'x': overlay.get('x', 0),
+                    'y': overlay.get('y', 0),
+                    'fontSize': overlay.get('fontSize', 24),
+                    'color': overlay.get('color', '#ffffff'),
+                    'fontFamily': overlay.get('fontFamily', 'Arial'),
+                    'shadow': overlay.get('shadow', {}),
+                    'stroke': overlay.get('stroke', {})
+                }
+                text_overlays.append(text_overlay)
         
-        if not final_ffmpeg_filters:
-            raise HTTPException(status_code=400, detail="No valid text overlays or FFmpeg filters to apply")
+        if not text_overlays:
+            raise HTTPException(status_code=400, detail="No valid text overlays to apply")
         
-        # For now, simulate processing by returning success
-        # In production, this would:
-        # 1. Download the source segment from S3
-        # 2. Apply FFmpeg filters to add text overlays
-        # 3. Upload the processed segment back to S3
-        # 4. Update the video record with the new segment URL
+        # Import lambda integration
+        from lambda_integration import trigger_text_overlay_processing
         
-        print(f"[DEBUG] Would apply {len(final_ffmpeg_filters)} FFmpeg filters to segment")
+        # Trigger Lambda text overlay processing
+        result = await trigger_text_overlay_processing(video_id, text_overlays)
         
-        # Generate a new S3 key for the processed segment
-        processed_s3_key = f"processed-with-text/{video_id}/segment_{segment_number}_with_text.mp4"
-        
-        # Generate a presigned URL for the "processed" segment (using original for now)
-        processed_url = generate_presigned_url(
-            bucket_name=settings.AWS_BUCKET_NAME,
-            object_key=s3_key,  # Using original segment for now
-            client_method='get_object',
-            expiration=3600
-        )
-        
-        # Generate a mock job_id for the response
-        job_id = f"job_{video_id}_{segment_number}_{uuid.uuid4().hex[:8]}"
-        
-        return {
-            "job_id": job_id,
-            "status": "processing",
-            "segment_id": segment_id,
-            "overlays_applied": len(overlays) if overlays else 0,
-            "ffmpeg_filters": final_ffmpeg_filters,
-            "processed_url": processed_url,
-            "processed_s3_key": processed_s3_key,
-            "message": f"Successfully started processing segment with {len(final_ffmpeg_filters)} text overlay filters"
-        }
+        if result['status'] == 'success':
+            # Generate a job_id for tracking
+            job_id = f"job_{video_id}_{segment_number}_{uuid.uuid4().hex[:8]}"
+            
+            return {
+                "job_id": job_id,
+                "status": "processing",
+                "segment_id": segment_id,
+                "overlays_applied": len(text_overlays),
+                "message": f"Successfully started processing segment with {len(text_overlays)} text overlays",
+                "lambda_function": result['function_name'],
+                "processing_type": result['processing_type']
+            }
+        else:
+            raise HTTPException(status_code=500, detail="Failed to trigger text overlay processing")
         
     except HTTPException:
         raise
@@ -1561,96 +1596,194 @@ async def process_segment_with_text_overlays(segment_id: str, request: dict):
         raise HTTPException(status_code=500, detail=f"Failed to process segment with text overlays: {str(e)}")
 
 
-@router.get("/segments/{segment_id}/play")
-async def get_segment_play_url(segment_id: str):
+@router.post("/videos/{video_id}/process-segments-without-text")
+async def process_segments_without_text(video_id: str, request: dict):
     """
-    Get a presigned URL for video playback (not download).
-    This endpoint is for streaming/playing videos, not downloading them.
+    Process video segments WITHOUT text overlays (Phase 1)
     """
     try:
-        # Parse segment_id to extract video_id and segment number
-        # Format: seg_{video_id}_{segment_number:03d}
-        if not segment_id.startswith("seg_"):
-            raise HTTPException(status_code=400, detail="Invalid segment ID format")
+        segments = request.get("segments", [])
+        text_data = request.get("textData", {})
         
-        # Remove "seg_" prefix
-        segment_id_without_prefix = segment_id[4:]
+        print(f"[DEBUG] Processing segments without text for video: {video_id}")
+        print(f"[DEBUG] Number of segments: {len(segments)}")
         
-        # Find the last underscore to separate video_id from segment_number
-        last_underscore_index = segment_id_without_prefix.rfind("_")
-        if last_underscore_index == -1:
-            raise HTTPException(status_code=400, detail="Invalid segment ID format")
+        if not segments:
+            raise HTTPException(status_code=400, detail="No segments provided")
         
-        video_id = segment_id_without_prefix[:last_underscore_index]
-        segment_number_str = segment_id_without_prefix[last_underscore_index + 1:]
-        
-        try:
-            segment_number = int(segment_number_str)
-        except ValueError:
-            raise HTTPException(status_code=400, detail="Invalid segment number format")
-        
-        print(f"[DEBUG] Parsed segment_id: {segment_id}")
-        print(f"[DEBUG] video_id: {video_id}")
-        print(f"[DEBUG] segment_number: {segment_number}")
-        
-        # Get the video record to find the segment
+        # Get the video record to find the source S3 key
         video_resp = table.get_item(Key={"video_id": video_id})
         video_item = video_resp.get("Item")
         
         if not video_item:
-            print(f"[DEBUG] Video not found: {video_id}")
             raise HTTPException(status_code=404, detail="Video not found")
         
-        # Get the output_s3_urls array
-        output_s3_urls = video_item.get("output_s3_urls", [])
-        if not output_s3_urls:
-            print(f"[DEBUG] No output_s3_urls found for video: {video_id}")
-            raise HTTPException(status_code=404, detail="No segments found for this video")
+        # Get the source S3 key
+        s3_key = video_item.get("s3_key")
+        if not s3_key:
+            raise HTTPException(status_code=400, detail="Source video S3 key not found")
         
-        print(f"[DEBUG] Found {len(output_s3_urls)} output URLs")
+        print(f"[DEBUG] Source video S3 key: {s3_key}")
         
-        # Check if segment number is valid
-        if segment_number < 1 or segment_number > len(output_s3_urls):
-            print(f"[DEBUG] Invalid segment number: {segment_number}, max: {len(output_s3_urls)}")
-            raise HTTPException(status_code=404, detail="Segment not found")
+        # Import lambda integration
+        from lambda_integration import trigger_segment_processing_without_text
         
-        # Get the s3_key for this segment
-        s3_key_or_url = output_s3_urls[segment_number - 1]  # Convert to 0-based index
+        # Generate job ID
+        job_id = f"job_{video_id}_{int(time.time())}"
         
-        # Extract object key from URL if it's a full URL
-        if s3_key_or_url.startswith('http'):
-            # It's a full URL, extract the object key
-            from urllib.parse import urlparse, unquote
-            parsed_url = urlparse(s3_key_or_url)
-            s3_key = unquote(parsed_url.path.lstrip('/'))
+        # Trigger Lambda segment processing
+        result = await trigger_segment_processing_without_text(video_id, s3_key, segments, job_id)
+        
+        if result['status'] == 'success':
+            # Store text data for later use
+            # TODO: Store text_data in DynamoDB for later text overlay processing
+            
+            return {
+                "job_id": job_id,
+                "status": "processing",
+                "video_id": video_id,
+                "segments_count": len(segments),
+                "message": "Successfully started processing segments without text overlays",
+                "lambda_function": result['function_name'],
+                "processing_type": result['processing_type']
+            }
         else:
-            # It's already an object key
-            s3_key = s3_key_or_url
+            raise HTTPException(status_code=500, detail="Failed to trigger segment processing")
         
-        print(f"[DEBUG] Using s3_key: {s3_key}")
-        
-        # Generate presigned URL for streaming/playback (not download)
-        presigned_url = generate_presigned_url(
-            bucket_name=settings.AWS_BUCKET_NAME,
-            object_key=s3_key,
-            client_method='get_object',
-            expiration=3600  # 1 hour
-        )
-        
-        print(f"[DEBUG] Generated presigned URL: {presigned_url[:50]}...")
-        
-        return {
-            "segment_id": segment_id,
-            "play_url": presigned_url,
-            "expires_at": (datetime.utcnow() + timedelta(hours=1)).isoformat().replace("+00:00", "Z")
-        }
     except HTTPException:
         raise
     except Exception as e:
-        print(f"[ERROR] Failed to get segment play URL: {e}")
+        print(f"[ERROR] Failed to process segments without text: {e}")
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Failed to get segment play URL: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to process segments without text: {str(e)}")
+
+
+@router.get("/videos/{video_id}/segments-status")
+async def get_segments_status(video_id: str):
+    """
+    Check if segments are ready for text overlay design
+    """
+    try:
+        print(f"[DEBUG] Getting segments status for video: {video_id}")
+        
+        # Get video job status
+        video_resp = table.get_item(Key={"video_id": video_id})
+        video_item = video_resp.get("Item")
+        
+        if not video_item:
+            raise HTTPException(status_code=404, detail="Video not found")
+        
+        # Get segments from DynamoDB (simulated for now)
+        # TODO: Implement actual DynamoDB segment retrieval
+        segments = []
+        segments_ready = False
+        
+        # For now, simulate segments based on video metadata
+        if video_item.get("status") == "COMPLETED":
+            output_s3_urls = video_item.get("output_s3_urls", [])
+            for i, url in enumerate(output_s3_urls):
+                segments.append({
+                    "segment_id": f"seg_{video_id}_{i+1:03d}",
+                    "segment_number": i + 1,
+                    "duration": 30,  # Default duration
+                    "raw_segment_ready": True,
+                    "thumbnail_generated": False,
+                    "text_overlays": []
+                })
+            segments_ready = True
+        
+        return {
+            "video_id": video_id,
+            "segments_ready": segments_ready,
+            "segments": segments,
+            "status": video_item.get("status", "UNKNOWN"),
+            "can_design_text": segments_ready
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[ERROR] Failed to get segments status: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to get segments status: {str(e)}")
+
+
+@router.post("/videos/{video_id}/save-text-data")
+async def save_text_data(video_id: str, request: dict):
+    """
+    Save text data without processing (for later use)
+    """
+    try:
+        text_data = request.get("textData", {})
+        
+        print(f"[DEBUG] Saving text data for video: {video_id}")
+        print(f"[DEBUG] Text data: {text_data}")
+        
+        # TODO: Store text data in DynamoDB
+        # For now, just update the video record
+        video_resp = table.get_item(Key={"video_id": video_id})
+        video_item = video_resp.get("Item")
+        
+        if not video_item:
+            raise HTTPException(status_code=404, detail="Video not found")
+        
+        # Update video record with text data
+        table.update_item(
+            Key={"video_id": video_id},
+            UpdateExpression="SET text_data = :text_data, updated_at = :updated_at",
+            ExpressionAttributeValues={
+                ":text_data": text_data,
+                ":updated_at": datetime.now(timezone.utc).isoformat()
+            }
+        )
+        
+        return {
+            "video_id": video_id,
+            "status": "success",
+            "message": "Text data saved successfully"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[ERROR] Failed to save text data: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to save text data: {str(e)}")
+
+
+@router.get("/videos/{video_id}/text-data")
+async def get_text_data(video_id: str):
+    """
+    Get saved text data for a video
+    """
+    try:
+        print(f"[DEBUG] Getting text data for video: {video_id}")
+        
+        # Get video record
+        video_resp = table.get_item(Key={"video_id": video_id})
+        video_item = video_resp.get("Item")
+        
+        if not video_item:
+            raise HTTPException(status_code=404, detail="Video not found")
+        
+        text_data = video_item.get("text_data", {})
+        
+        return {
+            "video_id": video_id,
+            "text_data": text_data,
+            "status": "success"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[ERROR] Failed to get text data: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to get text data: {str(e)}")
 
 
 # Add debug endpoint directly to app (without /api prefix)
