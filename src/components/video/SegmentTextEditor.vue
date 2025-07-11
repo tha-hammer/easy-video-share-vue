@@ -392,7 +392,7 @@ export default defineComponent({
       }
 
       try {
-        const img = await FabricImage.fromURL(props.thumbnailUrl, {})
+        const img = await Image.fromURL(props.thumbnailUrl, {})
         img.set({
           scaleX: canvasWidth.value / props.videoWidth,
           scaleY: canvasHeight.value / props.videoHeight,
@@ -449,7 +449,7 @@ export default defineComponent({
     const addText = () => {
       if (!canvas.value) return
 
-      const textObject = new FabricText('New Text', {
+      const textObject = new Text('New Text', {
         left: canvasWidth.value / 2,
         top: canvasHeight.value / 2,
         fontSize: 24,
@@ -476,7 +476,7 @@ export default defineComponent({
       deleteTextObject(selectedTextObject.value)
     }
 
-    const deleteTextObject = (textObj) => {
+    const deleteTextObject = (textObj: any) => {
       if (!canvas.value) return
 
       canvas.value.remove(textObj)
@@ -527,7 +527,7 @@ export default defineComponent({
       console.log('📋 Text duplicated')
     }
 
-    const selectTextObject = (textObj) => {
+    const selectTextObject = (textObj: any) => {
       selectedTextObject.value = textObj
 
       // Update UI controls to match selected object
