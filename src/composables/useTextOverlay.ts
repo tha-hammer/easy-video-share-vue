@@ -111,8 +111,8 @@ export function useTextOverlay() {
     }
 
     return new Promise((resolve, reject) => {
-      FabricImage.fromURL(imageUrl, { crossOrigin: 'anonymous' })
-        .then((img: FabricImage) => {
+      Image.fromURL(imageUrl, { crossOrigin: 'anonymous' })
+        .then((img: any) => {
           if (!canvas.value) {
             reject(new Error('Canvas not initialized'))
             return
@@ -198,8 +198,8 @@ export function useTextOverlay() {
           console.log('🎬 Frame extracted, loading into Fabric.js...')
 
           // Load the extracted frame as background image
-          FabricImage.fromURL(dataUrl)
-            .then((img: FabricImage) => {
+          Image.fromURL(dataUrl)
+            .then((img: any) => {
               if (!canvas.value) {
                 cleanup()
                 reject(new Error('Canvas not initialized'))
@@ -224,7 +224,7 @@ export function useTextOverlay() {
               cleanup()
               resolve()
             })
-            .catch((error) => {
+            .catch((error: any) => {
               cleanup()
               reject(error)
             })
@@ -318,14 +318,14 @@ export function useTextOverlay() {
     left: number = 100,
     top: number = 100,
     options: any = {},
-  ): Promise<FabricText | null> => {
+  ): Promise<any> => {
     if (!canvas.value) {
       console.error('❌ Canvas not initialized')
       return null
     }
 
     try {
-      const textObj = new FabricText(text, {
+      const textObj = new Text(text, {
         left,
         top,
         fontFamily: options.fontFamily || 'Arial',
@@ -349,7 +349,7 @@ export function useTextOverlay() {
     }
   }
 
-  const removeTextObject = (textObj: FabricText) => {
+  const removeTextObject = (textObj: any) => {
     if (!canvas.value) return
 
     canvas.value.remove(textObj)
@@ -362,7 +362,7 @@ export function useTextOverlay() {
     console.log('🗑️ Text object removed')
   }
 
-  const updateTextObject = (textObj: FabricText, properties: any) => {
+  const updateTextObject = (textObj: any, properties: any) => {
     if (!canvas.value) return
 
     textObj.set(properties)
@@ -411,7 +411,7 @@ export function useTextOverlay() {
    * Extract precise coordinates from Fabric.js text object using aCoords
    * aCoords represents the absolute corner coordinates after all transformations
    */
-  const extractTextCoordinates = (textObj: FabricText): { x: number; y: number } => {
+  const extractTextCoordinates = (textObj: any): { x: number; y: number } => {
     // Force update of coordinates to ensure accuracy
     textObj.setCoords()
 
@@ -501,7 +501,7 @@ export function useTextOverlay() {
   /**
    * Handle text effects translation (shadow, stroke)
    */
-  const handleTextEffects = (textObj: FabricText): string[] => {
+  const handleTextEffects = (textObj: any): string[] => {
     const effects: string[] = []
 
     // Handle shadow
@@ -535,7 +535,7 @@ export function useTextOverlay() {
    * This is the critical function that makes text overlay positioning work
    */
   const convertToFFmpegFilter = (
-    textObj: FabricText,
+    textObj: any,
     segmentDuration: number = 30,
     startTime: number = 0,
   ): string => {
@@ -616,9 +616,7 @@ export function useTextOverlay() {
   const convertAllTextToFFmpegFilters = (segmentDuration: number = 30): string[] => {
     if (!canvas.value) return []
 
-    const textObjects = canvas.value
-      .getObjects()
-      .filter((obj: object) => (obj as { type: string }).type === 'text') as FabricText[]
+    const textObjects = canvas.value.getObjects().filter((obj: any) => obj.type === 'text')
 
     return textObjects.map((textObj) => convertToFFmpegFilter(textObj, segmentDuration))
   }
