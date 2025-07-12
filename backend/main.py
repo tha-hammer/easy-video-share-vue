@@ -1631,15 +1631,37 @@ async def process_segment_with_text_overlays(segment_id: str, request: dict):
         if not text_overlays:
             raise HTTPException(status_code=400, detail="No valid text overlays to apply")
         
+        # Generate a job_id for tracking (following existing pattern)
+        job_id = f"job_{video_id}_{segment_number}_{uuid.uuid4().hex[:8]}"
+        
+        # Create DynamoDB job entry (following existing system pattern)
+        try:
+            from datetime import datetime, timezone
+            now_iso = datetime.utcnow().replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
+            
+            dynamodb_service.create_job_entry(
+                job_id=job_id,
+                user_id="text_overlay_user",  # Could be extracted from request
+                upload_date=now_iso,
+                status="PROCESSING",
+                created_at=now_iso,
+                updated_at=now_iso,
+                filename=f"segment_{segment_id}_with_overlays.mp4",
+                title=f"Text Overlay Processing - Segment {segment_number}",
+                content_type="video/mp4",
+                bucket_location=f"segments/{segment_id}"
+            )
+            print(f"[DynamoDB] Created job entry for text overlay processing: {job_id}")
+        except Exception as e:
+            print(f"[DynamoDB] Failed to create job entry for text overlay processing {job_id}: {e}")
+        
         # Import lambda integration
         from lambda_integration import trigger_text_overlay_processing
         
-        # Trigger Lambda text overlay processing
-        result = await trigger_text_overlay_processing(video_id, text_overlays)
+        # Trigger Lambda text overlay processing with the job_id
+        result = await trigger_text_overlay_processing(video_id, text_overlays, job_id)
         
         if result['status'] == 'success':
-            # Generate a job_id for tracking
-            job_id = f"job_{video_id}_{segment_number}_{uuid.uuid4().hex[:8]}"
             
             return {
                 "job_id": job_id,
