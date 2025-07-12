@@ -1051,9 +1051,16 @@ export default defineComponent({
     }
 
     // New methods for mobile/desktop layout
+    const windowWidth = ref(window.innerWidth)
+
     const isMobileView = computed(() => {
-      return window.innerWidth <= 768
+      return windowWidth.value <= 768
     })
+
+    // Update window width on resize
+    const updateWindowWidth = () => {
+      windowWidth.value = window.innerWidth
+    }
 
     const isTextEditingMode = ref(false)
     const textContentInput = ref<HTMLTextAreaElement | null>(null)
