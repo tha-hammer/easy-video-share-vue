@@ -285,152 +285,250 @@
             </div>
 
             <div class="panel-content">
-              <!-- Text Content -->
-              <div class="form-group mb-4">
+              <!-- Text Content - Always Visible -->
+              <div class="form-group mb-3">
                 <label class="form-label fw-bold">Text Content</label>
                 <textarea
                   v-model="currentTextContent"
                   @input="updateTextContent"
                   class="form-control"
-                  rows="3"
+                  rows="2"
                   placeholder="Enter your text..."
                 ></textarea>
               </div>
 
-              <!-- Font Family -->
-              <div class="form-group mb-4">
-                <label class="form-label fw-bold">Font Family</label>
-                <select v-model="currentFontFamily" @change="updateFontFamily" class="form-select">
-                  <option value="Arial">Arial</option>
-                  <option value="Helvetica">Helvetica</option>
-                  <option value="Times New Roman">Times New Roman</option>
-                  <option value="Georgia">Georgia</option>
-                  <option value="Verdana">Verdana</option>
-                  <option value="Courier New">Courier New</option>
-                  <option value="Impact">Impact</option>
-                  <option value="Comic Sans MS">Comic Sans MS</option>
-                </select>
+              <!-- Font Family - Collapsible -->
+              <div class="form-group mb-2">
+                <b-button
+                  v-b-toggle.collapse-font-family
+                  variant="outline-secondary"
+                  size="sm"
+                  class="w-100 text-start"
+                >
+                  <KTIcon icon-name="font" icon-class="fs-5 me-2" />
+                  Font Family: {{ currentFontFamily }}
+                  <KTIcon icon-name="arrow-down" icon-class="fs-5 ms-auto" />
+                </b-button>
+                <b-collapse id="collapse-font-family" class="mt-2">
+                  <div class="p-2 border rounded bg-light">
+                    <select
+                      v-model="currentFontFamily"
+                      @change="updateFontFamily"
+                      class="form-select"
+                    >
+                      <option value="Arial">Arial</option>
+                      <option value="Helvetica">Helvetica</option>
+                      <option value="Times New Roman">Times New Roman</option>
+                      <option value="Georgia">Georgia</option>
+                      <option value="Verdana">Verdana</option>
+                      <option value="Courier New">Courier New</option>
+                      <option value="Impact">Impact</option>
+                      <option value="Comic Sans MS">Comic Sans MS</option>
+                    </select>
+                  </div>
+                </b-collapse>
               </div>
 
-              <!-- Font Size -->
-              <div class="form-group mb-4">
-                <label class="form-label fw-bold">Font Size</label>
-                <div class="input-group">
-                  <input
-                    v-model.number="currentFontSize"
-                    @input="updateFontSize"
-                    type="number"
-                    class="form-control"
-                    min="8"
-                    max="200"
-                  />
-                  <span class="input-group-text">px</span>
-                </div>
-                <input
-                  v-model.number="currentFontSize"
-                  @input="updateFontSize"
-                  type="range"
-                  class="form-range mt-2"
-                  min="8"
-                  max="200"
-                />
+              <!-- Font Size - Collapsible -->
+              <div class="form-group mb-2">
+                <b-button
+                  v-b-toggle.collapse-font-size
+                  variant="outline-secondary"
+                  size="sm"
+                  class="w-100 text-start"
+                >
+                  <KTIcon icon-name="text" icon-class="fs-5 me-2" />
+                  Font Size: {{ currentFontSize }}px
+                  <KTIcon icon-name="arrow-down" icon-class="fs-5 ms-auto" />
+                </b-button>
+                <b-collapse id="collapse-font-size" class="mt-2">
+                  <div class="p-2 border rounded bg-light">
+                    <div class="input-group mb-2">
+                      <input
+                        v-model.number="currentFontSize"
+                        @input="updateFontSize"
+                        type="number"
+                        class="form-control"
+                        min="8"
+                        max="200"
+                      />
+                      <span class="input-group-text">px</span>
+                    </div>
+                    <input
+                      v-model.number="currentFontSize"
+                      @input="updateFontSize"
+                      type="range"
+                      class="form-range"
+                      min="8"
+                      max="200"
+                    />
+                  </div>
+                </b-collapse>
               </div>
 
-              <!-- Font Color -->
-              <div class="form-group mb-4">
-                <label class="form-label fw-bold">Font Color</label>
-                <div class="color-picker-group">
-                  <input
-                    v-model="currentFontColor"
-                    @input="updateFontColor"
-                    type="color"
-                    class="form-control form-control-color"
-                  />
-                  <input
-                    v-model="currentFontColor"
-                    @input="updateFontColor"
-                    type="text"
-                    class="form-control ms-2"
-                    placeholder="#000000"
-                  />
-                </div>
+              <!-- Font Color - Collapsible -->
+              <div class="form-group mb-2">
+                <b-button
+                  v-b-toggle.collapse-font-color
+                  variant="outline-secondary"
+                  size="sm"
+                  class="w-100 text-start"
+                >
+                  <KTIcon icon-name="palette" icon-class="fs-5 me-2" />
+                  Font Color
+                  <div
+                    class="ms-auto rounded"
+                    :style="{
+                      backgroundColor: currentFontColor,
+                      width: '20px',
+                      height: '20px',
+                      border: '1px solid #dee2e6',
+                    }"
+                  ></div>
+                </b-button>
+                <b-collapse id="collapse-font-color" class="mt-2">
+                  <div class="p-2 border rounded bg-light">
+                    <div class="color-picker-group">
+                      <input
+                        v-model="currentFontColor"
+                        @input="updateFontColor"
+                        type="color"
+                        class="form-control form-control-color"
+                      />
+                      <input
+                        v-model="currentFontColor"
+                        @input="updateFontColor"
+                        type="text"
+                        class="form-control ms-2"
+                        placeholder="#000000"
+                      />
+                    </div>
+                  </div>
+                </b-collapse>
               </div>
 
-              <!-- Font Style -->
-              <div class="form-group mb-4">
-                <label class="form-label fw-bold">Font Style</label>
-                <div class="btn-group w-100" role="group">
-                  <button
-                    @click="toggleBold"
-                    :class="{ active: currentFontWeight === 'bold' }"
-                    class="btn btn-outline-secondary"
-                  >
-                    <strong>B</strong>
-                  </button>
-                  <button
-                    @click="toggleItalic"
-                    :class="{ active: currentFontStyle === 'italic' }"
-                    class="btn btn-outline-secondary"
-                  >
-                    <em>I</em>
-                  </button>
-                </div>
+              <!-- Font Style - Collapsible -->
+              <div class="form-group mb-2">
+                <b-button
+                  v-b-toggle.collapse-font-style
+                  variant="outline-secondary"
+                  size="sm"
+                  class="w-100 text-start"
+                >
+                  <KTIcon icon-name="text" icon-class="fs-5 me-2" />
+                  Font Style
+                  <span class="ms-auto">
+                    <span v-if="currentFontWeight === 'bold'" class="badge bg-primary me-1">B</span>
+                    <span v-if="currentFontStyle === 'italic'" class="badge bg-primary">I</span>
+                  </span>
+                </b-button>
+                <b-collapse id="collapse-font-style" class="mt-2">
+                  <div class="p-2 border rounded bg-light">
+                    <div class="btn-group w-100" role="group">
+                      <button
+                        @click="toggleBold"
+                        :class="{ active: currentFontWeight === 'bold' }"
+                        class="btn btn-outline-secondary"
+                      >
+                        <strong>B</strong>
+                      </button>
+                      <button
+                        @click="toggleItalic"
+                        :class="{ active: currentFontStyle === 'italic' }"
+                        class="btn btn-outline-secondary"
+                      >
+                        <em>I</em>
+                      </button>
+                    </div>
+                  </div>
+                </b-collapse>
               </div>
 
-              <!-- Background -->
-              <div class="form-group mb-4">
-                <label class="form-label fw-bold">Text Background</label>
-                <div class="form-check mb-2">
-                  <input
-                    v-model="hasTextBackground"
-                    @change="toggleTextBackground"
-                    class="form-check-input"
-                    type="checkbox"
-                    id="backgroundToggle"
-                  />
-                  <label class="form-check-label" for="backgroundToggle"> Enable Background </label>
-                </div>
-                <div v-if="hasTextBackground" class="color-picker-group">
-                  <input
-                    v-model="currentBackgroundColor"
-                    @input="updateBackgroundColor"
-                    type="color"
-                    class="form-control form-control-color"
-                  />
-                  <input
-                    v-model="currentBackgroundColor"
-                    @input="updateBackgroundColor"
-                    type="text"
-                    class="form-control ms-2"
-                    placeholder="#ffffff"
-                  />
-                </div>
+              <!-- Background - Collapsible -->
+              <div class="form-group mb-2">
+                <b-button
+                  v-b-toggle.collapse-background
+                  variant="outline-secondary"
+                  size="sm"
+                  class="w-100 text-start"
+                >
+                  <KTIcon icon-name="background" icon-class="fs-5 me-2" />
+                  Text Background
+                  <span class="ms-auto">
+                    <span v-if="hasTextBackground" class="badge bg-success">ON</span>
+                    <span v-else class="badge bg-secondary">OFF</span>
+                  </span>
+                </b-button>
+                <b-collapse id="collapse-background" class="mt-2">
+                  <div class="p-2 border rounded bg-light">
+                    <div class="form-check mb-2">
+                      <input
+                        v-model="hasTextBackground"
+                        @change="toggleTextBackground"
+                        class="form-check-input"
+                        type="checkbox"
+                        id="backgroundToggle"
+                      />
+                      <label class="form-check-label" for="backgroundToggle">
+                        Enable Background
+                      </label>
+                    </div>
+                    <div v-if="hasTextBackground" class="color-picker-group">
+                      <input
+                        v-model="currentBackgroundColor"
+                        @input="updateBackgroundColor"
+                        type="color"
+                        class="form-control form-control-color"
+                      />
+                      <input
+                        v-model="currentBackgroundColor"
+                        @input="updateBackgroundColor"
+                        type="text"
+                        class="form-control ms-2"
+                        placeholder="#ffffff"
+                      />
+                    </div>
+                  </div>
+                </b-collapse>
               </div>
 
-              <!-- Opacity -->
-              <div class="form-group mb-4">
-                <label class="form-label fw-bold">Opacity</label>
-                <div class="input-group">
-                  <input
-                    v-model.number="currentOpacity"
-                    @input="updateOpacity"
-                    type="number"
-                    class="form-control"
-                    min="0"
-                    max="1"
-                    step="0.1"
-                  />
-                  <span class="input-group-text">%</span>
-                </div>
-                <input
-                  v-model.number="currentOpacity"
-                  @input="updateOpacity"
-                  type="range"
-                  class="form-range mt-2"
-                  min="0"
-                  max="1"
-                  step="0.1"
-                />
+              <!-- Opacity - Collapsible -->
+              <div class="form-group mb-2">
+                <b-button
+                  v-b-toggle.collapse-opacity
+                  variant="outline-secondary"
+                  size="sm"
+                  class="w-100 text-start"
+                >
+                  <KTIcon icon-name="transparency" icon-class="fs-5 me-2" />
+                  Opacity: {{ Math.round(currentOpacity * 100) }}%
+                  <KTIcon icon-name="arrow-down" icon-class="fs-5 ms-auto" />
+                </b-button>
+                <b-collapse id="collapse-opacity" class="mt-2">
+                  <div class="p-2 border rounded bg-light">
+                    <div class="input-group mb-2">
+                      <input
+                        v-model.number="currentOpacity"
+                        @input="updateOpacity"
+                        type="number"
+                        class="form-control"
+                        min="0"
+                        max="1"
+                        step="0.1"
+                      />
+                      <span class="input-group-text">%</span>
+                    </div>
+                    <input
+                      v-model.number="currentOpacity"
+                      @input="updateOpacity"
+                      type="range"
+                      class="form-range"
+                      min="0"
+                      max="1"
+                      step="0.1"
+                    />
+                  </div>
+                </b-collapse>
               </div>
             </div>
           </div>
@@ -626,11 +724,11 @@ export default defineComponent({
       let availableWidth, availableHeight, textPanelWidth
 
       if (isMobile) {
-        // Mobile: vertical layout, text panel below canvas
+        // Mobile: vertical layout, text panel below canvas (more compact with collapsible design)
         textPanelWidth = 0 // No side panel on mobile
         const margins = 40 // Reduced margins for mobile
         availableWidth = viewport.width - margins
-        availableHeight = viewport.height - 600 // Account for headers, status panels, and text panel below
+        availableHeight = viewport.height - 500 // Reduced space needed for compact collapsible panel
       } else if (isTablet) {
         // Tablet: horizontal layout with smaller text panel
         textPanelWidth = 280
@@ -1236,13 +1334,14 @@ export default defineComponent({
   .editor-layout {
     flex-direction: column;
     min-height: auto;
+    gap: 0;
   }
 
   .canvas-container {
     border-radius: 8px 8px 0 0;
     padding: 10px;
-    min-height: 400px;
-    max-height: 60vh; /* Limit canvas height on mobile */
+    min-height: 350px;
+    max-height: 65vh; /* Give more space to canvas */
   }
 
   .text-editing-panel {
@@ -1251,13 +1350,14 @@ export default defineComponent({
     border-left: none;
     border-top: 1px solid #dee2e6;
     border-radius: 0 0 8px 8px;
-    max-height: 40vh; /* Limit height on mobile */
+    max-height: 35vh; /* Reduced height for collapsible design */
   }
 
   .panel-content {
     height: auto;
-    max-height: calc(40vh - 60px); /* Account for panel header */
-    padding: 15px;
+    max-height: calc(35vh - 60px); /* Account for panel header */
+    padding: 10px;
+    overflow-y: auto;
   }
 
   .fabric-canvas {
@@ -1273,6 +1373,28 @@ export default defineComponent({
   }
 
   .form-control {
+    min-height: 44px;
+  }
+
+  /* Collapsible button styling for mobile */
+  .btn[data-bs-toggle='collapse'] {
+    font-size: 14px;
+    padding: 8px 12px;
+  }
+
+  /* Collapse content styling */
+  .collapse .p-2 {
+    padding: 8px !important;
+  }
+
+  /* Compact form groups */
+  .form-group {
+    margin-bottom: 8px;
+  }
+
+  /* Smaller textarea for mobile */
+  textarea.form-control {
+    rows: 1;
     min-height: 44px;
   }
 }
@@ -1391,6 +1513,52 @@ export default defineComponent({
   height: 100%;
   background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
   animation: shimmer 2s infinite;
+}
+
+/* Collapsible button styles */
+.btn[data-bs-toggle='collapse'] {
+  transition: all 0.2s ease;
+  border: 1px solid #dee2e6;
+  background-color: #f8f9fa;
+}
+
+.btn[data-bs-toggle='collapse']:hover {
+  background-color: #e9ecef;
+  border-color: #adb5bd;
+}
+
+.btn[data-bs-toggle='collapse'][aria-expanded='true'] {
+  background-color: #007bff;
+  color: white;
+  border-color: #007bff;
+}
+
+.btn[data-bs-toggle='collapse'][aria-expanded='true'] .kt-icon {
+  transform: rotate(180deg);
+}
+
+/* Collapse content styling */
+.collapse .p-2 {
+  background-color: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-top: none;
+}
+
+/* Badge styling for status indicators */
+.badge {
+  font-size: 0.75em;
+  padding: 0.25em 0.5em;
+}
+
+/* Color preview styling */
+.color-preview {
+  border: 2px solid #dee2e6;
+  border-radius: 4px;
+  transition: border-color 0.2s ease;
+}
+
+.color-preview:hover {
+  border-color: #adb5bd;
 }
 
 @keyframes shimmer {
