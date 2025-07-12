@@ -620,11 +620,18 @@ export default defineComponent({
       let availableWidth, availableHeight, textPanelWidth
 
       if (isMobile) {
-        // Mobile: vertical layout, text panel below canvas (more compact with collapsible design)
+        // Mobile: vertical layout, text panel below canvas
         textPanelWidth = 0 // No side panel on mobile
-        const margins = 40 // Reduced margins for mobile
+        const margins = 16 // Minimal margins for mobile
         availableWidth = viewport.width - margins
-        availableHeight = viewport.height - 500 // Reduced space needed for compact collapsible panel
+
+        // Calculate available height based on mobile layout
+        const headerHeight = 60
+        const controlsMinHeight = isTextEditingMode.value ? 250 : 200
+        availableHeight = viewport.height - headerHeight - controlsMinHeight - margins
+
+        // Don't let canvas exceed 55% of viewport height
+        availableHeight = Math.min(availableHeight, viewport.height * 0.55)
       } else if (isTablet) {
         // Tablet: horizontal layout with smaller text panel
         textPanelWidth = 280
@@ -640,12 +647,12 @@ export default defineComponent({
       }
 
       // Calculate maximum canvas size that fits in viewport
-      let maxCanvasWidth = Math.min(availableWidth, isMobile ? 600 : 800) // Smaller max on mobile
-      let maxCanvasHeight = Math.min(availableHeight, isMobile ? 800 : 1200) // Smaller max on mobile
+      let maxCanvasWidth = Math.min(availableWidth, isMobile ? 500 : 800) // Optimized for mobile
+      let maxCanvasHeight = Math.min(availableHeight, isMobile ? 700 : 1200) // Optimized for mobile
 
       // Ensure minimum usable size
-      maxCanvasWidth = Math.max(maxCanvasWidth, isMobile ? 300 : 400)
-      maxCanvasHeight = Math.max(maxCanvasHeight, isMobile ? 400 : 600)
+      maxCanvasWidth = Math.max(maxCanvasWidth, isMobile ? 280 : 400)
+      maxCanvasHeight = Math.max(maxCanvasHeight, isMobile ? 350 : 600)
 
       // Calculate canvas size maintaining aspect ratio
       let canvasWidth = maxCanvasWidth
