@@ -1,15 +1,18 @@
 <template>
-  <div class="text-overlay-editor">
-    <!-- Header -->
-    <div class="editor-header mb-6">
+  <div
+    class="text-overlay-editor"
+    :class="{ 'mobile-editor': isMobileView, 'text-editing-mode': isTextEditingMode }"
+  >
+    <!-- Desktop Header (hidden on mobile after thumbnail loads) -->
+    <div v-if="!isMobileView || !thumbnailUrl" class="editor-header mb-6">
       <h1 class="display-6 fw-bold text-gray-900 mb-2">Text Overlay Editor</h1>
       <p class="text-muted fs-5 mb-0">
         Design text overlays for your video segments using Fabric.js canvas editor
       </p>
     </div>
 
-    <!-- Segment Selection -->
-    <div class="segment-selection card mb-6">
+    <!-- Segment Selection (hidden on mobile after thumbnail loads) -->
+    <div v-if="!isMobileView || !thumbnailUrl" class="segment-selection card mb-6">
       <div class="card-header">
         <h3 class="card-title">Select Video Segment</h3>
       </div>
@@ -59,8 +62,11 @@
       </div>
     </div>
 
-    <!-- Thumbnail Generation -->
-    <div v-if="selectedSegment && !thumbnailUrl" class="thumbnail-generation card mb-6">
+    <!-- Thumbnail Generation (hidden on mobile after thumbnail loads) -->
+    <div
+      v-if="(!isMobileView || !thumbnailUrl) && selectedSegment && !thumbnailUrl"
+      class="thumbnail-generation card mb-6"
+    >
       <div class="card-header">
         <h3 class="card-title">Generate Thumbnail</h3>
       </div>
@@ -167,8 +173,30 @@
     </div>
 
     <!-- Main Editor Area -->
-    <div v-if="selectedSegment && thumbnailUrl" class="editor-area card">
-      <div class="card-header">
+    <div
+      v-if="selectedSegment && thumbnailUrl"
+      class="editor-area"
+      :class="{ 'mobile-layout': isMobileView }"
+    >
+      <!-- Mobile Header Bar -->
+      <div v-if="isMobileView" class="mobile-header">
+        <button @click="goBackToSegmentSelection" class="btn btn-sm btn-outline-secondary">
+          <KTIcon icon-name="arrow-left" icon-class="fs-5" />
+        </button>
+        <h6 class="mb-0 flex-grow-1 text-center">
+          {{ selectedSegment.title || `Segment ${selectedSegment.segment_number}` }}
+        </h6>
+        <button
+          @click="saveTextOverlays"
+          class="btn btn-sm btn-success"
+          :disabled="!isCanvasReady || textObjectCount === 0 || processingVideo"
+        >
+          <KTIcon :icon-name="processingVideo ? 'hourglass' : 'document-save'" icon-class="fs-5" />
+        </button>
+      </div>
+
+      <!-- Desktop Header -->
+      <div v-if="!isMobileView" class="card-header">
         <h3 class="card-title">
           Text Overlay Editor
           <span class="badge badge-light-primary ms-2">
@@ -208,9 +236,9 @@
         </div>
       </div>
 
-      <div class="card-body p-0">
-        <div class="editor-layout">
-          <!-- Canvas Area -->
+      <div class="editor-content" :class="{ 'mobile-editor-content': isMobileView }">
+        <!-- Thumbnail/Canvas Area (Top 2/3 on mobile) -->
+        <div class="canvas-section" :class="{ 'mobile-canvas-section': isMobileView }">
           <div class="canvas-container">
             <!-- Canvas will be mounted here -->
             <canvas
@@ -219,6 +247,7 @@
               :height="canvasSize.height"
               class="fabric-canvas"
               :style="{ opacity: isCanvasReady ? 1 : 0.3 }"
+              @click="handleCanvasClick"
             />
 
             <!-- Loading overlay -->
@@ -229,263 +258,149 @@
               <p class="text-muted mt-3">Initializing Fabric.js canvas...</p>
             </div>
           </div>
+        </div>
 
-          <!-- Text Editing Panel -->
-          <div v-if="hasActiveText" class="text-editing-panel">
-            <div class="panel-header">
-              <h5 class="mb-0">
-                <KTIcon icon-name="edit" icon-class="fs-4 me-2" />
-                Text Properties
-              </h5>
+        <!-- Editor Controls (Bottom 1/3 on mobile) -->
+        <div class="controls-section" :class="{ 'mobile-controls-section': isMobileView }">
+          <!-- Normal Mode: Main Editor Menu -->
+          <div
+            v-if="!isTextEditingMode"
+            class="main-editor-menu"
+            :class="{ 'mobile-main-menu': isMobileView }"
+          >
+            <div class="menu-actions">
+              <button
+                @click="enterTextEditingMode"
+                class="btn btn-primary"
+                :disabled="!isCanvasReady"
+              >
+                <KTIcon icon-name="plus" icon-class="fs-5" />
+                Add Text
+              </button>
+              <button @click="deleteSelectedText" class="btn btn-danger" :disabled="!hasActiveText">
+                <KTIcon icon-name="trash" icon-class="fs-5" />
+                Delete
+              </button>
+              <button @click="duplicateText" class="btn btn-info" :disabled="!hasActiveText">
+                <KTIcon icon-name="copy" icon-class="fs-5" />
+                Duplicate
+              </button>
+            </div>
+          </div>
+
+          <!-- Text Editing Mode: Text Input + Text Tools -->
+          <div
+            v-if="isTextEditingMode"
+            class="text-editing-controls"
+            :class="{ 'mobile-text-editing': isMobileView }"
+          >
+            <!-- Text Input Area (25% of controls on mobile) -->
+            <div class="text-input-section" :class="{ 'mobile-text-input': isMobileView }">
+              <div class="text-input-header">
+                <h6 class="mb-0">Text Content</h6>
+                <button @click="exitTextEditingMode" class="btn btn-sm btn-outline-secondary">
+                  <KTIcon icon-name="cross" icon-class="fs-5" />
+                </button>
+              </div>
+              <textarea
+                ref="textContentInput"
+                v-model="currentTextContent"
+                @input="updateTextContent"
+                @focus="handleTextInputFocus"
+                @blur="handleTextInputBlur"
+                class="form-control"
+                rows="2"
+                placeholder="Enter your text..."
+              ></textarea>
             </div>
 
-            <div class="panel-content">
-              <!-- Text Content - Always Visible -->
-              <div class="form-group mb-3">
-                <label class="form-label fw-bold">Text Content</label>
-                <textarea
-                  v-model="currentTextContent"
-                  @input="updateTextContent"
-                  class="form-control"
-                  rows="2"
-                  placeholder="Enter your text..."
-                ></textarea>
+            <!-- Text Tools (75% of controls on mobile) -->
+            <div class="text-tools-section" :class="{ 'mobile-text-tools': isMobileView }">
+              <!-- Font Family -->
+              <div class="tool-group">
+                <label class="tool-label">Font</label>
+                <select
+                  v-model="currentFontFamily"
+                  @change="updateFontFamily"
+                  class="form-select form-select-sm"
+                >
+                  <option value="Arial">Arial</option>
+                  <option value="Helvetica">Helvetica</option>
+                  <option value="Times New Roman">Times New Roman</option>
+                  <option value="Georgia">Georgia</option>
+                  <option value="Verdana">Verdana</option>
+                  <option value="Courier New">Courier New</option>
+                  <option value="Impact">Impact</option>
+                  <option value="Comic Sans MS">Comic Sans MS</option>
+                </select>
               </div>
 
-              <!-- Font Family - Collapsible -->
-              <div class="form-group mb-2">
-                <button
-                  @click="toggleCollapse('font-family')"
-                  class="btn btn-outline-secondary btn-sm w-100 text-start"
-                  :class="{ collapsed: !collapsedSections['font-family'] }"
-                >
-                  <KTIcon icon-name="font" icon-class="fs-5 me-2" />
-                  Font Family: {{ currentFontFamily }}
-                  <KTIcon
-                    :icon-name="collapsedSections['font-family'] ? 'arrow-down' : 'arrow-up'"
-                    icon-class="fs-5 ms-auto"
+              <!-- Font Size -->
+              <div class="tool-group">
+                <label class="tool-label">Size</label>
+                <div class="size-controls">
+                  <input
+                    v-model.number="currentFontSize"
+                    @input="updateFontSize"
+                    type="range"
+                    class="form-range"
+                    min="8"
+                    max="200"
                   />
-                </button>
-                <div v-show="collapsedSections['font-family']" class="collapse-content mt-2">
-                  <div class="p-2 border rounded bg-light">
-                    <select
-                      v-model="currentFontFamily"
-                      @change="updateFontFamily"
-                      class="form-select"
-                    >
-                      <option value="Arial">Arial</option>
-                      <option value="Helvetica">Helvetica</option>
-                      <option value="Times New Roman">Times New Roman</option>
-                      <option value="Georgia">Georgia</option>
-                      <option value="Verdana">Verdana</option>
-                      <option value="Courier New">Courier New</option>
-                      <option value="Impact">Impact</option>
-                      <option value="Comic Sans MS">Comic Sans MS</option>
-                    </select>
-                  </div>
+                  <span class="size-value">{{ currentFontSize }}px</span>
                 </div>
               </div>
 
-              <!-- Font Size - Collapsible -->
-              <div class="form-group mb-2">
-                <button
-                  @click="toggleCollapse('font-size')"
-                  class="btn btn-outline-secondary btn-sm w-100 text-start"
-                  :class="{ collapsed: !collapsedSections['font-size'] }"
-                >
-                  <KTIcon icon-name="text" icon-class="fs-5 me-2" />
-                  Font Size: {{ currentFontSize }}px
-                  <KTIcon
-                    :icon-name="collapsedSections['font-size'] ? 'arrow-down' : 'arrow-up'"
-                    icon-class="fs-5 ms-auto"
+              <!-- Font Color -->
+              <div class="tool-group">
+                <label class="tool-label">Color</label>
+                <input
+                  v-model="currentFontColor"
+                  @input="updateFontColor"
+                  type="color"
+                  class="form-control form-control-color"
+                />
+              </div>
+
+              <!-- Font Style -->
+              <div class="tool-group">
+                <label class="tool-label">Style</label>
+                <div class="btn-group btn-group-sm" role="group">
+                  <button
+                    @click="toggleBold"
+                    :class="{ active: currentFontWeight === 'bold' }"
+                    class="btn btn-outline-secondary"
+                  >
+                    <strong>B</strong>
+                  </button>
+                  <button
+                    @click="toggleItalic"
+                    :class="{ active: currentFontStyle === 'italic' }"
+                    class="btn btn-outline-secondary"
+                  >
+                    <em>I</em>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Background -->
+              <div class="tool-group">
+                <label class="tool-label">Background</label>
+                <div class="background-controls">
+                  <button
+                    @click="toggleTextBackground"
+                    :class="{ active: hasTextBackground }"
+                    class="btn btn-sm btn-outline-secondary"
+                  >
+                    BG
+                  </button>
+                  <input
+                    v-if="hasTextBackground"
+                    v-model="currentBackgroundColor"
+                    @input="updateBackgroundColor"
+                    type="color"
+                    class="form-control form-control-color form-control-sm"
                   />
-                </button>
-                <div v-show="collapsedSections['font-size']" class="collapse-content mt-2">
-                  <div class="p-2 border rounded bg-light">
-                    <div class="input-group mb-2">
-                      <input
-                        v-model.number="currentFontSize"
-                        @input="updateFontSize"
-                        type="number"
-                        class="form-control"
-                        min="8"
-                        max="200"
-                      />
-                      <span class="input-group-text">px</span>
-                    </div>
-                    <input
-                      v-model.number="currentFontSize"
-                      @input="updateFontSize"
-                      type="range"
-                      class="form-range"
-                      min="8"
-                      max="200"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <!-- Font Color - Collapsible -->
-              <div class="form-group mb-2">
-                <button
-                  @click="toggleCollapse('font-color')"
-                  class="btn btn-outline-secondary btn-sm w-100 text-start"
-                  :class="{ collapsed: !collapsedSections['font-color'] }"
-                >
-                  <KTIcon icon-name="palette" icon-class="fs-5 me-2" />
-                  Font Color
-                  <div
-                    class="ms-auto rounded"
-                    :style="{
-                      backgroundColor: currentFontColor,
-                      width: '20px',
-                      height: '20px',
-                      border: '1px solid #dee2e6',
-                    }"
-                  ></div>
-                </button>
-                <div v-show="collapsedSections['font-color']" class="collapse-content mt-2">
-                  <div class="p-2 border rounded bg-light">
-                    <div class="color-picker-group">
-                      <input
-                        v-model="currentFontColor"
-                        @input="updateFontColor"
-                        type="color"
-                        class="form-control form-control-color"
-                      />
-                      <input
-                        v-model="currentFontColor"
-                        @input="updateFontColor"
-                        type="text"
-                        class="form-control ms-2"
-                        placeholder="#000000"
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Font Style - Collapsible -->
-              <div class="form-group mb-2">
-                <button
-                  @click="toggleCollapse('font-style')"
-                  class="btn btn-outline-secondary btn-sm w-100 text-start"
-                  :class="{ collapsed: !collapsedSections['font-style'] }"
-                >
-                  <KTIcon icon-name="text" icon-class="fs-5 me-2" />
-                  Font Style
-                  <span class="ms-auto">
-                    <span v-if="currentFontWeight === 'bold'" class="badge bg-primary me-1">B</span>
-                    <span v-if="currentFontStyle === 'italic'" class="badge bg-primary">I</span>
-                  </span>
-                </button>
-                <div v-show="collapsedSections['font-style']" class="collapse-content mt-2">
-                  <div class="p-2 border rounded bg-light">
-                    <div class="btn-group w-100" role="group">
-                      <button
-                        @click="toggleBold"
-                        :class="{ active: currentFontWeight === 'bold' }"
-                        class="btn btn-outline-secondary"
-                      >
-                        <strong>B</strong>
-                      </button>
-                      <button
-                        @click="toggleItalic"
-                        :class="{ active: currentFontStyle === 'italic' }"
-                        class="btn btn-outline-secondary"
-                      >
-                        <em>I</em>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Background - Collapsible -->
-              <div class="form-group mb-2">
-                <button
-                  @click="toggleCollapse('background')"
-                  class="btn btn-outline-secondary btn-sm w-100 text-start"
-                  :class="{ collapsed: !collapsedSections['background'] }"
-                >
-                  <KTIcon icon-name="background" icon-class="fs-5 me-2" />
-                  Text Background
-                  <span class="ms-auto">
-                    <span v-if="hasTextBackground" class="badge bg-success">ON</span>
-                    <span v-if="!hasTextBackground" class="badge bg-secondary">OFF</span>
-                  </span>
-                </button>
-                <div v-show="collapsedSections['background']" class="collapse-content mt-2">
-                  <div class="p-2 border rounded bg-light">
-                    <div class="form-check mb-2">
-                      <input
-                        v-model="hasTextBackground"
-                        @change="toggleTextBackground"
-                        class="form-check-input"
-                        type="checkbox"
-                        id="backgroundToggle"
-                      />
-                      <label class="form-check-label" for="backgroundToggle">
-                        Enable Background
-                      </label>
-                    </div>
-                    <div v-if="hasTextBackground" class="color-picker-group">
-                      <input
-                        v-model="currentBackgroundColor"
-                        @input="updateBackgroundColor"
-                        type="color"
-                        class="form-control form-control-color"
-                      />
-                      <input
-                        v-model="currentBackgroundColor"
-                        @input="updateBackgroundColor"
-                        type="text"
-                        class="form-control ms-2"
-                        placeholder="#ffffff"
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Opacity - Collapsible -->
-              <div class="form-group mb-2">
-                <button
-                  @click="toggleCollapse('opacity')"
-                  class="btn btn-outline-secondary btn-sm w-100 text-start"
-                  :class="{ collapsed: !collapsedSections['opacity'] }"
-                >
-                  <KTIcon icon-name="transparency" icon-class="fs-5 me-2" />
-                  Opacity: {{ Math.round(currentOpacity * 100) }}%
-                  <KTIcon
-                    :icon-name="collapsedSections['opacity'] ? 'arrow-down' : 'arrow-up'"
-                    icon-class="fs-5 ms-auto"
-                  />
-                </button>
-                <div v-show="collapsedSections['opacity']" class="collapse-content mt-2">
-                  <div class="p-2 border rounded bg-light">
-                    <div class="input-group mb-2">
-                      <input
-                        v-model.number="currentOpacity"
-                        @input="updateOpacity"
-                        type="number"
-                        class="form-control"
-                        min="0"
-                        max="1"
-                        step="0.1"
-                      />
-                      <span class="input-group-text">%</span>
-                    </div>
-                    <input
-                      v-model.number="currentOpacity"
-                      @input="updateOpacity"
-                      type="range"
-                      class="form-range"
-                      min="0"
-                      max="1"
-                      step="0.1"
-                    />
-                  </div>
                 </div>
               </div>
             </div>
@@ -1098,25 +1013,7 @@ export default defineComponent({
       }, 250) // 250ms debounce delay
     }
 
-    // Lifecycle
-    onMounted(() => {
-      loadSegments()
-
-      // Add window resize listener
-      window.addEventListener('resize', handleWindowResize)
-    })
-
-    onUnmounted(() => {
-      dispose()
-
-      // Clear resize timeout
-      if (resizeTimeout) {
-        clearTimeout(resizeTimeout)
-      }
-
-      // Remove window resize listener
-      window.removeEventListener('resize', handleWindowResize)
-    })
+    // Lifecycle hooks are handled below with mobile functionality
 
     // Download processed video
     const downloadProcessedVideo = async () => {
@@ -1142,6 +1039,153 @@ export default defineComponent({
         alert('Failed to download video. Please try again.')
       }
     }
+
+    // New methods for mobile/desktop layout
+    const isMobileView = computed(() => {
+      return window.innerWidth <= 768
+    })
+
+    const isTextEditingMode = ref(false)
+    const textContentInput = ref<HTMLTextAreaElement | null>(null)
+
+    const enterTextEditingMode = async () => {
+      isTextEditingMode.value = true
+
+      // Add a new text object if none exists
+      if (!hasActiveText.value) {
+        await addNewText()
+      }
+
+      nextTick(() => {
+        textContentInput.value?.focus()
+      })
+    }
+
+    const exitTextEditingMode = () => {
+      isTextEditingMode.value = false
+      textContentInput.value?.blur()
+    }
+
+    const handleTextInputFocus = () => {
+      // Prevent viewport from scrolling when keyboard opens
+      if (isMobileView.value) {
+        document.body.style.overflow = 'hidden'
+      }
+    }
+
+    const handleTextInputBlur = () => {
+      // Restore normal scrolling when keyboard closes
+      if (isMobileView.value) {
+        document.body.style.overflow = 'auto'
+      }
+    }
+
+    const handleCanvasClick = (event: Event) => {
+      if (!isTextEditingMode.value && isCanvasReady.value && canvas.value) {
+        const mouseEvent = event as MouseEvent
+
+        // Check if the click is on an existing text object
+        const clickedObject = canvas.value.findTarget(mouseEvent)
+
+        if (clickedObject && clickedObject.type === 'text') {
+          // If a text object is clicked, enter editing mode
+          const textObj = clickedObject as unknown as {
+            text: string
+            fontFamily: string
+            fontSize: number
+            fill: string
+            fontWeight: string | number
+            fontStyle: string
+            backgroundColor: string
+            opacity: number
+          }
+          activeTextObject.value = clickedObject
+          currentTextContent.value = textObj.text || ''
+          currentFontFamily.value = textObj.fontFamily || 'Arial'
+          currentFontSize.value = textObj.fontSize || 24
+          currentFontColor.value =
+            (typeof textObj.fill === 'string' ? textObj.fill : '#000000') || '#000000'
+          currentFontWeight.value =
+            (typeof textObj.fontWeight === 'string'
+              ? textObj.fontWeight
+              : String(textObj.fontWeight)) || 'normal'
+          currentFontStyle.value = textObj.fontStyle || 'normal'
+          hasTextBackground.value = !!textObj.backgroundColor
+          currentBackgroundColor.value =
+            (typeof textObj.backgroundColor === 'string' ? textObj.backgroundColor : '#ffffff') ||
+            '#ffffff'
+          currentOpacity.value = textObj.opacity || 1
+          isTextEditingMode.value = true
+          nextTick(() => {
+            textContentInput.value?.focus()
+          })
+        } else {
+          // If no text object is clicked, add a new one
+          addNewText()
+        }
+      }
+    }
+
+    const goBackToSegmentSelection = () => {
+      isTextEditingMode.value = false
+      thumbnailUrl.value = ''
+      if (canvas.value) {
+        canvas.value.clear()
+      }
+      // Reset form values to default
+      currentTextContent.value = ''
+      currentFontFamily.value = 'Arial'
+      currentFontSize.value = 24
+      currentFontColor.value = '#000000'
+      currentFontWeight.value = 'normal'
+      currentFontStyle.value = 'normal'
+      hasTextBackground.value = false
+      currentBackgroundColor.value = '#ffffff'
+      currentOpacity.value = 1
+      activeTextObject.value = null
+    }
+
+    // Handle clicks outside text input to exit text editing mode
+    const handleDocumentClick = (event: Event) => {
+      if (isTextEditingMode.value && isMobileView.value) {
+        const target = event.target as HTMLElement
+        const textInputSection = document.querySelector('.mobile-text-input')
+
+        if (textInputSection && !textInputSection.contains(target)) {
+          exitTextEditingMode()
+        }
+      }
+    }
+
+    // Set up global click listener for mobile and window resize
+    onMounted(() => {
+      loadSegments()
+
+      // Add window resize listener
+      window.addEventListener('resize', handleWindowResize)
+
+      if (isMobileView.value) {
+        document.addEventListener('click', handleDocumentClick)
+      }
+    })
+
+    onUnmounted(() => {
+      if (canvas.value) {
+        dispose()
+      }
+
+      // Clear resize timeout
+      if (resizeTimeout) {
+        clearTimeout(resizeTimeout)
+      }
+
+      // Remove window resize listener
+      window.removeEventListener('resize', handleWindowResize)
+
+      if (isMobileView.value) {
+        document.removeEventListener('click', handleDocumentClick)
+      }
+    })
 
     return {
       // Refs
@@ -1211,6 +1255,17 @@ export default defineComponent({
       // Collapsible methods
       toggleCollapse,
       collapsedSections,
+
+      // New methods for mobile/desktop layout
+      isMobileView,
+      isTextEditingMode,
+      textContentInput,
+      enterTextEditingMode,
+      exitTextEditingMode,
+      handleTextInputFocus,
+      handleTextInputBlur,
+      handleCanvasClick,
+      goBackToSegmentSelection,
     }
   },
 })
@@ -1221,6 +1276,195 @@ export default defineComponent({
   padding: 20px;
 }
 
+/* Mobile Layout */
+@media (max-width: 768px) {
+  .text-overlay-editor.mobile-editor {
+    padding: 0;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  .mobile-layout {
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .mobile-header {
+    display: flex;
+    align-items: center;
+    padding: 12px 16px;
+    background: white;
+    border-bottom: 1px solid #dee2e6;
+    gap: 12px;
+    flex-shrink: 0;
+  }
+
+  .mobile-editor-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* Thumbnail/Canvas Section - Top 2/3 */
+  .mobile-canvas-section {
+    flex: 2;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #f8f9fa;
+    padding: 16px;
+    overflow: hidden;
+  }
+
+  /* Controls Section - Bottom 1/3 */
+  .mobile-controls-section {
+    flex: 1;
+    background: white;
+    border-top: 1px solid #dee2e6;
+    overflow: hidden;
+  }
+
+  /* Main Editor Menu */
+  .mobile-main-menu {
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+  }
+
+  .mobile-main-menu .menu-actions {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .mobile-main-menu .btn {
+    min-width: 80px;
+    padding: 8px 12px;
+    font-size: 14px;
+  }
+
+  /* Text Editing Mode */
+  .mobile-text-editing {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Text Input Section - 25% of controls */
+  .mobile-text-input {
+    flex: 0 0 25%;
+    border-bottom: 1px solid #dee2e6;
+    padding: 12px 16px;
+    background: #f8f9fa;
+  }
+
+  .text-input-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+
+  .text-input-header h6 {
+    font-size: 14px;
+    font-weight: 600;
+    color: #495057;
+  }
+
+  .mobile-text-input .form-control {
+    font-size: 14px;
+    border: 1px solid #ced4da;
+    border-radius: 6px;
+  }
+
+  /* Text Tools Section - 75% of controls */
+  .mobile-text-tools {
+    flex: 1;
+    padding: 16px;
+    overflow-y: auto;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    align-content: start;
+  }
+
+  .tool-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .tool-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #6c757d;
+    margin-bottom: 4px;
+  }
+
+  .tool-group .form-select,
+  .tool-group .form-control {
+    font-size: 14px;
+    padding: 6px 8px;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+  }
+
+  .tool-group .form-control-color {
+    width: 40px;
+    height: 32px;
+    padding: 2px;
+    border-radius: 4px;
+  }
+
+  .size-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .size-value {
+    font-size: 12px;
+    color: #6c757d;
+    text-align: center;
+  }
+
+  .background-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .btn-group-sm .btn {
+    padding: 4px 8px;
+    font-size: 12px;
+  }
+
+  /* Text editing mode - ensure keyboard doesn't push thumbnail out of view */
+  .text-editing-mode .mobile-canvas-section {
+    position: fixed;
+    top: 60px; /* Height of mobile header */
+    left: 0;
+    right: 0;
+    height: calc(66.67vh - 60px); /* 2/3 of viewport minus header */
+    z-index: 1000;
+  }
+
+  .text-editing-mode .mobile-controls-section {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 33.33vh; /* 1/3 of viewport */
+    z-index: 1001;
+  }
+}
+
+/* Desktop Layout */
 .canvas-container {
   display: flex;
   justify-content: center;
@@ -1232,11 +1476,31 @@ export default defineComponent({
   position: relative;
 }
 
+@media (max-width: 768px) {
+  .mobile-canvas-section .canvas-container {
+    margin: 0;
+    padding: 0;
+    background: transparent;
+    border-radius: 0;
+    width: 100%;
+    height: 100%;
+  }
+}
+
 .fabric-canvas {
   border: 2px solid #dee2e6;
   border-radius: 8px;
   background: white;
   transition: opacity 0.3s ease;
+  max-width: 100%;
+  max-height: 100%;
+}
+
+@media (max-width: 768px) {
+  .mobile-canvas-section .fabric-canvas {
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+  }
 }
 
 .loading-overlay {
