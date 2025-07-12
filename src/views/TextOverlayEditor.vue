@@ -129,6 +129,12 @@
               <span class="text-info">{{ canvasSize.width }}×{{ canvasSize.height }}</span>
             </div>
           </div>
+          <div class="col-md-3">
+            <div class="status-item">
+              <span class="status-label">Scale:</span>
+              <span class="text-info">{{ Math.round(scaleFactors.x * 100) }}%</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -603,7 +609,73 @@ export default defineComponent({
       }
     }
 
-    // Canvas initialization
+    // Dynamic canvas sizing with viewport constraints
+    const calculateCanvasSize = () => {
+      const viewport = {
+        width: window.innerWidth,
+        height: window.innerHeight,
+      }
+
+      // Check if we're on mobile (layout changes to vertical)
+      const isMobile = viewport.width <= 768
+      const isTablet = viewport.width > 768 && viewport.width <= 1024
+
+      // Video aspect ratio (vertical format: 9:16)
+      const videoAspectRatio = 1080 / 1920 // 0.5625
+
+      let availableWidth, availableHeight, textPanelWidth
+
+      if (isMobile) {
+        // Mobile: vertical layout, text panel below canvas
+        textPanelWidth = 0 // No side panel on mobile
+        const margins = 40 // Reduced margins for mobile
+        availableWidth = viewport.width - margins
+        availableHeight = viewport.height - 600 // Account for headers, status panels, and text panel below
+      } else if (isTablet) {
+        // Tablet: horizontal layout with smaller text panel
+        textPanelWidth = 280
+        const margins = 60
+        availableWidth = viewport.width - textPanelWidth - margins
+        availableHeight = viewport.height - 400
+      } else {
+        // Desktop: horizontal layout with full text panel
+        textPanelWidth = 320
+        const margins = 80
+        availableWidth = viewport.width - textPanelWidth - margins
+        availableHeight = viewport.height - 400
+      }
+
+      // Calculate maximum canvas size that fits in viewport
+      let maxCanvasWidth = Math.min(availableWidth, isMobile ? 600 : 800) // Smaller max on mobile
+      let maxCanvasHeight = Math.min(availableHeight, isMobile ? 800 : 1200) // Smaller max on mobile
+
+      // Ensure minimum usable size
+      maxCanvasWidth = Math.max(maxCanvasWidth, isMobile ? 300 : 400)
+      maxCanvasHeight = Math.max(maxCanvasHeight, isMobile ? 400 : 600)
+
+      // Calculate canvas size maintaining aspect ratio
+      let canvasWidth = maxCanvasWidth
+      let canvasHeight = maxCanvasWidth / videoAspectRatio
+
+      // If height exceeds available space, scale down
+      if (canvasHeight > maxCanvasHeight) {
+        canvasHeight = maxCanvasHeight
+        canvasWidth = maxCanvasHeight * videoAspectRatio
+      }
+
+      // Ensure width doesn't exceed available space
+      if (canvasWidth > maxCanvasWidth) {
+        canvasWidth = maxCanvasWidth
+        canvasHeight = maxCanvasWidth / videoAspectRatio
+      }
+
+      return {
+        width: Math.floor(canvasWidth),
+        height: Math.floor(canvasHeight),
+      }
+    }
+
+    // Canvas initialization with dynamic sizing
     const initializeEditor = async () => {
       if (!thumbnailUrl.value || !selectedSegment.value) return
 
@@ -620,13 +692,17 @@ export default defineComponent({
       console.log('🎨 Initializing Text Overlay Editor')
       console.log('🖼️ Using thumbnail:', thumbnailUrl.value)
 
+      // Calculate dynamic canvas size based on viewport
+      const dynamicCanvasSize = calculateCanvasSize()
+      console.log('📐 Dynamic canvas size:', dynamicCanvasSize)
+
       await initializeCanvas(
         fabricCanvasEl.value,
         thumbnailUrl.value,
-        1080, // Default video width - could be enhanced to get from segment metadata
-        1920, // Default video height - could be enhanced to get from segment metadata
-        540, // max canvas width (scaled down for display)
-        960, // max canvas height (scaled down for display)
+        1080, // Video width (original)
+        1920, // Video height (original)
+        dynamicCanvasSize.width, // Dynamic max canvas width
+        dynamicCanvasSize.height, // Dynamic max canvas height
       )
     }
 
@@ -920,13 +996,53 @@ export default defineComponent({
       return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
     }
 
+    // Debounced window resize handler for dynamic canvas sizing
+    let resizeTimeout: NodeJS.Timeout | null = null
+
+    const handleWindowResize = () => {
+      // Clear existing timeout
+      if (resizeTimeout) {
+        clearTimeout(resizeTimeout)
+      }
+
+      // Debounce resize events to prevent excessive recalculations
+      resizeTimeout = setTimeout(() => {
+        if (isCanvasReady.value && canvas.value) {
+          console.log('🔄 Window resized, recalculating canvas size...')
+          const newCanvasSize = calculateCanvasSize()
+
+          // Update canvas dimensions
+          canvas.value.setDimensions({
+            width: newCanvasSize.width,
+            height: newCanvasSize.height,
+          })
+
+          // Update reactive canvas size
+          canvasSize.value = newCanvasSize
+
+          console.log('✅ Canvas resized to:', newCanvasSize)
+        }
+      }, 250) // 250ms debounce delay
+    }
+
     // Lifecycle
     onMounted(() => {
       loadSegments()
+
+      // Add window resize listener
+      window.addEventListener('resize', handleWindowResize)
     })
 
     onUnmounted(() => {
       dispose()
+
+      // Clear resize timeout
+      if (resizeTimeout) {
+        clearTimeout(resizeTimeout)
+      }
+
+      // Remove window resize listener
+      window.removeEventListener('resize', handleWindowResize)
     })
 
     // Download processed video
@@ -1090,6 +1206,7 @@ export default defineComponent({
 .editor-layout {
   display: flex;
   min-height: 500px;
+  gap: 0;
 }
 
 .canvas-container {
@@ -1101,13 +1218,75 @@ export default defineComponent({
   background: #f8f9fa;
   border-radius: 8px 0 0 8px;
   position: relative;
+  min-width: 0; /* Allow flex item to shrink below content size */
+  overflow: hidden; /* Prevent canvas from overflowing */
 }
 
 .text-editing-panel {
   width: 320px;
+  min-width: 320px; /* Prevent panel from shrinking */
   background: white;
   border-left: 1px solid #dee2e6;
   border-radius: 0 8px 8px 0;
+  overflow-y: auto; /* Allow scrolling if content is too tall */
+}
+
+/* Mobile responsive design */
+@media (max-width: 768px) {
+  .editor-layout {
+    flex-direction: column;
+    min-height: auto;
+  }
+
+  .canvas-container {
+    border-radius: 8px 8px 0 0;
+    padding: 10px;
+    min-height: 400px;
+    max-height: 60vh; /* Limit canvas height on mobile */
+  }
+
+  .text-editing-panel {
+    width: 100%;
+    min-width: 100%;
+    border-left: none;
+    border-top: 1px solid #dee2e6;
+    border-radius: 0 0 8px 8px;
+    max-height: 40vh; /* Limit height on mobile */
+  }
+
+  .panel-content {
+    height: auto;
+    max-height: calc(40vh - 60px); /* Account for panel header */
+    padding: 15px;
+  }
+
+  .fabric-canvas {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+  }
+
+  /* Improve touch interactions on mobile */
+  .btn {
+    min-height: 44px; /* iOS recommended touch target size */
+    padding: 8px 16px;
+  }
+
+  .form-control {
+    min-height: 44px;
+  }
+}
+
+/* Tablet responsive design */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .text-editing-panel {
+    width: 280px;
+    min-width: 280px;
+  }
+
+  .canvas-container {
+    padding: 15px;
+  }
 }
 
 .panel-header {
