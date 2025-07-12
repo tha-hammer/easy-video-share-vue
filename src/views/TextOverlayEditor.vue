@@ -180,18 +180,21 @@
     >
       <!-- Mobile Header Bar -->
       <div v-if="isMobileView" class="mobile-header">
-        <button @click="goBackToSegmentSelection" class="btn btn-sm btn-outline-secondary">
-          <KTIcon icon-name="arrow-left" icon-class="fs-5" />
+        <button
+          @click="goBackToSegmentSelection"
+          class="btn btn-sm btn-outline-secondary mobile-header-btn"
+        >
+          <KTIcon icon-name="arrow-left" icon-class="fs-6" />
         </button>
-        <h6 class="mb-0 flex-grow-1 text-center">
+        <h6 class="mb-0 flex-grow-1 text-center mobile-header-title">
           {{ selectedSegment.title || `Segment ${selectedSegment.segment_number}` }}
         </h6>
         <button
           @click="saveTextOverlays"
-          class="btn btn-sm btn-success"
+          class="btn btn-sm btn-success mobile-header-btn"
           :disabled="!isCanvasReady || textObjectCount === 0 || processingVideo"
         >
-          <KTIcon :icon-name="processingVideo ? 'hourglass' : 'document-save'" icon-class="fs-5" />
+          <KTIcon :icon-name="processingVideo ? 'hourglass' : 'document-save'" icon-class="fs-6" />
         </button>
       </div>
 
@@ -273,17 +276,25 @@
                 @click="enterTextEditingMode"
                 class="btn btn-primary"
                 :disabled="!isCanvasReady"
+                title="Add Text"
               >
-                <KTIcon icon-name="plus" icon-class="fs-5" />
-                Add Text
+                <KTIcon icon-name="plus" icon-class="fs-6" />
               </button>
-              <button @click="deleteSelectedText" class="btn btn-danger" :disabled="!hasActiveText">
-                <KTIcon icon-name="trash" icon-class="fs-5" />
-                Delete
+              <button
+                @click="deleteSelectedText"
+                class="btn btn-danger"
+                :disabled="!hasActiveText"
+                title="Delete"
+              >
+                <KTIcon icon-name="trash" icon-class="fs-6" />
               </button>
-              <button @click="duplicateText" class="btn btn-info" :disabled="!hasActiveText">
-                <KTIcon icon-name="copy" icon-class="fs-5" />
-                Duplicate
+              <button
+                @click="duplicateText"
+                class="btn btn-info"
+                :disabled="!hasActiveText"
+                title="Duplicate"
+              >
+                <KTIcon icon-name="copy" icon-class="fs-6" />
               </button>
             </div>
           </div>
@@ -626,12 +637,12 @@ export default defineComponent({
         availableWidth = viewport.width - margins
 
         // Calculate available height based on mobile layout
-        const headerHeight = 60
-        const controlsMinHeight = isTextEditingMode.value ? 250 : 200
+        const headerHeight = 40
+        const controlsMinHeight = isTextEditingMode.value ? 120 : 80
         availableHeight = viewport.height - headerHeight - controlsMinHeight - margins
 
-        // Don't let canvas exceed 55% of viewport height
-        availableHeight = Math.min(availableHeight, viewport.height * 0.55)
+        // Don't let canvas exceed 75% of viewport height (more space now)
+        availableHeight = Math.min(availableHeight, viewport.height * 0.75)
       } else if (isTablet) {
         // Tablet: horizontal layout with smaller text panel
         textPanelWidth = 280
@@ -1394,13 +1405,28 @@ export default defineComponent({
   .mobile-header {
     display: flex;
     align-items: center;
-    padding: 12px 16px;
+    padding: 8px 12px;
     background: white;
     border-bottom: 1px solid #dee2e6;
-    gap: 12px;
+    gap: 8px;
     flex-shrink: 0;
-    height: 60px;
-    min-height: 60px;
+    height: 40px;
+    min-height: 40px;
+  }
+
+  .mobile-header-btn {
+    min-width: 24px;
+    max-width: 24px;
+    min-height: 24px;
+    max-height: 24px;
+    padding: 2px;
+    border-radius: 3px;
+    font-size: 8px;
+  }
+
+  .mobile-header-title {
+    font-size: 12px;
+    font-weight: 600;
   }
 
   .mobile-editor-content {
@@ -1408,12 +1434,12 @@ export default defineComponent({
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    height: calc(100vh - 60px);
+    height: calc(100vh - 40px);
   }
 
-  /* Thumbnail/Canvas Section - Flexible height based on content */
+  /* Thumbnail/Canvas Section - Takes most of the space */
   .mobile-canvas-section {
-    flex: 0 0 auto;
+    flex: 1;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1422,10 +1448,10 @@ export default defineComponent({
     overflow: hidden;
     width: 100vw;
     box-sizing: border-box;
-    max-height: 55vh; /* Limit canvas height to leave room for controls */
+    min-height: 300px; /* Ensure minimum canvas size */
   }
 
-  /* Controls Section - Take remaining space with minimum height */
+  /* Controls Section - Compact height */
   .mobile-controls-section {
     flex: 1;
     background: white;
@@ -1433,22 +1459,23 @@ export default defineComponent({
     overflow: hidden;
     width: 100vw;
     box-sizing: border-box;
-    min-height: 200px; /* Ensure minimum height for controls */
+    min-height: 80px; /* Much smaller minimum height */
+    max-height: 150px; /* Limit max height to save space */
   }
 
-  /* Main Editor Menu - Improved layout */
+  /* Main Editor Menu - Compact layout */
   .mobile-main-menu {
     height: 100%;
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 20px 16px;
-    min-height: 120px; /* Ensure minimum height for buttons */
+    padding: 8px 12px;
+    min-height: 50px; /* Much smaller height */
   }
 
   .mobile-main-menu .menu-actions {
     display: flex;
-    gap: 12px;
+    gap: 6px;
     flex-wrap: wrap;
     justify-content: center;
     align-items: center;
@@ -1456,27 +1483,30 @@ export default defineComponent({
   }
 
   .mobile-main-menu .btn {
-    min-width: 90px;
-    padding: 12px 16px;
-    font-size: 14px;
-    min-height: 44px; /* Touch-friendly size */
-    border-radius: 8px;
-    font-weight: 600;
+    min-width: 25px;
+    max-width: 26px;
+    padding: 2px 4px;
+    font-size: 10px;
+    min-height: 22px;
+    max-height: 22px;
+    border-radius: 3px;
+    font-weight: 500;
+    line-height: 1;
   }
 
-  /* Text Editing Mode - Improved layout */
+  /* Text Editing Mode - Compact layout */
   .mobile-text-editing {
     height: 100%;
     display: flex;
     flex-direction: column;
-    min-height: 300px; /* Ensure minimum height for text editing */
+    min-height: 200px; /* Reduced minimum height */
   }
 
-  /* Text Input Section - Fixed height for better UX */
+  /* Text Input Section - Compact */
   .mobile-text-input {
-    flex: 0 0 80px;
+    flex: 0 0 50px;
     border-bottom: 1px solid #dee2e6;
-    padding: 12px 16px;
+    padding: 6px 8px;
     background: #f8f9fa;
   }
 
@@ -1484,30 +1514,41 @@ export default defineComponent({
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 8px;
+    margin-bottom: 4px;
   }
 
   .text-input-header h6 {
-    font-size: 14px;
+    font-size: 10px;
     font-weight: 600;
     color: #495057;
   }
 
-  .mobile-text-input .form-control {
-    font-size: 14px;
-    border: 1px solid #ced4da;
-    border-radius: 6px;
-    min-height: 36px;
+  .text-input-header .btn {
+    min-width: 16px;
+    max-width: 16px;
+    min-height: 16px;
+    max-height: 16px;
+    padding: 0;
+    font-size: 8px;
+    border-radius: 2px;
   }
 
-  /* Text Tools Section - Improved scrolling and layout */
+  .mobile-text-input .form-control {
+    font-size: 10px;
+    border: 1px solid #ced4da;
+    border-radius: 3px;
+    min-height: 20px;
+    padding: 2px 4px;
+  }
+
+  /* Text Tools Section - Compact grid layout */
   .mobile-text-tools {
     flex: 1;
-    padding: 16px;
+    padding: 6px;
     overflow-y: auto;
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 16px;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 6px;
     align-content: start;
     min-height: 0; /* Allow proper scrolling */
   }
@@ -1515,66 +1556,71 @@ export default defineComponent({
   .tool-group {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 2px;
   }
 
   .tool-label {
-    font-size: 12px;
+    font-size: 8px;
     font-weight: 600;
     color: #6c757d;
-    margin-bottom: 4px;
+    margin-bottom: 2px;
+    line-height: 1;
   }
 
   .tool-group .form-select,
   .tool-group .form-control {
-    font-size: 14px;
-    padding: 8px 10px;
+    font-size: 8px;
+    padding: 2px 4px;
     border: 1px solid #ced4da;
-    border-radius: 6px;
-    min-height: 40px;
+    border-radius: 3px;
+    min-height: 20px;
   }
 
   .tool-group .form-control-color {
-    width: 50px;
-    height: 40px;
-    padding: 2px;
-    border-radius: 6px;
+    width: 20px;
+    height: 20px;
+    padding: 1px;
+    border-radius: 3px;
   }
 
   .size-controls {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 2px;
   }
 
   .size-value {
-    font-size: 12px;
+    font-size: 8px;
     color: #6c757d;
     text-align: center;
     font-weight: 600;
+    line-height: 1;
   }
 
   .background-controls {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 4px;
   }
 
   .btn-group-sm .btn {
-    padding: 6px 10px;
-    font-size: 12px;
-    min-height: 32px;
+    padding: 2px 4px;
+    font-size: 8px;
+    min-height: 18px;
+    max-height: 18px;
+    border-radius: 2px;
   }
 
-  /* Remove problematic fixed positioning for text editing mode */
+  /* Text editing mode adjustments */
   .text-editing-mode .mobile-canvas-section {
-    /* Keep normal flex layout instead of fixed positioning */
-    max-height: 50vh; /* Slightly reduce canvas height in text editing mode */
+    /* Keep normal flex layout but reduce height slightly */
+    flex: 2; /* Give more space to canvas in text editing mode */
   }
 
   .text-editing-mode .mobile-controls-section {
-    /* Keep normal flex layout instead of fixed positioning */
-    min-height: 250px; /* Ensure adequate height for text editing tools */
+    /* Ensure adequate height for text editing tools */
+    min-height: 120px;
+    max-height: 180px;
   }
 }
 
