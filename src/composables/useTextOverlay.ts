@@ -619,35 +619,38 @@ export function useTextOverlay() {
     const textObjects = canvas.value.getObjects().filter((obj: any) => obj.type === 'text')
 
     return textObjects.map((textObj) => {
+      // Type assertion for Fabric.js text object
+      const text = textObj as any
+      
       // Extract precise coordinates using aCoords
-      const coordinates = extractTextCoordinates(textObj)
+      const coordinates = extractTextCoordinates(text)
       const videoX = Math.round(coordinates.x * scaleFactors.value.x)
       const videoY = Math.round(coordinates.y * scaleFactors.value.y)
 
       // Convert font size to video scale
-      const fontSize = textObj.fontSize || 24
+      const fontSize = text.fontSize || 24
       const videoFontSize = Math.round(
         fontSize * Math.min(scaleFactors.value.x, scaleFactors.value.y),
       )
 
       return {
         segment_id: segmentId,
-        text: textObj.text || '',
+        text: text.text || '',
         x: videoX,
         y: videoY,
         fontSize: videoFontSize,
-        color: convertColorToFFmpeg(textObj.fill),
-        fontFamily: textObj.fontFamily || 'Arial',
-        fontWeight: textObj.fontWeight || 'normal',
-        stroke: textObj.stroke ? {
-          color: convertColorToFFmpeg(textObj.stroke),
-          width: textObj.strokeWidth || 1
+        color: text.fill ? convertColorToFFmpeg(text.fill) : '#ffffff',
+        fontFamily: text.fontFamily || 'Arial',
+        fontWeight: text.fontWeight || 'normal',
+        stroke: text.stroke ? {
+          color: convertColorToFFmpeg(text.stroke),
+          width: text.strokeWidth || 1
         } : undefined,
-        shadow: textObj.shadow ? {
-          offsetX: textObj.shadow.offsetX || 0,
-          offsetY: textObj.shadow.offsetY || 0,
-          blur: textObj.shadow.blur || 0,
-          color: convertColorToFFmpeg(textObj.shadow.color)
+        shadow: text.shadow ? {
+          offsetX: text.shadow.offsetX || 0,
+          offsetY: text.shadow.offsetY || 0,
+          blur: text.shadow.blur || 0,
+          color: convertColorToFFmpeg(text.shadow.color)
         } : undefined
       }
     })

@@ -891,7 +891,7 @@ export default defineComponent({
           alert(
             `✅ Text Overlays Saved Successfully!\n` +
               `❌ Video Processing Failed: ${errorMessage}\n\n` +
-              `Generated ${ffmpegFilters.length} FFmpeg filter(s)\n` +
+              `Generated ${overlayData.length} text overlay(s)\n` +
               `Canvas: ${canvasSize.value.width}×${canvasSize.value.height}\n` +
               `Video: ${videoSize.value.width}×${videoSize.value.height}\n` +
               `Scale: ${scaleFactors.value.x.toFixed(2)}×${scaleFactors.value.y.toFixed(2)}\n\n` +
