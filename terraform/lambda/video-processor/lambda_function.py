@@ -536,15 +536,21 @@ def get_segment_from_dynamodb(segment_id: str) -> Optional[dict]:
     
     try:
         dynamodb = boto3.resource('dynamodb')
-        video_metadata_table = dynamodb.Table('easy-video-share-video-metadata')
+        table_name = os.environ.get('DYNAMODB_TABLE', 'easy-video-share-video-metadata')
+        video_metadata_table = dynamodb.Table(table_name)
+        
+        logger.info(f"Using DynamoDB table: {table_name}")
         
         # Get the video record to find the segment from output_s3_urls
+        logger.info(f"Querying DynamoDB for video_id: {video_id}")
         video_resp = video_metadata_table.get_item(Key={"video_id": video_id})
         video_item = video_resp.get("Item")
         
         if not video_item:
-            logger.error(f"Video not found: {video_id}")
+            logger.error(f"Video not found in table {table_name}: {video_id}")
             return None
+        
+        logger.info(f"Video found. Status: {video_item.get('status')}, Title: {video_item.get('title')}")
         
         # Get the output_s3_urls array
         output_s3_urls = video_item.get("output_s3_urls", [])
@@ -552,9 +558,11 @@ def get_segment_from_dynamodb(segment_id: str) -> Optional[dict]:
             logger.error(f"No output_s3_urls found for video: {video_id}")
             return None
         
+        logger.info(f"Found {len(output_s3_urls)} segments in output_s3_urls")
+        
         # Check if segment number is valid
         if segment_number < 1 or segment_number > len(output_s3_urls):
-            logger.error(f"Invalid segment number: {segment_number}, max: {len(output_s3_urls)}")
+            logger.error(f"Invalid segment number: {segment_number}, max: {len(output_s3_urls)}, available range: 1-{len(output_s3_urls)}")
             return None
         
         # Get the s3_key for this segment

@@ -30,7 +30,7 @@ if aws lambda get-function --function-name $FUNCTION_NAME 2>/dev/null; then
         --timeout 900 \
         --memory-size 3008 \
         --ephemeral-storage Size=10240 \
-        --environment Variables='{ENVIRONMENT=production,S3_BUCKET=easy-video-share-bucket}'
+        --environment Variables='{ENVIRONMENT=production,S3_BUCKET=easy-video-share-bucket,DYNAMODB_TABLE_NAME=easy-video-share-video-metadata}'
 else
     echo "Enhanced function doesn't exist, creating new function..."
     aws lambda create-function \
@@ -42,7 +42,7 @@ else
         --timeout 900 \
         --memory-size 3008 \
         --ephemeral-storage Size=10240 \
-        --environment Variables='{ENVIRONMENT=production,S3_BUCKET=easy-video-share-bucket}'
+        --environment Variables='{ENVIRONMENT=production,S3_BUCKET=easy-video-share-bucket,DYNAMODB_TABLE_NAME=easy-video-share-video-metadata}'
 fi
 
 echo "STEP 5: Creating/updating DynamoDB table for video segments..."

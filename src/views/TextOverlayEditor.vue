@@ -870,7 +870,7 @@ export default defineComponent({
         // 🎯 STEP 3: Extract detailed overlay data for storage
         const textObjects = canvas.value.getObjects().filter((obj) => obj.type === 'text')
         const overlays = textObjects.map((obj, index) => {
-          const textObj = obj
+          const textObj = obj as any // Type assertion for Fabric.js text object
 
           // Use precise coordinate extraction from aCoords
           const coordinates = extractTextCoordinates(textObj)

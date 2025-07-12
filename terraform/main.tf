@@ -191,6 +191,14 @@ resource "aws_dynamodb_table" "video_metadata" {
     projection_type = "ALL"
   }
 
+  # Global Secondary Index for user_id queries by creation date
+  global_secondary_index {
+    name            = "user_id-created_at-index"
+    hash_key        = "user_id"
+    range_key       = "created_at"
+    projection_type = "ALL"
+  }
+
   # Global Secondary Index for segment queries by video_id
   global_secondary_index {
     name            = "video_id-segment_type-index"
@@ -255,6 +263,16 @@ resource "aws_dynamodb_table" "video_segments" {
     type = "S"
   }
 
+  attribute {
+    name = "user_id"
+    type = "S"
+  }
+
+  attribute {
+    name = "segment_type"
+    type = "S"
+  }
+
   # Global secondary index for querying segments by video_id
   global_secondary_index {
     name     = "VideoIndex"
@@ -268,6 +286,22 @@ resource "aws_dynamodb_table" "video_segments" {
     name     = "CreatedAtIndex"
     hash_key = "video_id"
     range_key = "created_at"
+    projection_type = "ALL"
+  }
+
+  # Global secondary index for querying segments by user_id
+  global_secondary_index {
+    name     = "UserIndex"
+    hash_key = "user_id"
+    range_key = "created_at"
+    projection_type = "ALL"
+  }
+
+  # Global secondary index for querying segments by type
+  global_secondary_index {
+    name     = "TypeIndex"
+    hash_key = "user_id"
+    range_key = "segment_type"
     projection_type = "ALL"
   }
 
@@ -334,7 +368,9 @@ resource "aws_iam_role_policy" "lambda_policy" {
           "dynamodb:UpdateItem",
           "dynamodb:DeleteItem",
           "dynamodb:Query",
-          "dynamodb:Scan"
+          "dynamodb:Scan",
+          "dynamodb:BatchGetItem",
+          "dynamodb:BatchWriteItem"
         ]
         Resource = [
           aws_dynamodb_table.video_metadata.arn,
@@ -371,6 +407,7 @@ resource "aws_lambda_function" "video_metadata_api" {
   environment {
     variables = {
       DYNAMODB_TABLE = aws_dynamodb_table.video_metadata.name
+      VIDEO_SEGMENTS_TABLE = aws_dynamodb_table.video_segments.name
       CORS_ORIGIN    = "*"
     }
   }
@@ -395,6 +432,7 @@ resource "aws_lambda_function" "admin_api" {
   environment {
     variables = {
       DYNAMODB_TABLE = aws_dynamodb_table.video_metadata.name
+      VIDEO_SEGMENTS_TABLE = aws_dynamodb_table.video_segments.name
       COGNITO_USER_POOL_ID = aws_cognito_user_pool.video_app_users.id
       CORS_ORIGIN    = "*"
     }
@@ -552,6 +590,10 @@ resource "aws_lambda_function" "video_processor" {
   environment {
     variables = {
       ENVIRONMENT = "production"
+      DYNAMODB_TABLE = aws_dynamodb_table.video_metadata.name
+      VIDEO_SEGMENTS_TABLE = aws_dynamodb_table.video_segments.name
+      S3_BUCKET = aws_s3_bucket.video_bucket.bucket
+      AWS_REGION = var.aws_region
     }
   }
   tags = {
