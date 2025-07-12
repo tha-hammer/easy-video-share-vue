@@ -94,51 +94,6 @@
       </div>
     </div>
 
-    <!-- Status Panel -->
-    <div v-if="selectedSegment && thumbnailUrl" class="status-panel card mb-6">
-      <div class="card-header">
-        <h3 class="card-title">Canvas Status</h3>
-      </div>
-      <div class="card-body">
-        <div class="row g-4">
-          <div class="col-md-3">
-            <div class="status-item">
-              <span class="status-label">Canvas Ready:</span>
-              <span :class="isCanvasReady ? 'text-success' : 'text-warning'">
-                {{ isCanvasReady ? '✅ Ready' : '⏳ Loading...' }}
-              </span>
-            </div>
-          </div>
-          <div class="col-md-3">
-            <div class="status-item">
-              <span class="status-label">Text Objects:</span>
-              <span class="text-info">{{ textObjectCount }}</span>
-            </div>
-          </div>
-          <div class="col-md-3">
-            <div class="status-item">
-              <span class="status-label">Active Text:</span>
-              <span :class="hasActiveText ? 'text-success' : 'text-muted'">
-                {{ hasActiveText ? 'Selected' : 'None' }}
-              </span>
-            </div>
-          </div>
-          <div class="col-md-3">
-            <div class="status-item">
-              <span class="status-label">Canvas Size:</span>
-              <span class="text-info">{{ canvasSize.width }}×{{ canvasSize.height }}</span>
-            </div>
-          </div>
-          <div class="col-md-3">
-            <div class="status-item">
-              <span class="status-label">Scale:</span>
-              <span class="text-info">{{ Math.round(scaleFactors.x * 100) }}%</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
     <!-- Video Processing Status -->
     <div v-if="processingVideo" class="processing-status card mb-6">
       <div class="card-header">
@@ -299,17 +254,19 @@
 
               <!-- Font Family - Collapsible -->
               <div class="form-group mb-2">
-                <b-button
-                  v-b-toggle.collapse-font-family
-                  variant="outline-secondary"
-                  size="sm"
-                  class="w-100 text-start"
+                <button
+                  @click="toggleCollapse('font-family')"
+                  class="btn btn-outline-secondary btn-sm w-100 text-start"
+                  :class="{ collapsed: !collapsedSections['font-family'] }"
                 >
                   <KTIcon icon-name="font" icon-class="fs-5 me-2" />
                   Font Family: {{ currentFontFamily }}
-                  <KTIcon icon-name="arrow-down" icon-class="fs-5 ms-auto" />
-                </b-button>
-                <b-collapse id="collapse-font-family" class="mt-2">
+                  <KTIcon
+                    :icon-name="collapsedSections['font-family'] ? 'arrow-down' : 'arrow-up'"
+                    icon-class="fs-5 ms-auto"
+                  />
+                </button>
+                <div v-show="collapsedSections['font-family']" class="collapse-content mt-2">
                   <div class="p-2 border rounded bg-light">
                     <select
                       v-model="currentFontFamily"
@@ -326,7 +283,7 @@
                       <option value="Comic Sans MS">Comic Sans MS</option>
                     </select>
                   </div>
-                </b-collapse>
+                </div>
               </div>
 
               <!-- Font Size - Collapsible -->
@@ -612,6 +569,23 @@ export default defineComponent({
     const hasTextBackground = ref(false)
     const currentBackgroundColor = ref('#ffffff')
     const currentOpacity = ref(1)
+
+    // Collapsible sections state
+    const collapsedSections = ref<Record<string, boolean>>({
+      'font-family': true,
+      'font-size': true,
+      'font-color': true,
+      'font-style': true,
+      background: true,
+      opacity: true,
+    })
+
+    // Toggle collapse function
+    const toggleCollapse = (section: string) => {
+      if (section in collapsedSections.value) {
+        collapsedSections.value[section] = !collapsedSections.value[section]
+      }
+    }
 
     // Auth store
     const authStore = useAuthStore()
@@ -1232,6 +1206,10 @@ export default defineComponent({
       toggleTextBackground,
       updateBackgroundColor,
       updateOpacity,
+
+      // Collapsible methods
+      toggleCollapse,
+      collapsedSections,
     }
   },
 })
@@ -1240,18 +1218,6 @@ export default defineComponent({
 <style scoped>
 .text-overlay-editor {
   padding: 20px;
-}
-
-.status-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px 0;
-}
-
-.status-label {
-  font-weight: 500;
-  color: #6c757d;
 }
 
 .canvas-container {
