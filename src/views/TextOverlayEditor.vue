@@ -492,6 +492,7 @@ export default defineComponent({
       dispose,
       // FFmpeg translation functions
       extractTextCoordinates,
+      extractTextOverlaysData,
       convertAllTextToFFmpegFilters,
       generateFFmpegCommand,
       canvasToVideoCoordinates,
@@ -849,130 +850,29 @@ export default defineComponent({
         console.log('📹 Video size:', videoSize.value)
         console.log('⚖️ Scale factors:', scaleFactors.value)
 
-        // 🎯 STEP 1: Generate FFmpeg filters using the coordinate translation system
-        const ffmpegFilters = convertAllTextToFFmpegFilters(selectedSegment.value.duration)
+        // 🎯 STEP 1: Extract overlay data for backend processing
+        const overlayData = extractTextOverlaysData(selectedSegment.value.segment_id)
 
-        console.log('🎬 Generated FFmpeg Filters:')
-        ffmpegFilters.forEach((filter, index) => {
-          console.log(`  Filter ${index + 1}: ${filter}`)
+        console.log('🎯 Extracted overlay data:')
+        overlayData.forEach((overlay, index) => {
+          console.log(`  Overlay ${index + 1}:`, overlay)
         })
 
-        // 🎯 STEP 2: Generate complete FFmpeg command for processing
-        const ffmpegCommand = generateFFmpegCommand(
-          `input_segment_${selectedSegment.value.segment_id}.mp4`,
-          `output_segment_${selectedSegment.value.segment_id}.mp4`,
-          selectedSegment.value.duration,
-        )
+        // 🎯 STEP 2: Save overlay data to backend  
+        console.log('💾 Saving overlay data to backend...')
+        await VideoService.saveTextOverlays(selectedSegment.value.segment_id, overlayData)
 
-        console.log('🎬 Complete FFmpeg Command:')
-        console.log(ffmpegCommand)
+        console.log('✅ Text overlays saved successfully!')
 
-        // 🎯 STEP 3: Extract detailed overlay data for storage
-        const textObjects = canvas.value.getObjects().filter((obj) => obj.type === 'text')
-        const overlays = textObjects.map((obj, index) => {
-          const textObj = obj as any // Type assertion for Fabric.js text object
-
-          // Use precise coordinate extraction from aCoords
-          const coordinates = extractTextCoordinates(textObj)
-          const videoCoords = canvasToVideoCoordinates(coordinates.x, coordinates.y)
-
-          const overlay = {
-            id: `text_${Date.now()}_${index}`,
-            segment_id: selectedSegment.value!.segment_id,
-
-            // Original canvas properties
-            canvas_x: coordinates.x,
-            canvas_y: coordinates.y,
-            canvas_fontSize: textObj.fontSize || 24,
-
-            // Translated video properties (for FFmpeg)
-            video_x: Math.round(videoCoords.x),
-            video_y: Math.round(videoCoords.y),
-            video_fontSize: Math.round(
-              (textObj.fontSize || 24) * Math.min(scaleFactors.value.x, scaleFactors.value.y),
-            ),
-
-            // Text content and styling
-            text: textObj.text || '',
-            fontFamily: textObj.fontFamily || 'Arial',
-            fontWeight: textObj.fontWeight || 'normal',
-            fontStyle: textObj.fontStyle || 'normal',
-            color: textObj.fill || '#ffffff',
-            backgroundColor: textObj.backgroundColor || null,
-            opacity: textObj.opacity || 1,
-            rotation: textObj.angle || 0,
-
-            // Text effects
-            shadow: textObj.shadow
-              ? {
-                  enabled: true,
-                  color: textObj.shadow.color || '#000000',
-                  offsetX: textObj.shadow.offsetX || 0,
-                  offsetY: textObj.shadow.offsetY || 0,
-                  blur: textObj.shadow.blur || 0,
-                }
-              : { enabled: false },
-            stroke: textObj.stroke
-              ? {
-                  enabled: true,
-                  color: textObj.stroke,
-                  width: textObj.strokeWidth || 0,
-                }
-              : { enabled: false },
-
-            // Timing
-            startTime: 0,
-            endTime: selectedSegment.value!.duration,
-
-            // Generated FFmpeg filter for this text object
-            ffmpeg_filter: ffmpegFilters[index] || '',
-
-            // Metadata
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          }
-
-          console.log(`📝 Text ${index + 1} coordinate translation:`)
-          console.log(
-            `   Canvas: (${coordinates.x}, ${coordinates.y}) → Video: (${overlay.video_x}, ${overlay.video_y})`,
-          )
-          console.log(`   Font size: ${overlay.canvas_fontSize}px → ${overlay.video_fontSize}px`)
-
-          return overlay
-        })
-
-        console.log('💾 Complete overlay data with FFmpeg filters:', overlays)
-
-        // 🎯 STEP 4: Save to backend (overlays with embedded FFmpeg data)
-        console.log('💾 Saving enhanced overlay data with FFmpeg filters...')
-
-        await VideoService.saveTextOverlays(selectedSegment.value.segment_id, overlays)
-
-        // Log the complete data for backend integration
-        console.log('🎯 FFmpeg Integration Data:')
-        console.log({
-          segment_id: selectedSegment.value.segment_id,
-          ffmpeg_filters: ffmpegFilters,
-          ffmpeg_command: ffmpegCommand,
-          segment_duration: selectedSegment.value.duration,
-          canvas_dimensions: canvasSize.value,
-          video_dimensions: videoSize.value,
-          scale_factors: scaleFactors.value,
-        })
-
-        console.log('✅ Text overlays and FFmpeg filters saved successfully!')
-        console.log('🎯 Ready for video processing with precise coordinate translation')
-
-        // 🎯 STEP 5: Process the video with text overlays
+        // 🎯 STEP 3: Process the video with text overlays using overlay objects
         console.log('🎬 Starting video processing with text overlays...')
         processingVideo.value = true
         processingStatus.value = 'Processing video with text overlays...'
 
         try {
-          const processResult = await VideoService.processSegmentWithTextOverlays(
+          const processResult = await VideoService.processSegmentWithTextOverlayObjects(
             selectedSegment.value.segment_id,
-            ffmpegFilters,
-            ffmpegCommand,
+            overlayData,
           )
 
           console.log('🎬 Video processing job started:', processResult)
