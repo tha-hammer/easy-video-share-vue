@@ -257,8 +257,9 @@ def apply_text_overlays_to_segments(event, context):
             progress = 10.0 + (i + 1) / total_segments * 80.0
             update_job_status(job_id, "PROCESSING", "applying_text_overlays", progress)
         
-        # Final status update
-        update_job_status(job_id, "COMPLETED", "text_overlays_applied", 100.0)
+        # Final status update with output URLs
+        final_s3_urls = [segment['final_s3_key'] for segment in processed_segments if segment.get('final_s3_key')]
+        update_job_status(job_id, "COMPLETED", "text_overlays_applied", 100.0, output_s3_keys=final_s3_urls)
         
         return {
             'statusCode': 200,
