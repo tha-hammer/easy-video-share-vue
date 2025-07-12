@@ -998,6 +998,9 @@ export default defineComponent({
     let resizeTimeout: NodeJS.Timeout | null = null
 
     const handleWindowResize = () => {
+      // Update window width immediately for mobile detection
+      updateWindowWidth()
+
       // Clear existing timeout
       if (resizeTimeout) {
         clearTimeout(resizeTimeout)
