@@ -168,49 +168,90 @@ def apply_text_overlays_to_segments(event, context):
     
     try:
         video_id = event['video_id']
-        text_overlays = event['text_overlays']  # From Fabric.js
+        text_overlays = convert_decimals_to_floats(event['text_overlays'])  # From Fabric.js, convert Decimals to floats
         job_id = event.get('job_id', f"job_{video_id}_{int(time.time())}")
         
-        # Get all segments for this video
-        segments = get_segments_from_dynamodb(video_id)
+        # Get video metadata to access existing segments from output_s3_urls
+        dynamodb = boto3.resource('dynamodb')
+        video_table = dynamodb.Table('easy-video-share-video-metadata')
+        
+        video_response = video_table.get_item(Key={'video_id': video_id})
+        video_item = video_response.get('Item')
+        
+        if not video_item:
+            raise Exception(f"Video {video_id} not found in database")
+        
+        # Get existing processed segments from output_s3_urls
+        output_s3_urls = video_item.get('output_s3_urls', [])
+        if not output_s3_urls:
+            raise Exception(f"No processed segments found for video {video_id}")
         
         processed_segments = []
         
         update_job_status(job_id, "PROCESSING", "applying_text_overlays", 10.0)
         
-        total_segments = len(segments)
-        for i, segment in enumerate(segments):
-            segment_id = segment['segment_id']
-            segment_overlays = [o for o in text_overlays if o['segment_id'] == segment_id]
+        # Process each segment that has text overlays
+        segments_with_overlays = {}
+        for overlay in text_overlays:
+            segment_id = overlay['segment_id']
+            if segment_id not in segments_with_overlays:
+                segments_with_overlays[segment_id] = []
+            segments_with_overlays[segment_id].append(overlay)
+        
+        total_segments = len(segments_with_overlays)
+        for i, (segment_id, segment_overlays) in enumerate(segments_with_overlays.items()):
+            logger.info(f"Processing segment {segment_id} with {len(segment_overlays)} overlays")
             
-            if not segment_overlays:
-                logger.info(f"No text overlays for segment {segment_id}")
+            # Parse segment_id to get segment number: seg_{video_id}_{segment_number:03d}
+            try:
+                # Remove "seg_" prefix and video_id to get segment number
+                segment_suffix = segment_id.replace(f"seg_{video_id}_", "")
+                segment_number = int(segment_suffix)
+                
+                # Get the corresponding S3 URL (1-based indexing)
+                if segment_number < 1 or segment_number > len(output_s3_urls):
+                    logger.error(f"Invalid segment number {segment_number} for segment {segment_id}")
+                    continue
+                
+                input_s3_key = output_s3_urls[segment_number - 1]  # Convert to 0-based index
+                logger.info(f"Processing segment {segment_id} from S3 key: {input_s3_key}")
+                
+            except (ValueError, IndexError) as e:
+                logger.error(f"Failed to parse segment ID {segment_id}: {e}")
                 continue
             
-            # Get segment video
-            if segment['storage_type'] == 'lambda_temp':
-                input_path = segment['temp_segment_path']
-            else:
-                input_path = download_from_s3(segment['location'])
+            # Download the segment from S3
+            input_path = download_from_s3(input_s3_key)
             
             # Apply text overlays
             output_path = f"/tmp/final_segment_{segment_id}.mp4"
-            segment_duration = float(segment.get('duration', 30.0))
+            # Get segment duration from the overlay data (all overlays for a segment should have the same duration)
+            segment_duration = float(segment_overlays[0].get('segment_duration', 30.0)) if segment_overlays else 30.0
             success = apply_text_overlays_ffmpeg(input_path, output_path, segment_overlays, segment_duration)
             
             if success:
-                # Upload final segment
-                final_s3_key = f"processed/{video_id}/segment_{segment['segment_number']}_final.mp4"
+                # Upload final segment with text overlays
+                final_s3_key = f"processed/{video_id}/segment_{segment_number:03d}_with_text.mp4"
                 final_url = upload_to_s3(output_path, final_s3_key)
                 
                 processed_segments.append({
                     'segment_id': segment_id,
+                    'segment_number': segment_number,
+                    'original_s3_key': input_s3_key,
+                    'final_s3_key': final_s3_key,
                     'final_url': final_url,
-                    'text_overlays_applied': True
+                    'text_overlays_applied': True,
+                    'overlay_count': len(segment_overlays)
                 })
                 
-                # Clean up temp file
+                logger.info(f"Successfully processed segment {segment_id} with text overlays")
+                
+                # Clean up temp files
                 os.remove(output_path)
+                if os.path.exists(input_path):
+                    os.remove(input_path)
+            else:
+                logger.error(f"Failed to apply text overlays to segment {segment_id}")
             
             # Update progress
             progress = 10.0 + (i + 1) / total_segments * 80.0
