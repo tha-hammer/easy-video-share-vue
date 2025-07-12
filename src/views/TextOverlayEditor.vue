@@ -71,9 +71,16 @@
           <p class="text-muted mb-4">
             Generate a thumbnail image to design text overlays on this segment.
           </p>
-          <button @click="generateThumbnail" class="btn btn-primary">
-            <KTIcon icon-name="image" icon-class="fs-4" />
-            Generate Thumbnail
+          <button
+            @click="generateThumbnail"
+            class="btn btn-primary"
+            :disabled="generatingThumbnail"
+          >
+            <KTIcon
+              :icon-name="generatingThumbnail ? 'hourglass' : 'image'"
+              :icon-class="generatingThumbnail ? 'fs-4 fa-spin' : 'fs-4'"
+            />
+            {{ generatingThumbnail ? 'Generating...' : 'Generate Thumbnail' }}
           </button>
         </div>
 
@@ -546,7 +553,10 @@ export default defineComponent({
 
     // Generate thumbnail for selected segment
     const generateThumbnail = async () => {
-      if (!selectedSegment.value) return
+      if (!selectedSegment.value || generatingThumbnail.value) {
+        console.log('⚠️ Skipping thumbnail generation - already in progress or no segment selected')
+        return
+      }
 
       try {
         generatingThumbnail.value = true
@@ -564,7 +574,13 @@ export default defineComponent({
         await initializeEditor()
       } catch (error) {
         console.error('❌ Failed to generate thumbnail:', error)
-        // TODO: Show user-friendly error message
+
+        // Show user-friendly error message
+        alert(
+          `❌ Thumbnail Generation Failed\n\n` +
+            `Error: ${error instanceof Error ? error.message : 'Unknown error'}\n\n` +
+            `Please try again or contact support if the issue persists.`,
+        )
       } finally {
         generatingThumbnail.value = false
       }

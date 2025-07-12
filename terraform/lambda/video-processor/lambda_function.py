@@ -454,7 +454,7 @@ def update_segments_in_dynamodb(video_id: str, segments: List[dict]):
     
     try:
         dynamodb = boto3.resource('dynamodb')
-        table = dynamodb.Table('video_segments')
+        table = dynamodb.Table('easy-video-share-video-segments')
         
         for segment in segments:
             table.put_item(Item={
@@ -485,7 +485,7 @@ def get_segments_from_dynamodb(video_id: str) -> List[dict]:
     
     try:
         dynamodb = boto3.resource('dynamodb')
-        table = dynamodb.Table('video_segments')
+        table = dynamodb.Table('easy-video-share-video-segments')
         
         response = table.scan(
             FilterExpression='video_id = :video_id',
@@ -508,7 +508,7 @@ def get_segment_from_dynamodb(segment_id: str) -> Optional[dict]:
     
     try:
         dynamodb = boto3.resource('dynamodb')
-        table = dynamodb.Table('video_segments')
+        table = dynamodb.Table('easy-video-share-video-segments')
         
         response = table.get_item(Key={'segment_id': segment_id})
         
@@ -532,7 +532,7 @@ def update_segment_thumbnail_in_dynamodb(segment_id: str, thumbnail_s3_key: str)
     
     try:
         dynamodb = boto3.resource('dynamodb')
-        table = dynamodb.Table('video_segments')
+        table = dynamodb.Table('easy-video-share-video-segments')
         
         table.update_item(
             Key={'segment_id': segment_id},
