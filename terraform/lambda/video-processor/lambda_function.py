@@ -598,6 +598,8 @@ def get_segment_from_dynamodb(segment_id: str) -> Optional[dict]:
             'segment_type': 'PROCESSED',
             'segment_number': segment_number,
             's3_key': s3_key,
+            'location': s3_key,  # Add location field for Lambda compatibility
+            'storage_type': 's3',  # Add storage_type field for Lambda compatibility
             'duration': 30.0,  # Default duration, could be enhanced to get from S3
             'file_size': 0,    # Default size, could be enhanced to get from S3
             'content_type': "video/mp4",

@@ -586,6 +586,10 @@ resource "aws_lambda_function" "video_processor" {
   ephemeral_storage {
     size = 10240
   }
+  
+  # Use FFmpeg layer for video processing
+  layers = [aws_lambda_layer_version.ffmpeg_layer.arn]
+  
   source_code_hash = filebase64sha256("lambda/video-processor/production-lambda.zip")
   environment {
     variables = {
