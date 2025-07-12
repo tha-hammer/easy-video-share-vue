@@ -1,6 +1,6 @@
 <template>
   <!--begin::Action group-->
-  <div class="d-flex align-items-stretch overflow-auto pt-3 pt-lg-0">
+  <div v-if="!shouldHideOnMobile" class="d-flex align-items-stretch overflow-auto pt-3 pt-lg-0">
     <!--begin::Action wrapper-->
     <div class="d-flex align-items-center">
       <!--begin::Label-->
@@ -11,7 +11,7 @@
       <!--begin::Select-->
       <!--  <select class="form-select form-select-sm form-select-solid w-100px w-xxl-125px">
         <option value="1" selected>Latest</option>
-        <option value="2">In Progress</option>
+        <option value="2" selected>In Progress</option>
         <option value="3">Done</option>
       </select>
  -->
@@ -130,9 +130,10 @@
 
 <script lang="ts">
 import { getAssetPath } from '@/core/helpers/assets'
-import { defineComponent, onMounted } from 'vue'
+import { defineComponent, onMounted, computed, ref, onUnmounted } from 'vue'
 import noUiSlider, { type target } from 'nouislider'
 import KTThemeModeSwitcher from '@/layouts/default-layout/components/theme-mode/ThemeModeSwitcher.vue'
+import { useRoute } from 'vue-router'
 
 export default defineComponent({
   name: 'layout-topbar',
@@ -140,6 +141,30 @@ export default defineComponent({
     KTThemeModeSwitcher,
   },
   setup() {
+    const route = useRoute()
+    const windowWidth = ref(window.innerWidth)
+
+    // Update window width on resize
+    const handleResize = () => {
+      windowWidth.value = window.innerWidth
+    }
+
+    onMounted(() => {
+      window.addEventListener('resize', handleResize)
+      initSlider()
+    })
+
+    onUnmounted(() => {
+      window.removeEventListener('resize', handleResize)
+    })
+
+    // Hide Topbar on mobile for text overlay editor
+    const shouldHideOnMobile = computed(() => {
+      const isMobile = windowWidth.value <= 768
+      const isTextOverlayEditor = route.name === 'text-overlay-editor'
+      return isMobile && isTextOverlayEditor
+    })
+
     const initSlider = (): void => {
       const slider: target = document.querySelector('#kt_toolbar_slider') as target
       const rangeSliderValueElement: Element | null = document.querySelector(
@@ -171,12 +196,9 @@ export default defineComponent({
       })
     }
 
-    onMounted(() => {
-      initSlider()
-    })
-
     return {
       getAssetPath,
+      shouldHideOnMobile,
     }
   },
 })

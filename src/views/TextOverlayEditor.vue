@@ -49,14 +49,14 @@
             </select>
           </div>
           <div class="col-md-6" v-if="selectedSegment">
-            <label class="form-label">Segment Details:</label>
+            <!--             <label class="form-label">Segment Details:</label>
             <div class="bg-light p-3 rounded">
               <small class="text-muted">
                 <strong>Video ID:</strong> {{ selectedSegment.video_id }}<br />
                 <strong>Duration:</strong> {{ formatDuration(selectedSegment.duration) }}<br />
                 <strong>File Size:</strong> {{ formatFileSize(selectedSegment.file_size) }}
               </small>
-            </div>
+            </div> -->
           </div>
         </div>
       </div>
@@ -566,6 +566,11 @@ export default defineComponent({
 
         // Initialize canvas with the thumbnail
         await initializeEditor()
+
+        // Add mobile class when thumbnail is generated
+        if (isMobileView.value) {
+          document.body.classList.add('mobile-text-editor')
+        }
       } catch (error) {
         console.error('❌ Failed to generate thumbnail:', error)
 
@@ -593,6 +598,11 @@ export default defineComponent({
         if (selectedSegment.value.thumbnail_url) {
           thumbnailUrl.value = selectedSegment.value.thumbnail_url
           initializeEditor()
+
+          // Add mobile class when thumbnail is loaded
+          if (isMobileView.value) {
+            document.body.classList.add('mobile-text-editor')
+          }
         }
       }
     }
@@ -1143,6 +1153,11 @@ export default defineComponent({
       currentBackgroundColor.value = '#ffffff'
       currentOpacity.value = 1
       activeTextObject.value = null
+
+      // Remove mobile class when going back to segment selection
+      if (isMobileView.value) {
+        document.body.classList.remove('mobile-text-editor')
+      }
     }
 
     // Handle clicks outside text input to exit text editing mode
@@ -1166,6 +1181,8 @@ export default defineComponent({
 
       if (isMobileView.value) {
         document.addEventListener('click', handleDocumentClick)
+        // Add class to body to hide header/sidebar on mobile
+        document.body.classList.add('mobile-text-editor')
       }
     })
 
@@ -1184,6 +1201,8 @@ export default defineComponent({
 
       if (isMobileView.value) {
         document.removeEventListener('click', handleDocumentClick)
+        // Remove class from body when component unmounts
+        document.body.classList.remove('mobile-text-editor')
       }
     })
 
@@ -1278,10 +1297,79 @@ export default defineComponent({
 
 /* Mobile Layout */
 @media (max-width: 768px) {
+  /* Reset body styles for mobile editor */
+  body.mobile-text-editor {
+    overflow: hidden !important;
+    position: fixed !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
   .text-overlay-editor.mobile-editor {
     padding: 0;
     height: 100vh;
+    width: 100vw;
     overflow: hidden;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 9999;
+    box-sizing: border-box;
+  }
+
+  /* Reset any parent containers */
+  .text-overlay-editor.mobile-editor * {
+    box-sizing: border-box;
+  }
+
+  /* Hide the main header (includes PageTitle, toolbar, etc.) on mobile */
+  body.mobile-text-editor #kt_header {
+    display: none !important;
+  }
+
+  /* Also hide the aside/sidebar on mobile */
+  body.mobile-text-editor #kt_aside {
+    display: none !important;
+  }
+
+  /* Make sure the main content takes full width and height */
+  body.mobile-text-editor #kt_wrapper {
+    padding-left: 0 !important;
+    padding-top: 0 !important;
+    padding-right: 0 !important;
+    padding-bottom: 0 !important;
+    margin: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    overflow: hidden !important;
+  }
+
+  /* Ensure the main content area takes full viewport */
+  body.mobile-text-editor #kt_content {
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    overflow: hidden !important;
+  }
+
+  /* Hide any containers that might add padding/margin */
+  body.mobile-text-editor .container,
+  body.mobile-text-editor .container-fluid,
+  body.mobile-text-editor .container-xxl {
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  /* If PageTitle is somehow still showing, hide it specifically */
+  body.mobile-text-editor .page-title {
+    display: none !important;
   }
 
   .mobile-layout {
@@ -1314,8 +1402,10 @@ export default defineComponent({
     align-items: center;
     justify-content: center;
     background: #f8f9fa;
-    padding: 16px;
+    padding: 8px;
     overflow: hidden;
+    width: 100vw;
+    box-sizing: border-box;
   }
 
   /* Controls Section - Bottom 1/3 */
@@ -1324,6 +1414,8 @@ export default defineComponent({
     background: white;
     border-top: 1px solid #dee2e6;
     overflow: hidden;
+    width: 100vw;
+    box-sizing: border-box;
   }
 
   /* Main Editor Menu */
@@ -1484,6 +1576,9 @@ export default defineComponent({
     border-radius: 0;
     width: 100%;
     height: 100%;
+    max-width: 100vw;
+    max-height: 100%;
+    box-sizing: border-box;
   }
 }
 
@@ -1500,6 +1595,9 @@ export default defineComponent({
   .mobile-canvas-section .fabric-canvas {
     border: 1px solid #dee2e6;
     border-radius: 4px;
+    max-width: calc(100vw - 16px);
+    max-height: calc(100% - 16px);
+    object-fit: contain;
   }
 }
 
