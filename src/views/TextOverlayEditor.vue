@@ -1396,6 +1396,8 @@ export default defineComponent({
     border-bottom: 1px solid #dee2e6;
     gap: 12px;
     flex-shrink: 0;
+    height: 60px;
+    min-height: 60px;
   }
 
   .mobile-editor-content {
@@ -1403,11 +1405,12 @@ export default defineComponent({
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    height: calc(100vh - 60px);
   }
 
-  /* Thumbnail/Canvas Section - Top 2/3 */
+  /* Thumbnail/Canvas Section - Flexible height based on content */
   .mobile-canvas-section {
-    flex: 2;
+    flex: 0 0 auto;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1416,9 +1419,10 @@ export default defineComponent({
     overflow: hidden;
     width: 100vw;
     box-sizing: border-box;
+    max-height: 55vh; /* Limit canvas height to leave room for controls */
   }
 
-  /* Controls Section - Bottom 1/3 */
+  /* Controls Section - Take remaining space with minimum height */
   .mobile-controls-section {
     flex: 1;
     background: white;
@@ -1426,15 +1430,17 @@ export default defineComponent({
     overflow: hidden;
     width: 100vw;
     box-sizing: border-box;
+    min-height: 200px; /* Ensure minimum height for controls */
   }
 
-  /* Main Editor Menu */
+  /* Main Editor Menu - Improved layout */
   .mobile-main-menu {
     height: 100%;
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 16px;
+    padding: 20px 16px;
+    min-height: 120px; /* Ensure minimum height for buttons */
   }
 
   .mobile-main-menu .menu-actions {
@@ -1442,24 +1448,30 @@ export default defineComponent({
     gap: 12px;
     flex-wrap: wrap;
     justify-content: center;
+    align-items: center;
+    width: 100%;
   }
 
   .mobile-main-menu .btn {
-    min-width: 80px;
-    padding: 8px 12px;
+    min-width: 90px;
+    padding: 12px 16px;
     font-size: 14px;
+    min-height: 44px; /* Touch-friendly size */
+    border-radius: 8px;
+    font-weight: 600;
   }
 
-  /* Text Editing Mode */
+  /* Text Editing Mode - Improved layout */
   .mobile-text-editing {
     height: 100%;
     display: flex;
     flex-direction: column;
+    min-height: 300px; /* Ensure minimum height for text editing */
   }
 
-  /* Text Input Section - 25% of controls */
+  /* Text Input Section - Fixed height for better UX */
   .mobile-text-input {
-    flex: 0 0 25%;
+    flex: 0 0 80px;
     border-bottom: 1px solid #dee2e6;
     padding: 12px 16px;
     background: #f8f9fa;
@@ -1482,9 +1494,10 @@ export default defineComponent({
     font-size: 14px;
     border: 1px solid #ced4da;
     border-radius: 6px;
+    min-height: 36px;
   }
 
-  /* Text Tools Section - 75% of controls */
+  /* Text Tools Section - Improved scrolling and layout */
   .mobile-text-tools {
     flex: 1;
     padding: 16px;
@@ -1493,6 +1506,7 @@ export default defineComponent({
     grid-template-columns: 1fr 1fr;
     gap: 16px;
     align-content: start;
+    min-height: 0; /* Allow proper scrolling */
   }
 
   .tool-group {
@@ -1511,28 +1525,30 @@ export default defineComponent({
   .tool-group .form-select,
   .tool-group .form-control {
     font-size: 14px;
-    padding: 6px 8px;
+    padding: 8px 10px;
     border: 1px solid #ced4da;
-    border-radius: 4px;
+    border-radius: 6px;
+    min-height: 40px;
   }
 
   .tool-group .form-control-color {
-    width: 40px;
-    height: 32px;
+    width: 50px;
+    height: 40px;
     padding: 2px;
-    border-radius: 4px;
+    border-radius: 6px;
   }
 
   .size-controls {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 6px;
   }
 
   .size-value {
     font-size: 12px;
     color: #6c757d;
     text-align: center;
+    font-weight: 600;
   }
 
   .background-controls {
@@ -1542,27 +1558,20 @@ export default defineComponent({
   }
 
   .btn-group-sm .btn {
-    padding: 4px 8px;
+    padding: 6px 10px;
     font-size: 12px;
+    min-height: 32px;
   }
 
-  /* Text editing mode - ensure keyboard doesn't push thumbnail out of view */
+  /* Remove problematic fixed positioning for text editing mode */
   .text-editing-mode .mobile-canvas-section {
-    position: fixed;
-    top: 60px; /* Height of mobile header */
-    left: 0;
-    right: 0;
-    height: calc(66.67vh - 60px); /* 2/3 of viewport minus header */
-    z-index: 1000;
+    /* Keep normal flex layout instead of fixed positioning */
+    max-height: 50vh; /* Slightly reduce canvas height in text editing mode */
   }
 
   .text-editing-mode .mobile-controls-section {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    height: 33.33vh; /* 1/3 of viewport */
-    z-index: 1001;
+    /* Keep normal flex layout instead of fixed positioning */
+    min-height: 250px; /* Ensure adequate height for text editing tools */
   }
 }
 
