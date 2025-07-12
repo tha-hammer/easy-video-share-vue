@@ -1,7 +1,7 @@
 <template>
   <!--begin::Page title-->
   <div
-    v-if="pageTitleDisplay"
+    v-if="pageTitleDisplay && !shouldHideOnMobile"
     :class="`page-title d-flex flex-${pageTitleDirection} justify-content-center flex-wrap me-3`"
   >
     <template v-if="pageTitle">
@@ -25,9 +25,7 @@
       >
         <!--begin::Item-->
         <li class="breadcrumb-item text-muted">
-          <router-link to="/" class="text-muted text-hover-primary"
-            >Home</router-link
-          >
+          <router-link to="/" class="text-muted text-hover-primary">Home</router-link>
         </li>
         <!--end::Item-->
         <template v-for="(item, i) in breadcrumbs" :key="i">
@@ -49,27 +47,48 @@
 </template>
 
 <script lang="ts">
-import { computed, defineComponent } from "vue";
+import { computed, defineComponent, ref, onMounted, onUnmounted } from 'vue'
 import {
   pageTitleBreadcrumbDisplay,
   pageTitleDirection,
   pageTitleDisplay,
-} from "@/layouts/default-layout/config/helper";
-import { useRoute } from "vue-router";
+} from '@/layouts/default-layout/config/helper'
+import { useRoute } from 'vue-router'
 
 export default defineComponent({
-  name: "layout-page-title",
+  name: 'layout-page-title',
   components: {},
   setup() {
-    const route = useRoute();
+    const route = useRoute()
+    const windowWidth = ref(window.innerWidth)
 
     const pageTitle = computed(() => {
-      return route.meta.pageTitle;
-    });
+      return route.meta.pageTitle
+    })
 
     const breadcrumbs = computed(() => {
-      return route.meta.breadcrumbs;
-    });
+      return route.meta.breadcrumbs
+    })
+
+    // Update window width on resize
+    const handleResize = () => {
+      windowWidth.value = window.innerWidth
+    }
+
+    onMounted(() => {
+      window.addEventListener('resize', handleResize)
+    })
+
+    onUnmounted(() => {
+      window.removeEventListener('resize', handleResize)
+    })
+
+    // Hide PageTitle on mobile for text overlay editor
+    const shouldHideOnMobile = computed(() => {
+      const isMobile = windowWidth.value <= 768
+      const isTextOverlayEditor = route.name === 'text-overlay-editor'
+      return isMobile && isTextOverlayEditor
+    })
 
     return {
       pageTitle,
@@ -77,7 +96,8 @@ export default defineComponent({
       pageTitleDisplay,
       pageTitleBreadcrumbDisplay,
       pageTitleDirection,
-    };
+      shouldHideOnMobile,
+    }
   },
-});
+})
 </script>
