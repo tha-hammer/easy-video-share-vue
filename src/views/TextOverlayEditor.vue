@@ -288,17 +288,19 @@
 
               <!-- Font Size - Collapsible -->
               <div class="form-group mb-2">
-                <b-button
-                  v-b-toggle.collapse-font-size
-                  variant="outline-secondary"
-                  size="sm"
-                  class="w-100 text-start"
+                <button
+                  @click="toggleCollapse('font-size')"
+                  class="btn btn-outline-secondary btn-sm w-100 text-start"
+                  :class="{ collapsed: !collapsedSections['font-size'] }"
                 >
                   <KTIcon icon-name="text" icon-class="fs-5 me-2" />
                   Font Size: {{ currentFontSize }}px
-                  <KTIcon icon-name="arrow-down" icon-class="fs-5 ms-auto" />
-                </b-button>
-                <b-collapse id="collapse-font-size" class="mt-2">
+                  <KTIcon
+                    :icon-name="collapsedSections['font-size'] ? 'arrow-down' : 'arrow-up'"
+                    icon-class="fs-5 ms-auto"
+                  />
+                </button>
+                <div v-show="collapsedSections['font-size']" class="collapse-content mt-2">
                   <div class="p-2 border rounded bg-light">
                     <div class="input-group mb-2">
                       <input
@@ -320,16 +322,15 @@
                       max="200"
                     />
                   </div>
-                </b-collapse>
+                </div>
               </div>
 
               <!-- Font Color - Collapsible -->
               <div class="form-group mb-2">
-                <b-button
-                  v-b-toggle.collapse-font-color
-                  variant="outline-secondary"
-                  size="sm"
-                  class="w-100 text-start"
+                <button
+                  @click="toggleCollapse('font-color')"
+                  class="btn btn-outline-secondary btn-sm w-100 text-start"
+                  :class="{ collapsed: !collapsedSections['font-color'] }"
                 >
                   <KTIcon icon-name="palette" icon-class="fs-5 me-2" />
                   Font Color
@@ -342,8 +343,8 @@
                       border: '1px solid #dee2e6',
                     }"
                   ></div>
-                </b-button>
-                <b-collapse id="collapse-font-color" class="mt-2">
+                </button>
+                <div v-show="collapsedSections['font-color']" class="collapse-content mt-2">
                   <div class="p-2 border rounded bg-light">
                     <div class="color-picker-group">
                       <input
@@ -361,16 +362,15 @@
                       />
                     </div>
                   </div>
-                </b-collapse>
+                </div>
               </div>
 
               <!-- Font Style - Collapsible -->
               <div class="form-group mb-2">
-                <b-button
-                  v-b-toggle.collapse-font-style
-                  variant="outline-secondary"
-                  size="sm"
-                  class="w-100 text-start"
+                <button
+                  @click="toggleCollapse('font-style')"
+                  class="btn btn-outline-secondary btn-sm w-100 text-start"
+                  :class="{ collapsed: !collapsedSections['font-style'] }"
                 >
                   <KTIcon icon-name="text" icon-class="fs-5 me-2" />
                   Font Style
@@ -378,8 +378,8 @@
                     <span v-if="currentFontWeight === 'bold'" class="badge bg-primary me-1">B</span>
                     <span v-if="currentFontStyle === 'italic'" class="badge bg-primary">I</span>
                   </span>
-                </b-button>
-                <b-collapse id="collapse-font-style" class="mt-2">
+                </button>
+                <div v-show="collapsedSections['font-style']" class="collapse-content mt-2">
                   <div class="p-2 border rounded bg-light">
                     <div class="btn-group w-100" role="group">
                       <button
@@ -398,25 +398,24 @@
                       </button>
                     </div>
                   </div>
-                </b-collapse>
+                </div>
               </div>
 
               <!-- Background - Collapsible -->
               <div class="form-group mb-2">
-                <b-button
-                  v-b-toggle.collapse-background
-                  variant="outline-secondary"
-                  size="sm"
-                  class="w-100 text-start"
+                <button
+                  @click="toggleCollapse('background')"
+                  class="btn btn-outline-secondary btn-sm w-100 text-start"
+                  :class="{ collapsed: !collapsedSections['background'] }"
                 >
                   <KTIcon icon-name="background" icon-class="fs-5 me-2" />
                   Text Background
                   <span class="ms-auto">
                     <span v-if="hasTextBackground" class="badge bg-success">ON</span>
-                    <span v-else class="badge bg-secondary">OFF</span>
+                    <span v-if="!hasTextBackground" class="badge bg-secondary">OFF</span>
                   </span>
-                </b-button>
-                <b-collapse id="collapse-background" class="mt-2">
+                </button>
+                <div v-show="collapsedSections['background']" class="collapse-content mt-2">
                   <div class="p-2 border rounded bg-light">
                     <div class="form-check mb-2">
                       <input
@@ -446,22 +445,24 @@
                       />
                     </div>
                   </div>
-                </b-collapse>
+                </div>
               </div>
 
               <!-- Opacity - Collapsible -->
               <div class="form-group mb-2">
-                <b-button
-                  v-b-toggle.collapse-opacity
-                  variant="outline-secondary"
-                  size="sm"
-                  class="w-100 text-start"
+                <button
+                  @click="toggleCollapse('opacity')"
+                  class="btn btn-outline-secondary btn-sm w-100 text-start"
+                  :class="{ collapsed: !collapsedSections['opacity'] }"
                 >
                   <KTIcon icon-name="transparency" icon-class="fs-5 me-2" />
                   Opacity: {{ Math.round(currentOpacity * 100) }}%
-                  <KTIcon icon-name="arrow-down" icon-class="fs-5 ms-auto" />
-                </b-button>
-                <b-collapse id="collapse-opacity" class="mt-2">
+                  <KTIcon
+                    :icon-name="collapsedSections['opacity'] ? 'arrow-down' : 'arrow-up'"
+                    icon-class="fs-5 ms-auto"
+                  />
+                </button>
+                <div v-show="collapsedSections['opacity']" class="collapse-content mt-2">
                   <div class="p-2 border rounded bg-light">
                     <div class="input-group mb-2">
                       <input
@@ -485,7 +486,7 @@
                       step="0.1"
                     />
                   </div>
-                </b-collapse>
+                </div>
               </div>
             </div>
           </div>
@@ -1482,32 +1483,33 @@ export default defineComponent({
 }
 
 /* Collapsible button styles */
-.btn[data-bs-toggle='collapse'] {
+.btn.collapsed {
   transition: all 0.2s ease;
   border: 1px solid #dee2e6;
   background-color: #f8f9fa;
 }
 
-.btn[data-bs-toggle='collapse']:hover {
+.btn.collapsed:hover {
   background-color: #e9ecef;
   border-color: #adb5bd;
 }
 
-.btn[data-bs-toggle='collapse'][aria-expanded='true'] {
+.btn:not(.collapsed) {
   background-color: #007bff;
   color: white;
   border-color: #007bff;
 }
 
-.btn[data-bs-toggle='collapse'][aria-expanded='true'] .kt-icon {
+.btn:not(.collapsed) .kt-icon {
   transform: rotate(180deg);
 }
 
 /* Collapse content styling */
-.collapse .p-2 {
+.collapse-content {
   background-color: #f8f9fa;
   border: 1px solid #dee2e6;
   border-top: none;
+  transition: all 0.3s ease;
 }
 
 /* Badge styling for status indicators */
