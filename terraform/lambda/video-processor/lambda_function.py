@@ -15,6 +15,17 @@ import uuid
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+def convert_decimals_to_floats(obj):
+    """Convert Decimal values to float for processing"""
+    if isinstance(obj, Decimal):
+        return float(obj)
+    elif isinstance(obj, dict):
+        return {k: convert_decimals_to_floats(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_decimals_to_floats(item) for item in obj]
+    else:
+        return obj
+
 def lambda_handler(event, context):
     """
     Enhanced Lambda handler for two-phase video processing
@@ -582,9 +593,13 @@ def get_segment_from_dynamodb(segment_id: str) -> Optional[dict]:
             
             if segment_item:
                 logger.info(f"Found additional data in video-segments table: {segment_id}")
+                # Convert Decimals to floats for text overlays
+                raw_text_overlays = segment_item.get('text_overlays', [])
+                converted_text_overlays = convert_decimals_to_floats(raw_text_overlays)
+                
                 additional_data = {
                     'thumbnail_url': segment_item.get('thumbnail_url'),
-                    'text_overlays': segment_item.get('text_overlays', []),
+                    'text_overlays': converted_text_overlays,
                     'download_count': segment_item.get('download_count', 0),
                     'social_media_usage': segment_item.get('social_media_usage', [])
                 }
