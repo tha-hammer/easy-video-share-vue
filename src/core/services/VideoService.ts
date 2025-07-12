@@ -833,7 +833,51 @@ export class VideoService {
   }
 
   /**
-   * Process video segment with text overlays to create final video
+   * Process video segment with text overlay objects (preferred method)
+   */
+  static async processSegmentWithTextOverlayObjects(
+    segmentId: string,
+    overlays: object[],
+  ): Promise<{ job_id: string; status: string }> {
+    try {
+      const baseUrl = API_CONFIG.aiVideoBackend.endsWith('/')
+        ? API_CONFIG.aiVideoBackend.slice(0, -1)
+        : API_CONFIG.aiVideoBackend
+      const processUrl = `${baseUrl}/api/segments/${segmentId}/process-with-text-overlays`
+
+      console.log('🎬 Processing segment with text overlay objects:', {
+        segmentId,
+        overlayCount: overlays.length,
+      })
+
+      const response = await fetch(processUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          segment_id: segmentId,
+          overlays: overlays,
+          processing_type: 'text_overlays',
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error(`Failed to process segment with text overlays: ${response.statusText}`)
+      }
+
+      const data = await response.json()
+      console.log('🎬 Video processing started:', data)
+
+      return data
+    } catch (error) {
+      console.error('Error processing segment with text overlays:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Process video segment with text overlays to create final video (legacy FFmpeg filters method)
    */
   static async processSegmentWithTextOverlays(
     segmentId: string,

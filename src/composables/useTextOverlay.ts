@@ -611,6 +611,49 @@ export function useTextOverlay() {
   }
 
   /**
+   * Extract raw overlay data from canvas text objects for backend processing
+   */
+  const extractTextOverlaysData = (segmentId: string): any[] => {
+    if (!canvas.value) return []
+
+    const textObjects = canvas.value.getObjects().filter((obj: any) => obj.type === 'text')
+
+    return textObjects.map((textObj) => {
+      // Extract precise coordinates using aCoords
+      const coordinates = extractTextCoordinates(textObj)
+      const videoX = Math.round(coordinates.x * scaleFactors.value.x)
+      const videoY = Math.round(coordinates.y * scaleFactors.value.y)
+
+      // Convert font size to video scale
+      const fontSize = textObj.fontSize || 24
+      const videoFontSize = Math.round(
+        fontSize * Math.min(scaleFactors.value.x, scaleFactors.value.y),
+      )
+
+      return {
+        segment_id: segmentId,
+        text: textObj.text || '',
+        x: videoX,
+        y: videoY,
+        fontSize: videoFontSize,
+        color: convertColorToFFmpeg(textObj.fill),
+        fontFamily: textObj.fontFamily || 'Arial',
+        fontWeight: textObj.fontWeight || 'normal',
+        stroke: textObj.stroke ? {
+          color: convertColorToFFmpeg(textObj.stroke),
+          width: textObj.strokeWidth || 1
+        } : undefined,
+        shadow: textObj.shadow ? {
+          offsetX: textObj.shadow.offsetX || 0,
+          offsetY: textObj.shadow.offsetY || 0,
+          blur: textObj.shadow.blur || 0,
+          color: convertColorToFFmpeg(textObj.shadow.color)
+        } : undefined
+      }
+    })
+  }
+
+  /**
    * Convert all text objects on canvas to FFmpeg filters
    */
   const convertAllTextToFFmpegFilters = (segmentDuration: number = 30): string[] => {
@@ -688,6 +731,7 @@ export function useTextOverlay() {
 
     // FFmpeg Translation Methods
     extractTextCoordinates,
+    extractTextOverlaysData,
     convertToFFmpegFilter,
     convertAllTextToFFmpegFilters,
     generateFFmpegCommand,
