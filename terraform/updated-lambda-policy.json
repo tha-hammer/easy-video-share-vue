@@ -1,0 +1,60 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Action": ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"],
+      "Effect": "Allow",
+      "Resource": "arn:aws:logs:*:*:*"
+    },
+    {
+      "Action": [
+        "dynamodb:PutItem",
+        "dynamodb:GetItem",
+        "dynamodb:Query",
+        "dynamodb:Scan",
+        "dynamodb:UpdateItem",
+        "dynamodb:DeleteItem"
+      ],
+      "Effect": "Allow",
+      "Resource": [
+        "arn:aws:dynamodb:us-east-1:571960159088:table/easy-video-share-video-metadata",
+        "arn:aws:dynamodb:us-east-1:571960159088:table/easy-video-share-video-metadata/index/*",
+        "arn:aws:dynamodb:us-east-1:571960159088:table/easy-video-share-video-segments",
+        "arn:aws:dynamodb:us-east-1:571960159088:table/easy-video-share-video-segments/*"
+      ]
+    },
+    {
+      "Action": [
+        "cognito-idp:ListUsers",
+        "cognito-idp:AdminGetUser",
+        "cognito-idp:AdminDeleteUser",
+        "cognito-idp:AdminDisableUser",
+        "cognito-idp:AdminEnableUser",
+        "cognito-idp:AdminAddUserToGroup",
+        "cognito-idp:AdminRemoveUserFromGroup",
+        "cognito-idp:AdminListGroupsForUser",
+        "cognito-idp:ListUsersInGroup"
+      ],
+      "Effect": "Allow",
+      "Resource": "arn:aws:cognito-idp:us-east-1:571960159088:userpool/us-east-1_8L0Sa4BCn"
+    },
+    {
+      "Action": [
+        "s3:PutObject",
+        "s3:PutObjectAcl",
+        "s3:GetObject",
+        "s3:DeleteObject",
+        "s3:CreateMultipartUpload",
+        "s3:UploadPart",
+        "s3:CompleteMultipartUpload",
+        "s3:AbortMultipartUpload",
+        "s3:ListMultipartUploadParts"
+      ],
+      "Effect": "Allow",
+      "Resource": [
+        "arn:aws:s3:::easy-video-share-silmari-dev",
+        "arn:aws:s3:::easy-video-share-silmari-dev/*"
+      ]
+    }
+  ]
+}

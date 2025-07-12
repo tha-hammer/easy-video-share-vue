@@ -180,10 +180,142 @@ def list_videos(user_id: Optional[str] = None) -> list:
 
 # === SEGMENT MANAGEMENT FUNCTIONS ===
 
+def get_segment(segment_id: str) -> Optional[VideoSegment]:
+    """
+    Get a specific video segment by ID.
+    This function gets segments from the video-metadata table (output_s3_urls)
+    and can also check the video-segments table for additional text overlay data.
+    """
+    print(f"[DEBUG] Getting segment: {segment_id}")
+    
+    # Parse segment_id to extract video_id and segment number
+    # Format: seg_{video_id}_{segment_number:03d}
+    if not segment_id.startswith("seg_"):
+        print(f"[DEBUG] Invalid segment ID format: {segment_id}")
+        return None
+    
+    # Remove "seg_" prefix
+    segment_id_without_prefix = segment_id[4:]
+    
+    # Find the last underscore to separate video_id from segment_number
+    last_underscore_index = segment_id_without_prefix.rfind("_")
+    if last_underscore_index == -1:
+        print(f"[DEBUG] Invalid segment ID format: {segment_id}")
+        return None
+    
+    video_id = segment_id_without_prefix[:last_underscore_index]
+    segment_number_str = segment_id_without_prefix[last_underscore_index + 1:]
+    
+    try:
+        segment_number = int(segment_number_str)
+    except ValueError:
+        print(f"[DEBUG] Invalid segment number format: {segment_number_str}")
+        return None
+    
+    print(f"[DEBUG] Parsed segment ID: video_id='{video_id}', segment_number={segment_number}")
+    
+    # Get the video record to find the segment from output_s3_urls
+    try:
+        video_resp = table.get_item(Key={"video_id": video_id})
+        video_item = video_resp.get("Item")
+        
+        if not video_item:
+            print(f"[DEBUG] Video not found: {video_id}")
+            return None
+        
+        # Get the output_s3_urls array
+        output_s3_urls = video_item.get("output_s3_urls", [])
+        if not output_s3_urls:
+            print(f"[DEBUG] No output_s3_urls found for video: {video_id}")
+            return None
+        
+        # Check if segment number is valid
+        if segment_number < 1 or segment_number > len(output_s3_urls):
+            print(f"[DEBUG] Invalid segment number: {segment_number}, max: {len(output_s3_urls)}")
+            return None
+        
+        # Get the s3_key for this segment
+        s3_key = output_s3_urls[segment_number - 1]  # Convert to 0-based index
+        
+        # Extract filename from s3_key
+        filename = s3_key.split("/")[-1] if s3_key else None
+        
+        # Check if there's additional data in the video-segments table
+        additional_data = {}
+        try:
+            segments_table = boto3.resource('dynamodb', region_name=settings.AWS_REGION).Table('easy-video-share-video-segments')
+            response = segments_table.get_item(Key={'segment_id': segment_id})
+            segment_item = response.get('Item')
+            
+            if segment_item:
+                print(f"[DEBUG] Found additional data in video-segments table: {segment_id}")
+                additional_data = {
+                    'thumbnail_url': segment_item.get('thumbnail_url'),
+                    'text_overlays': segment_item.get('text_overlays', []),
+                    'download_count': segment_item.get('download_count', 0),
+                    'social_media_usage': segment_item.get('social_media_usage', [])
+                }
+        except Exception as e:
+            print(f"[DEBUG] Error querying video-segments table for additional data: {e}")
+            # Continue without additional data
+        
+        # Create segment data
+        segment_data = VideoSegment(
+            segment_id=segment_id,
+            video_id=video_id,
+            user_id=video_item.get("user_id", ""),
+            segment_type=SegmentType.PROCESSED,
+            segment_number=segment_number,
+            s3_key=s3_key,
+            duration=30.0,  # Default duration, could be enhanced to get from S3
+            file_size=0,    # Default size, could be enhanced to get from S3
+            content_type="video/mp4",
+            title=f"{video_item.get('title', 'Video')} - Part {segment_number}",
+            description=f"Processed segment {segment_number} of {len(output_s3_urls)}",
+            tags=video_item.get("tags", []),
+            created_at=video_item.get("created_at", ""),
+            updated_at=video_item.get("updated_at", ""),
+            filename=filename,
+            download_count=additional_data.get('download_count', 0),
+            social_media_usage=additional_data.get('social_media_usage', []),
+            thumbnail_url=additional_data.get('thumbnail_url')
+        )
+        
+        print(f"[DEBUG] Created segment from output_s3_urls with additional data: {segment_id}")
+        return segment_data
+        
+    except Exception as e:
+        print(f"[DEBUG] Error getting segment: {e}")
+        return None
 
 
-
-
+def _item_to_video_segment(item: dict) -> VideoSegment:
+    """
+    Convert DynamoDB item to VideoSegment model.
+    """
+    try:
+        return VideoSegment(
+            segment_id=item.get("segment_id"),
+            video_id=item.get("video_id"),
+            user_id=item.get("user_id"),
+            segment_type=SegmentType(item.get("segment_type", "PROCESSED")),
+            segment_number=item.get("segment_number", 1),
+            s3_key=item.get("s3_key"),
+            duration=float(item.get("duration", 30.0)),
+            file_size=item.get("file_size", 0),
+            content_type=item.get("content_type", "video/mp4"),
+            title=item.get("title"),
+            description=item.get("description"),
+            tags=item.get("tags", []),
+            created_at=item.get("created_at"),
+            updated_at=item.get("updated_at"),
+            filename=item.get("filename"),
+            download_count=item.get("download_count", 0),
+            social_media_usage=item.get("social_media_usage", [])
+        )
+    except Exception as e:
+        print(f"[ERROR] Failed to convert item to VideoSegment: {e}")
+        raise e
 
 
 def list_segments_by_video(video_id: str, segment_type: Optional[SegmentType] = None) -> List[VideoSegment]:
