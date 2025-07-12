@@ -778,23 +778,24 @@ export default defineComponent({
             console.log('✅ Video processing completed successfully!')
             processingVideo.value = false
 
-            // Get the processed video URL
+            // Get the processed video URL from the job status response
             try {
-              const videoResult = await VideoService.getProcessedVideoUrl(
-                selectedSegment.value!.segment_id,
-              )
-              processedVideoUrl.value = videoResult.video_url
+              if (status.output_urls && status.output_urls.length > 0) {
+                // Use the first processed video URL from the job status response
+                processedVideoUrl.value = status.output_urls[0]
+                console.log('🎥 Processed video URL from job status:', processedVideoUrl.value)
 
-              console.log('🎥 Processed video URL:', processedVideoUrl.value)
-
-              // Show success notification
-              alert(
-                `🎉 Video Processing Complete!\n\n` +
-                  `✅ Text overlays applied successfully\n` +
-                  `🎥 Final video is ready for preview\n` +
-                  `⏱️ Processing time: ${Math.round((attempts * 5) / 60)} minutes\n\n` +
-                  `You can now preview or download the final video!`,
-              )
+                // Show success notification
+                alert(
+                  `🎉 Video Processing Complete!\n\n` +
+                    `✅ Text overlays applied successfully\n` +
+                    `🎥 Final video is ready for preview\n` +
+                    `⏱️ Processing time: ${Math.round((attempts * 5) / 60)} minutes\n\n` +
+                    `You can now preview or download the final video!`,
+                )
+              } else {
+                throw new Error('No processed video URLs found in job status response')
+              }
             } catch (urlError) {
               console.error('❌ Failed to get processed video URL:', urlError)
               processingError.value = 'Failed to get processed video URL'
@@ -858,7 +859,7 @@ export default defineComponent({
           console.log(`  Overlay ${index + 1}:`, overlay)
         })
 
-        // 🎯 STEP 2: Save overlay data to backend  
+        // 🎯 STEP 2: Save overlay data to backend
         console.log('💾 Saving overlay data to backend...')
         await VideoService.saveTextOverlays(selectedSegment.value.segment_id, overlayData)
 
@@ -930,24 +931,23 @@ export default defineComponent({
 
     // Download processed video
     const downloadProcessedVideo = async () => {
-      if (!selectedSegment.value) return
+      if (!processedVideoUrl.value) {
+        alert('No processed video available for download. Please process the video first.')
+        return
+      }
 
       try {
         console.log('📥 Downloading processed video...')
 
-        const downloadInfo = await VideoService.downloadProcessedSegment(
-          selectedSegment.value.segment_id,
-        )
-
-        // Create download link
+        // Use the processed video URL directly from the job status response
         const link = document.createElement('a')
-        link.href = downloadInfo.download_url
-        link.download = downloadInfo.filename
+        link.href = processedVideoUrl.value
+        link.download = `processed_video_${selectedSegment.value?.segment_id || 'segment'}.mp4`
         document.body.appendChild(link)
         link.click()
         document.body.removeChild(link)
 
-        console.log('📥 Download initiated:', downloadInfo.filename)
+        console.log('📥 Download initiated for processed video')
       } catch (error) {
         console.error('❌ Download failed:', error)
         alert('Failed to download video. Please try again.')

@@ -926,15 +926,7 @@ export class VideoService {
   /**
    * Get video processing status
    */
-  static async getVideoProcessingStatus(jobId: string): Promise<{
-    job_id: string
-    status: string
-    progress?: number
-    output_url?: string
-    error_message?: string
-    created_at?: string
-    updated_at?: string
-  }> {
+  static async getVideoProcessingStatus(jobId: string): Promise<JobStatusResponse> {
     try {
       const baseUrl = API_CONFIG.aiVideoBackend.endsWith('/')
         ? API_CONFIG.aiVideoBackend.slice(0, -1)
@@ -960,76 +952,6 @@ export class VideoService {
       return data
     } catch (error) {
       console.error('Error getting processing status:', error)
-      throw error
-    }
-  }
-
-  /**
-   * Get processed video URL (final video with text overlays)
-   */
-  static async getProcessedVideoUrl(
-    segmentId: string,
-  ): Promise<{ video_url: string; expires_at: string; processed_at: string }> {
-    try {
-      const baseUrl = API_CONFIG.aiVideoBackend.endsWith('/')
-        ? API_CONFIG.aiVideoBackend.slice(0, -1)
-        : API_CONFIG.aiVideoBackend
-      const videoUrl = `${baseUrl}/api/segments/${segmentId}/processed-video`
-
-      console.log('🎥 Getting processed video URL for segment:', segmentId)
-
-      const response = await fetch(videoUrl, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      })
-
-      if (!response.ok) {
-        throw new Error(`Failed to get processed video URL: ${response.statusText}`)
-      }
-
-      const data = await response.json()
-      console.log('🎥 Processed video URL:', data)
-
-      return data
-    } catch (error) {
-      console.error('Error getting processed video URL:', error)
-      throw error
-    }
-  }
-
-  /**
-   * Download processed video segment
-   */
-  static async downloadProcessedSegment(
-    segmentId: string,
-  ): Promise<{ download_url: string; expires_at: string; filename: string }> {
-    try {
-      const baseUrl = API_CONFIG.aiVideoBackend.endsWith('/')
-        ? API_CONFIG.aiVideoBackend.slice(0, -1)
-        : API_CONFIG.aiVideoBackend
-      const downloadUrl = `${baseUrl}/api/segments/${segmentId}/download-processed`
-
-      console.log('📥 Getting download URL for processed segment:', segmentId)
-
-      const response = await fetch(downloadUrl, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      })
-
-      if (!response.ok) {
-        throw new Error(`Failed to get download URL: ${response.statusText}`)
-      }
-
-      const data = await response.json()
-      console.log('📥 Download URL:', data)
-
-      return data
-    } catch (error) {
-      console.error('Error getting download URL:', error)
       throw error
     }
   }
