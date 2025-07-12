@@ -1299,30 +1299,55 @@ async def generate_segment_thumbnail(segment_id: str):
         
         # Parse segment_id to extract video_id
         if not segment_id.startswith("seg_"):
-            raise HTTPException(status_code=400, detail="Invalid segment ID format")
+            raise HTTPException(status_code=400, detail="Invalid segment ID format - must start with 'seg_'")
         
         # Extract video_id from segment_id
-        segment_id_without_prefix = segment_id[4:]
+        segment_id_without_prefix = segment_id[4:]  # Remove "seg_" prefix
         last_underscore_index = segment_id_without_prefix.rfind("_")
         if last_underscore_index == -1:
-            raise HTTPException(status_code=400, detail="Invalid segment ID format")
+            raise HTTPException(status_code=400, detail="Invalid segment ID format - missing segment number")
         
         video_id = segment_id_without_prefix[:last_underscore_index]
+        segment_number = segment_id_without_prefix[last_underscore_index + 1:]
         
-        print(f"[DEBUG] Extracted video_id: {video_id}")
+        print(f"[DEBUG] Parsed segment ID: video_id='{video_id}', segment_number='{segment_number}'")
         
-        # Import lambda integration
-        from lambda_integration import trigger_thumbnail_generation
+        # Validate video_id format (should be a UUID or similar)
+        if not video_id or len(video_id) < 10:
+            raise HTTPException(status_code=400, detail=f"Invalid video ID extracted: '{video_id}'")
+        
+        # Check if Lambda integration is available
+        try:
+            from lambda_integration import trigger_thumbnail_generation
+        except ImportError as e:
+            print(f"[ERROR] Lambda integration import failed: {e}")
+            raise HTTPException(status_code=500, detail="Lambda integration not available")
+        
+        print(f"[DEBUG] Triggering Lambda thumbnail generation...")
         
         # Trigger Lambda thumbnail generation
-        result = await trigger_thumbnail_generation(video_id, segment_id)
+        try:
+            result = await trigger_thumbnail_generation(video_id, segment_id)
+            print(f"[DEBUG] Lambda result: {result}")
+        except Exception as lambda_error:
+            print(f"[ERROR] Lambda invocation failed: {lambda_error}")
+            import traceback
+            traceback.print_exc()
+            raise HTTPException(status_code=500, detail=f"Lambda invocation failed: {str(lambda_error)}")
         
         if result['status'] == 'success':
             # Extract thumbnail URL from Lambda response
             lambda_response = result['lambda_response']
-            if lambda_response['statusCode'] == 200:
+            print(f"[DEBUG] Lambda response: {lambda_response}")
+            
+            if lambda_response.get('statusCode') == 200:
                 response_body = json.loads(lambda_response['body'])
                 thumbnail_url = response_body.get('thumbnail_url')
+                
+                if not thumbnail_url:
+                    raise HTTPException(status_code=500, detail="Lambda response missing thumbnail_url")
+                
+                print(f"[DEBUG] Thumbnail generated successfully: {thumbnail_url}")
                 
                 return {
                     "segment_id": segment_id,
@@ -1331,17 +1356,28 @@ async def generate_segment_thumbnail(segment_id: str):
                     "message": "Thumbnail generated successfully"
                 }
             else:
-                raise HTTPException(status_code=500, detail="Lambda thumbnail generation failed")
+                error_detail = f"Lambda returned status {lambda_response.get('statusCode')}"
+                if lambda_response.get('body'):
+                    try:
+                        error_body = json.loads(lambda_response['body'])
+                        error_detail += f": {error_body}"
+                    except:
+                        error_detail += f": {lambda_response['body']}"
+                
+                print(f"[ERROR] Lambda thumbnail generation failed: {error_detail}")
+                raise HTTPException(status_code=500, detail=f"Lambda thumbnail generation failed: {error_detail}")
         else:
-            raise HTTPException(status_code=500, detail="Failed to trigger thumbnail generation")
+            error_detail = f"Lambda invocation failed with status: {result.get('status')}"
+            print(f"[ERROR] {error_detail}")
+            raise HTTPException(status_code=500, detail=error_detail)
             
     except HTTPException:
         raise
     except Exception as e:
-        print(f"[ERROR] Failed to generate thumbnail: {e}")
+        print(f"[ERROR] Unexpected error in thumbnail generation: {e}")
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Failed to generate thumbnail: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
 
 
 @router.post("/segments/{segment_id}/text-overlays")
@@ -1382,7 +1418,7 @@ async def save_text_overlays(segment_id: str, request: dict):
         
         try:
             # Update the segment with text overlays
-            segments_table = boto3.resource('dynamodb', region_name='us-east-1').Table('video_segments')
+            segments_table = boto3.resource('dynamodb', region_name='us-east-1').Table('easy-video-share-video-segments')
             
             # Store the overlays data
             timestamp = datetime.now().isoformat()
@@ -1462,7 +1498,7 @@ async def get_text_overlays(segment_id: str):
         
         # Get text overlays from DynamoDB
         try:
-            segments_table = boto3.resource('dynamodb', region_name='us-east-1').Table('video_segments')
+            segments_table = boto3.resource('dynamodb', region_name='us-east-1').Table('easy-video-share-video-segments')
             
             response = segments_table.get_item(
                 Key={'segment_id': segment_id}
