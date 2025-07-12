@@ -1380,6 +1380,30 @@ async def generate_segment_thumbnail(segment_id: str):
         raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
 
 
+def convert_floats_to_decimals(obj):
+    """Convert float values to Decimal for DynamoDB storage"""
+    from decimal import Decimal
+    if isinstance(obj, float):
+        return Decimal(str(obj))
+    elif isinstance(obj, dict):
+        return {k: convert_floats_to_decimals(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_floats_to_decimals(item) for item in obj]
+    else:
+        return obj
+
+def convert_decimals_to_floats(obj):
+    """Convert Decimal values to float for frontend consumption"""
+    from decimal import Decimal
+    if isinstance(obj, Decimal):
+        return float(obj)
+    elif isinstance(obj, dict):
+        return {k: convert_decimals_to_floats(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_decimals_to_floats(item) for item in obj]
+    else:
+        return obj
+
 @router.post("/segments/{segment_id}/text-overlays")
 async def save_text_overlays(segment_id: str, request: dict):
     """
@@ -1423,12 +1447,15 @@ async def save_text_overlays(segment_id: str, request: dict):
             # Store the overlays data
             timestamp = datetime.now().isoformat()
             
+            # Convert floats to Decimals for DynamoDB storage
+            overlays_for_storage = convert_floats_to_decimals(overlays)
+            
             response = segments_table.put_item(
                 Item={
                     'segment_id': segment_id,
                     'video_id': video_id,
                     'segment_number': segment_number,
-                    'text_overlays': overlays,
+                    'text_overlays': overlays_for_storage,
                     'updated_at': timestamp,
                     'created_at': timestamp
                 }
@@ -1507,13 +1534,16 @@ async def get_text_overlays(segment_id: str):
             item = response.get('Item', {})
             text_overlays = item.get('text_overlays', [])
             
+            # Convert Decimals to floats for frontend consumption
+            text_overlays_for_frontend = convert_decimals_to_floats(text_overlays)
+            
             print(f"[DEBUG] Retrieved {len(text_overlays)} text overlays for segment: {segment_id}")
             
             return {
                 "segment_id": segment_id,
                 "video_id": video_id,
                 "segment_number": segment_number,
-                "text_overlays": text_overlays,
+                "text_overlays": text_overlays_for_frontend,
                 "overlays_count": len(text_overlays),
                 "updated_at": item.get('updated_at'),
                 "created_at": item.get('created_at')
