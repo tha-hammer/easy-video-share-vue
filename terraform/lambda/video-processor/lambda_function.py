@@ -503,22 +503,109 @@ def get_segments_from_dynamodb(video_id: str) -> List[dict]:
 def get_segment_from_dynamodb(segment_id: str) -> Optional[dict]:
     """
     Get a specific segment from DynamoDB
+    This function gets segments from the video-metadata table (output_s3_urls)
+    and can also check the video-segments table for additional text overlay data.
     """
     logger.info(f"Getting segment from DynamoDB: {segment_id}")
     
+    # Parse segment_id to extract video_id and segment number
+    # Format: seg_{video_id}_{segment_number:03d}
+    if not segment_id.startswith("seg_"):
+        logger.error(f"Invalid segment ID format: {segment_id}")
+        return None
+    
+    # Remove "seg_" prefix
+    segment_id_without_prefix = segment_id[4:]
+    
+    # Find the last underscore to separate video_id from segment_number
+    last_underscore_index = segment_id_without_prefix.rfind("_")
+    if last_underscore_index == -1:
+        logger.error(f"Invalid segment ID format: {segment_id}")
+        return None
+    
+    video_id = segment_id_without_prefix[:last_underscore_index]
+    segment_number_str = segment_id_without_prefix[last_underscore_index + 1:]
+    
+    try:
+        segment_number = int(segment_number_str)
+    except ValueError:
+        logger.error(f"Invalid segment number format: {segment_number_str}")
+        return None
+    
+    logger.info(f"Parsed segment ID: video_id='{video_id}', segment_number={segment_number}")
+    
     try:
         dynamodb = boto3.resource('dynamodb')
-        table = dynamodb.Table('easy-video-share-video-segments')
+        video_metadata_table = dynamodb.Table('easy-video-share-video-metadata')
         
-        response = table.get_item(Key={'segment_id': segment_id})
+        # Get the video record to find the segment from output_s3_urls
+        video_resp = video_metadata_table.get_item(Key={"video_id": video_id})
+        video_item = video_resp.get("Item")
         
-        segment = response.get('Item')
-        if segment:
-            logger.info(f"Found segment: {segment_id}")
-        else:
-            logger.warning(f"Segment not found: {segment_id}")
+        if not video_item:
+            logger.error(f"Video not found: {video_id}")
+            return None
         
-        return segment
+        # Get the output_s3_urls array
+        output_s3_urls = video_item.get("output_s3_urls", [])
+        if not output_s3_urls:
+            logger.error(f"No output_s3_urls found for video: {video_id}")
+            return None
+        
+        # Check if segment number is valid
+        if segment_number < 1 or segment_number > len(output_s3_urls):
+            logger.error(f"Invalid segment number: {segment_number}, max: {len(output_s3_urls)}")
+            return None
+        
+        # Get the s3_key for this segment
+        s3_key = output_s3_urls[segment_number - 1]  # Convert to 0-based index
+        
+        # Extract filename from s3_key
+        filename = s3_key.split("/")[-1] if s3_key else None
+        
+        # Check if there's additional data in the video-segments table
+        additional_data = {}
+        try:
+            segments_table = dynamodb.Table('easy-video-share-video-segments')
+            response = segments_table.get_item(Key={'segment_id': segment_id})
+            segment_item = response.get('Item')
+            
+            if segment_item:
+                logger.info(f"Found additional data in video-segments table: {segment_id}")
+                additional_data = {
+                    'thumbnail_url': segment_item.get('thumbnail_url'),
+                    'text_overlays': segment_item.get('text_overlays', []),
+                    'download_count': segment_item.get('download_count', 0),
+                    'social_media_usage': segment_item.get('social_media_usage', [])
+                }
+        except Exception as e:
+            logger.warning(f"Error querying video-segments table for additional data: {str(e)}")
+            # Continue without additional data
+        
+        # Create segment data
+        segment_data = {
+            'segment_id': segment_id,
+            'video_id': video_id,
+            'user_id': video_item.get("user_id", ""),
+            'segment_type': 'PROCESSED',
+            'segment_number': segment_number,
+            's3_key': s3_key,
+            'duration': 30.0,  # Default duration, could be enhanced to get from S3
+            'file_size': 0,    # Default size, could be enhanced to get from S3
+            'content_type': "video/mp4",
+            'title': f"{video_item.get('title', 'Video')} - Part {segment_number}",
+            'description': f"Processed segment {segment_number} of {len(output_s3_urls)}",
+            'tags': video_item.get("tags", []),
+            'created_at': video_item.get("created_at", ""),
+            'updated_at': video_item.get("updated_at", ""),
+            'filename': filename,
+            'download_count': additional_data.get('download_count', 0),
+            'social_media_usage': additional_data.get('social_media_usage', []),
+            'thumbnail_url': additional_data.get('thumbnail_url')
+        }
+        
+        logger.info(f"Created segment from output_s3_urls with additional data: {segment_id}")
+        return segment_data
         
     except Exception as e:
         logger.error(f"Error getting segment from DynamoDB: {str(e)}")

@@ -492,7 +492,6 @@ export default defineComponent({
       dispose,
       // FFmpeg translation functions
       extractTextCoordinates,
-      convertToFFmpegFilter,
       convertAllTextToFFmpegFilters,
       generateFFmpegCommand,
       canvasToVideoCoordinates,
@@ -869,8 +868,8 @@ export default defineComponent({
         console.log(ffmpegCommand)
 
         // 🎯 STEP 3: Extract detailed overlay data for storage
-        const textObjects = canvas.value.getObjects().filter((obj: any) => obj.type === 'text')
-        const overlays = textObjects.map((obj: any, index: number) => {
+        const textObjects = canvas.value.getObjects().filter((obj) => obj.type === 'text')
+        const overlays = textObjects.map((obj, index) => {
           const textObj = obj
 
           // Use precise coordinate extraction from aCoords
