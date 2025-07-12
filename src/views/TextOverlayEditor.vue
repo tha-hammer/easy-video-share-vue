@@ -468,11 +468,7 @@ export default defineComponent({
       removeTextObject,
       dispose,
       // FFmpeg translation functions
-      extractTextCoordinates,
       extractTextOverlaysData,
-      convertAllTextToFFmpegFilters,
-      generateFFmpegCommand,
-      canvasToVideoCoordinates,
     } = useTextOverlay()
 
     // Text editing reactive properties
