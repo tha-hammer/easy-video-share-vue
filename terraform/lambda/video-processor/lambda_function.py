@@ -184,7 +184,8 @@ def apply_text_overlays_to_segments(event, context):
             
             # Apply text overlays
             output_path = f"/tmp/final_segment_{segment_id}.mp4"
-            success = apply_text_overlays_ffmpeg(input_path, output_path, segment_overlays)
+            segment_duration = float(segment.get('duration', 30.0))
+            success = apply_text_overlays_ffmpeg(input_path, output_path, segment_overlays, segment_duration)
             
             if success:
                 # Upload final segment
@@ -326,7 +327,7 @@ def process_full_video(event, context):
         })
     }
 
-def apply_text_overlays_ffmpeg(input_path: str, output_path: str, text_overlays: List[dict]) -> bool:
+def apply_text_overlays_ffmpeg(input_path: str, output_path: str, text_overlays: List[dict], segment_duration: float = 30.0) -> bool:
     """
     Apply text overlays using FFmpeg with proper filter chaining
     """
@@ -346,7 +347,7 @@ def apply_text_overlays_ffmpeg(input_path: str, output_path: str, text_overlays:
         filters = []
         for i, overlay in enumerate(text_overlays):
             # Convert overlay to FFmpeg drawtext filter
-            filter_str = convert_overlay_to_ffmpeg(overlay)
+            filter_str = convert_overlay_to_ffmpeg(overlay, segment_duration)
             if i == 0:
                 filters.append(f"[0:v]{filter_str}[v{i+1}]")
             else:
@@ -377,7 +378,7 @@ def apply_text_overlays_ffmpeg(input_path: str, output_path: str, text_overlays:
         logger.error(f"Error applying text overlays: {str(e)}")
         return False
 
-def convert_overlay_to_ffmpeg(overlay: dict) -> str:
+def convert_overlay_to_ffmpeg(overlay: dict, segment_duration: float = 30.0) -> str:
     """
     Convert text overlay object to FFmpeg drawtext filter
     """
@@ -395,7 +396,7 @@ def convert_overlay_to_ffmpeg(overlay: dict) -> str:
         f"y={y}",
         f"fontsize={font_size}",
         f"fontcolor={color}",
-        "enable='between(t,0,30)'"
+        f"enable='between(t,0,{segment_duration})'"
     ]
     
     return ':'.join(filter_parts)
@@ -573,6 +574,7 @@ def get_segment_from_dynamodb(segment_id: str) -> Optional[dict]:
         
         # Check if there's additional data in the video-segments table
         additional_data = {}
+        actual_duration = 30.0  # Default fallback
         try:
             segments_table = dynamodb.Table('easy-video-share-video-segments')
             response = segments_table.get_item(Key={'segment_id': segment_id})
@@ -586,6 +588,10 @@ def get_segment_from_dynamodb(segment_id: str) -> Optional[dict]:
                     'download_count': segment_item.get('download_count', 0),
                     'social_media_usage': segment_item.get('social_media_usage', [])
                 }
+                # Get actual duration from video-segments table
+                if 'duration' in segment_item:
+                    actual_duration = float(segment_item['duration'])
+                    logger.info(f"Found actual duration for {segment_id}: {actual_duration}s")
         except Exception as e:
             logger.warning(f"Error querying video-segments table for additional data: {str(e)}")
             # Continue without additional data
@@ -600,7 +606,7 @@ def get_segment_from_dynamodb(segment_id: str) -> Optional[dict]:
             's3_key': s3_key,
             'location': s3_key,  # Add location field for Lambda compatibility
             'storage_type': 's3',  # Add storage_type field for Lambda compatibility
-            'duration': 30.0,  # Default duration, could be enhanced to get from S3
+            'duration': actual_duration,  # Use actual duration from video-segments table
             'file_size': 0,    # Default size, could be enhanced to get from S3
             'content_type': "video/mp4",
             'title': f"{video_item.get('title', 'Video')} - Part {segment_number}",
