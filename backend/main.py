@@ -1609,6 +1609,20 @@ async def process_segment_with_text_overlays(segment_id: str, request: dict):
         
         print(f"[DEBUG] Extracted video_id: {video_id}, segment_number: {segment_number}")
         
+        # Get segment duration from the segment data
+        segment_duration = 30.0  # Default fallback
+        try:
+            # Get segment info to extract duration
+            segment_info = dynamodb_service.get_segment(segment_id)
+            if segment_info and hasattr(segment_info, 'duration'):
+                # Convert from Decimal to float for processing
+                segment_duration = float(segment_info.duration)
+                print(f"[DEBUG] Found segment duration: {segment_duration}")
+            else:
+                print(f"[DEBUG] Using default segment duration: {segment_duration}")
+        except Exception as e:
+            print(f"[DEBUG] Failed to get segment duration, using default: {e}")
+        
         # Prepare text overlays for Lambda processing
         text_overlays = []
         
@@ -1624,7 +1638,8 @@ async def process_segment_with_text_overlays(segment_id: str, request: dict):
                     'color': overlay.get('color', '#ffffff'),
                     'fontFamily': overlay.get('fontFamily', 'Arial'),
                     'shadow': overlay.get('shadow', {}),
-                    'stroke': overlay.get('stroke', {})
+                    'stroke': overlay.get('stroke', {}),
+                    'segment_duration': segment_duration
                 }
                 text_overlays.append(text_overlay)
         
@@ -1658,7 +1673,7 @@ async def process_segment_with_text_overlays(segment_id: str, request: dict):
         # Import lambda integration
         from lambda_integration import trigger_text_overlay_processing
         
-        # Trigger Lambda text overlay processing with the job_id
+        # Trigger Lambda text overlay processing with the job_id and segment duration
         result = await trigger_text_overlay_processing(video_id, text_overlays, job_id)
         
         if result['status'] == 'success':
