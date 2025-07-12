@@ -2444,6 +2444,51 @@ async def test_lambda_full_integration(request: dict):
             "error_type": type(e).__name__
         }
 
+@app.get("/debug/video/{video_id}")
+async def debug_video_data(video_id: str):
+    """Debug endpoint to check video data in DynamoDB"""
+    try:
+        print(f"[DEBUG] Checking video data for video_id: {video_id}")
+        
+        # Get video from DynamoDB
+        video_resp = table.get_item(Key={"video_id": video_id})
+        video_item = video_resp.get("Item")
+        
+        if not video_item:
+            return {
+                "status": "error",
+                "message": f"Video {video_id} not found in DynamoDB",
+                "table": "easy-video-share-video-metadata"
+            }
+        
+        # Get output_s3_urls
+        output_s3_urls = video_item.get("output_s3_urls", [])
+        
+        return {
+            "status": "success",
+            "video_id": video_id,
+            "video_found": True,
+            "output_s3_urls_count": len(output_s3_urls),
+            "output_s3_urls": output_s3_urls[:5] if len(output_s3_urls) > 5 else output_s3_urls,  # Show first 5
+            "video_status": video_item.get("status"),
+            "created_at": video_item.get("created_at"),
+            "updated_at": video_item.get("updated_at"),
+            "user_id": video_item.get("user_id"),
+            "title": video_item.get("title"),
+            "filename": video_item.get("filename"),
+            "table": "easy-video-share-video-metadata"
+        }
+        
+    except Exception as e:
+        print(f"[ERROR] Failed to check video data: {e}")
+        import traceback
+        traceback.print_exc()
+        return {
+            "status": "error",
+            "error": str(e),
+            "video_id": video_id
+        }
+
 # Include router in app (after all endpoints are defined)
 app.include_router(router)
 
