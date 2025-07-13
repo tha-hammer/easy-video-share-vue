@@ -283,8 +283,7 @@
                 <span class="visually-hidden">Loading canvas...</span>
               </div>
               <p class="text-muted mt-3">
-                Initializing Fabric.js canvas... YEEEEEEEEEEEEE EHAAAAAA
-                AAHAAHAHAHAHAHAHAHAHAHHAHAHAHAHAHA
+                Initializing Fabric.js canvas... BOOOOOOOOOOOOOOOOOOOOOOOOOOOYAAAAAAAHHHHHHHHHHHHHHHHHHHHHHHHHHHH
               </p>
             </div>
           </div>
@@ -609,10 +608,18 @@
           class="form-control mobile-text-input"
           placeholder="Enter your text..."
         />
-        <button class="btn btn-sm btn-outline-secondary mobile-expand-btn">
-          <KTIcon icon-name="expand" icon-class="fs-6" />
+        <button 
+          @click="exitTextEditingMode" 
+          class="btn btn-sm btn-outline-secondary mobile-expand-btn"
+          title="Close Text Editor"
+        >
+          <KTIcon icon-name="cross" icon-class="fs-6" />
         </button>
-        <button class="btn btn-sm btn-success mobile-confirm-btn">
+        <button 
+          @click="confirmTextEdit" 
+          class="btn btn-sm btn-success mobile-confirm-btn"
+          title="Confirm Text"
+        >
           <KTIcon icon-name="check" icon-class="fs-6" />
         </button>
       </div>
@@ -1057,7 +1064,7 @@ export default defineComponent({
 
     // Text object management
     const addNewText = async () => {
-      console.log('🎯 addNewText called')
+      console.log('🎯 addNewText called (Mobile mode:', isMobileView.value, ')')
       console.log('🎯 Canvas ready:', isCanvasReady.value)
       console.log('🎯 Canvas exists:', !!canvas.value)
       console.log('🎯 addTextObject function exists:', typeof addTextObject)
@@ -1150,11 +1157,11 @@ export default defineComponent({
       // Calculate offset that keeps the duplicated text visible on canvas
       const offsetX = 20
       const offsetY = 20
-      
+
       // Ensure the duplicated text stays within canvas bounds
       let newLeft = (originalText.left || 0) + offsetX
       let newTop = (originalText.top || 0) + offsetY
-      
+
       // Check bounds and wrap around if necessary
       if (newLeft > canvasSize.value.width - 50) {
         newLeft = 50 // Reset to left side with padding
@@ -1539,6 +1546,15 @@ export default defineComponent({
       textContentInput.value?.blur()
     }
 
+    const confirmTextEdit = () => {
+      console.log('🔄 Mobile confirm button clicked')
+      // Apply any pending changes and exit text editing mode
+      if (activeTextObject.value && currentTextContent.value.trim()) {
+        updateTextContent()
+      }
+      exitTextEditingMode()
+    }
+
     const handleTextInputFocus = () => {
       // Prevent viewport from scrolling when keyboard opens
       if (isMobileView.value) {
@@ -1762,6 +1778,7 @@ export default defineComponent({
       textContentInput,
       enterTextEditingMode,
       exitTextEditingMode,
+      confirmTextEdit,
       handleTextInputFocus,
       handleTextInputBlur,
       handleCanvasClick,
@@ -2449,6 +2466,7 @@ export default defineComponent({
   display: flex !important;
   flex-direction: column !important;
   visibility: visible !important;
+  pointer-events: auto !important;
 }
 
 /* Text Input Bar (~8% of 30vh) */
@@ -2457,6 +2475,9 @@ export default defineComponent({
   padding: 8px 12px;
   border-bottom: 1px solid #dee2e6;
   background: #f8f9fa;
+  pointer-events: auto;
+  z-index: 1000;
+  position: relative;
 }
 
 .mobile-text-input {
@@ -2468,10 +2489,21 @@ export default defineComponent({
 
 .mobile-expand-btn,
 .mobile-confirm-btn {
-  min-width: 32px;
-  height: 32px;
-  padding: 4px;
-  border-radius: 4px;
+  min-width: 36px;
+  height: 36px;
+  padding: 6px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.mobile-expand-btn .kt-icon,
+.mobile-confirm-btn .kt-icon {
+  font-size: 16px !important;
+  color: inherit;
 }
 
 /* Tab Navigation (~6% of 30vh) */
