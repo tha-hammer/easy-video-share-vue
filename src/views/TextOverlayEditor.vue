@@ -466,7 +466,118 @@
           </div>
 
           <!-- Mobile Only: Text Editing Mode: Text Input + Text Tools -->
+          <div v-if="isTextEditingMode" class="text-editing-controls mobile-text-editing">
+            <!-- Text Input Area (25% of controls on mobile) -->
+            <div class="text-input-section" :class="{ 'mobile-text-input': isMobileView }">
+           <!--    <div class="text-input-header">
+                <h6 class="mb-0">Text Content</h6>
+                <button @click="exitTextEditingMode" class="btn btn-sm btn-outline-secondary">
+                  <KTIcon icon-name="cross" icon-class="fs-5" />
+                </button>
+              </div>
+              <textarea
+                ref="textContentInput"
+                v-model="currentTextContent"
+                @input="updateTextContent"
+                @focus="handleTextInputFocus"
+                @blur="handleTextInputBlur"
+                class="form-control"
+                rows="2"
+                placeholder="Enter your text..."
+              ></textarea> -->
+            </div>
 
+            <!-- Text Tools (75% of controls on mobile) -->
+            <div class="text-tools-section" :class="{ 'mobile-text-tools': isMobileView }">
+              <!-- Font Family -->
+              <div class="tool-group">
+                <label class="tool-label">Font</label>
+                <select
+                  v-model="currentFontFamily"
+                  @change="updateFontFamily"
+                  class="form-select form-select-sm"
+                >
+                  <option value="Arial">Arial</option>
+                  <option value="Helvetica">Helvetica</option>
+                  <option value="Times New Roman">Times New Roman</option>
+                  <option value="Georgia">Georgia</option>
+                  <option value="Verdana">Verdana</option>
+                  <option value="Courier New">Courier New</option>
+                  <option value="Impact">Impact</option>
+                  <option value="Comic Sans MS">Comic Sans MS</option>
+                </select>
+              </div>
+
+              <!-- Font Size -->
+              <div class="tool-group">
+                <label class="tool-label">Size</label>
+                <div class="size-controls">
+                  <input
+                    v-model.number="currentFontSize"
+                    @input="updateFontSize"
+                    type="range"
+                    class="form-range"
+                    min="8"
+                    max="200"
+                  />
+                  <span class="size-value">{{ currentFontSize }}px</span>
+                </div>
+              </div>
+
+              <!-- Font Color -->
+              <div class="tool-group">
+                <label class="tool-label">Color</label>
+                <input
+                  v-model="currentFontColor"
+                  @input="updateFontColor"
+                  type="color"
+                  class="form-control form-control-color"
+                />
+              </div>
+
+              <!-- Font Style -->
+              <div class="tool-group">
+                <label class="tool-label">Style</label>
+                <div class="btn-group btn-group-sm" role="group">
+                  <button
+                    @click="toggleBold"
+                    :class="{ active: currentFontWeight === 'bold' }"
+                    class="btn btn-outline-secondary"
+                  >
+                    <strong>B</strong>
+                  </button>
+                  <button
+                    @click="toggleItalic"
+                    :class="{ active: currentFontStyle === 'italic' }"
+                    class="btn btn-outline-secondary"
+                  >
+                    <em>I</em>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Background -->
+              <div class="tool-group">
+                <label class="tool-label">Background</label>
+                <div class="background-controls">
+                  <button
+                    @click="toggleTextBackground"
+                    :class="{ active: hasTextBackground }"
+                    class="btn btn-sm btn-outline-secondary"
+                  >
+                    BG
+                  </button>
+                  <input
+                    v-if="hasTextBackground"
+                    v-model="currentBackgroundColor"
+                    @input="updateBackgroundColor"
+                    type="color"
+                    class="form-control form-control-color form-control-sm"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
