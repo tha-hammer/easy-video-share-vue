@@ -296,7 +296,7 @@
           <div v-if="!isTextEditingMode" class="main-editor-menu mobile-main-menu">
             <div class="menu-actions">
               <button
-                @click="enterTextEditingMode"
+                @click="addNewText"
                 class="btn btn-primary"
                 :disabled="!isCanvasReady"
                 title="Add Text"
