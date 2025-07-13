@@ -480,8 +480,8 @@
           <!-- Mobile Only: Text Editing Mode: Text Input + Text Tools -->
           <div v-if="isTextEditingMode" class="text-editing-controls mobile-text-editing">
             <!-- Text Input Area (25% of controls on mobile) -->
-            <div class="text-input-section" :class="{ 'mobile-text-input': isMobileView }">
-           <!--    <div class="text-input-header">
+           <!-- <div class="text-input-section" :class="{ 'mobile-text-input': isMobileView }">
+               <div class="text-input-header">
                 <h6 class="mb-0">Text Content</h6>
                 <button @click="exitTextEditingMode" class="btn btn-sm btn-outline-secondary">
                   <KTIcon icon-name="cross" icon-class="fs-5" />
@@ -496,8 +496,8 @@
                 class="form-control"
                 rows="2"
                 placeholder="Enter your text..."
-              ></textarea> -->
-            </div>
+              ></textarea>
+            </div>-->
 
             <!-- Text Tools (75% of controls on mobile) -->
             <div class="text-tools-section" :class="{ 'mobile-text-tools': isMobileView }">
@@ -1125,7 +1125,7 @@ export default defineComponent({
       } catch (error) {
         console.error('❌ Error in addNewText:', error)
       }
-      
+
       const endTime = Date.now()
       console.log('🎯 addNewText END:', endTime, 'Duration:', endTime - startTime, 'ms')
     }
@@ -1660,11 +1660,11 @@ export default defineComponent({
       console.log('📄 Target className:', (event.target as HTMLElement)?.className)
       console.log('📄 isTextEditingMode:', isTextEditingMode.value)
       console.log('📄 isMobileView:', isMobileView.value)
-      
+
       if (isTextEditingMode.value && isMobileView.value) {
         const target = event.target as HTMLElement
         const textInputSection = document.querySelector('.mobile-text-input')
-        
+
         console.log('📄 textInputSection exists:', !!textInputSection)
         console.log('📄 target is inside textInputSection:', textInputSection?.contains(target))
 
