@@ -2287,17 +2287,20 @@ export default defineComponent({
 
 /* Mobile Text Editing Panel Styles */
 .mobile-text-editing-panel {
-  background: white;
-  border-top: 1px solid #dee2e6;
-  border-radius: 0;
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  z-index: 1000;
-  max-height: 50vh;
-  overflow-y: auto;
-  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
+  background: white !important;
+  border-top: 1px solid #dee2e6 !important;
+  border-radius: 0 !important;
+  position: fixed !important;
+  bottom: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  z-index: 9999 !important;
+  height: 50vh !important;
+  min-height: 300px !important;
+  overflow-y: auto !important;
+  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1) !important;
+  display: block !important;
+  visibility: visible !important;
 }
 
 .mobile-panel-header {
@@ -2317,13 +2320,23 @@ export default defineComponent({
 }
 
 .mobile-panel-content {
-  padding: 12px 16px;
-  max-height: calc(50vh - 40px);
-  overflow-y: auto;
+  padding: 12px 16px !important;
+  height: calc(50vh - 40px) !important;
+  max-height: none !important;
+  overflow-y: auto !important;
+  display: block !important;
+  visibility: visible !important;
+}
+
+.mobile-text-editing-full {
+  display: block !important;
+  visibility: visible !important;
 }
 
 .mobile-text-editing-full .form-group {
-  margin-bottom: 12px;
+  margin-bottom: 12px !important;
+  display: block !important;
+  visibility: visible !important;
 }
 
 .mobile-text-editing-full .form-label {
