@@ -548,7 +548,7 @@
               </div> -->
 
               <!-- Font Style -->
-              <div class="tool-group">
+              <!--<div class="tool-group">
                 <label class="tool-label">Style</label>
                 <div class="btn-group btn-group-sm" role="group">
                   <button
@@ -556,7 +556,7 @@
                     :class="{ active: currentFontWeight === 'bold' }"
                     class="btn btn-outline-secondary"
                   >
-               <!--      <strong>B</strong>
+                     <strong>B</strong>
                   </button>
                   <button
                     @click="toggleItalic"
