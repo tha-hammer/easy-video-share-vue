@@ -1558,7 +1558,10 @@ export default defineComponent({
     }
 
     const exitTextEditingMode = () => {
+      alert('🚪 exitTextEditingMode called!')
+       console.log('🚪 Before exit - isTextEditingMode:', isTextEditingMode.value)
       isTextEditingMode.value = false
+       console.log('🚪 After exit - isTextEditingMode:', isTextEditingMode.value)
       textContentInput.value?.blur()
     }
 
@@ -1971,7 +1974,7 @@ export default defineComponent({
 
   .mobile-main-menu .menu-actions {
     display: flex;
-    gap: 6px;
+    gap: 10px;
     flex-wrap: wrap;
     justify-content: center;
     align-items: center;
@@ -1982,7 +1985,7 @@ export default defineComponent({
     min-width: 32px;
     max-width: 36px;
     padding: 4px 6px;
-    font-size: 10px;
+    font-size: 8px;
     min-height: 32px;
     max-height: 32px;
     border-radius: 4px;
@@ -2014,7 +2017,7 @@ export default defineComponent({
 
   /* Text Input Section - Like reference app */
   .mobile-text-input {
-    flex: 0 0 60px;
+    flex: 0 0 160px;
     border-bottom: 1px solid #dee2e6;
     padding: 8px 12px;
     background: #f8f9fa;
