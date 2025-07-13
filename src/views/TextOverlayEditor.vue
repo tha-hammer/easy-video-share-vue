@@ -1079,6 +1079,7 @@ export default defineComponent({
 
     // Text object management
     const addNewText = async () => {
+      alert('🎯 addNewText function called!')
       console.log('🎯 addNewText called (Mobile mode:', isMobileView.value, ')')
       console.log('🎯 Canvas ready BABY YEAHHH:', isCanvasReady.value)
       console.log('🎯 Canvas exists:', !!canvas.value)
