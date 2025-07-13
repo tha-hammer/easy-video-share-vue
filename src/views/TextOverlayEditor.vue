@@ -293,16 +293,25 @@
         <div class="controls-section mobile-controls-section">
           <!-- Mobile Only: Normal Mode: Main Editor Menu -->
           <div v-if="!isTextEditingMode" class="main-editor-menu mobile-main-menu">
-            <div class="menu-actions">
-              <button
-                @click="addNewText"
-                @touchstart="console.log('🎯 Mobile Add Text button touched, disabled:', !isCanvasReady, 'isCanvasReady:', isCanvasReady)"
-                class="btn btn-primary"
-                :disabled="!isCanvasReady"
-                title="Add Text"
-              >
-                <KTIcon icon-name="plus" icon-class="fs-6" />
-              </button>
+            <div class="menu-actions" @touchstart="console.log('🔥 PARENT TOUCHSTART - menu-actions touched')" @click="console.log('🔥 PARENT CLICK - menu-actions clicked')">
+              <div @touchstart="console.log('🎭 WRAPPER TOUCHSTART - button wrapper touched')" @click="console.log('🎭 WRAPPER CLICK - button wrapper clicked')" style="display: inline-block;">
+                <button
+                  @click="addNewText"
+                  @touchstart="console.log('🎯 TOUCHSTART - Mobile Add Text button touched, disabled:', !isCanvasReady, 'isCanvasReady:', isCanvasReady)"
+                  @touchend="console.log('🎯 TOUCHEND - Mobile Add Text button touch ended')"
+                  @touchmove="console.log('🎯 TOUCHMOVE - Mobile Add Text button touch moved')"
+                  @touchcancel="console.log('🎯 TOUCHCANCEL - Mobile Add Text button touch cancelled')"
+                  @mousedown="console.log('🎯 MOUSEDOWN - Mobile Add Text button mouse down')"
+                  @mouseup="console.log('🎯 MOUSEUP - Mobile Add Text button mouse up')"
+                  @pointerdown="console.log('🎯 POINTERDOWN - Mobile Add Text button pointer down')"
+                  @pointerup="console.log('🎯 POINTERUP - Mobile Add Text button pointer up')"
+                  class="btn btn-primary mobile-add-text-btn"
+                  :disabled="!isCanvasReady"
+                  title="Add Text"
+                >
+                  <KTIcon icon-name="plus" icon-class="fs-6" />
+                </button>
+              </div>
               <button
                 @click="deleteSelectedText"
                 class="btn btn-danger"
@@ -1978,6 +1987,20 @@ export default defineComponent({
     border-radius: 4px;
     font-weight: 500;
     line-height: 1;
+  }
+
+  .mobile-add-text-btn {
+    pointer-events: auto !important;
+    touch-action: manipulation !important;
+    z-index: 99999 !important;
+    position: relative !important;
+    background-color: #007bff !important;
+    border: 2px solid #ff0000 !important; /* Red border for debugging */
+    min-height: 44px !important; /* Ensure touch target is large enough */
+    min-width: 44px !important;
+    user-select: none !important;
+    -webkit-user-select: none !important;
+    -webkit-touch-callout: none !important;
   }
 
   /* Text Editing Mode - Adequate space for tools */
