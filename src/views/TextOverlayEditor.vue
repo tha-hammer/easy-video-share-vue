@@ -367,11 +367,22 @@
             <div class="mobile-content-grid">
               <!-- Fonts Tab Content -->
               <div v-if="activeTab === 'fonts'" class="tab-content">
-                <div class="grid-2-cols">
-                  <button class="grid-option" @click="setFontFamily('Arial')">Arial</button>
-                  <button class="grid-option" @click="setFontFamily('Helvetica')">Helvetica</button>
-                  <button class="grid-option" @click="setFontFamily('Times')">Times</button>
-                  <button class="grid-option" @click="setFontFamily('Georgia')">Georgia</button>
+              <div class="tool-group">
+                  <label class="tool-label">Font</label>
+                  <select
+                    v-model="currentFontFamily"
+                    @change="updateFontFamily"
+                    class="form-select form-select-sm"
+                  >
+                    <option value="Arial">Arial</option>
+                    <option value="Helvetica">Helvetica</option>
+                    <option value="Times New Roman">Times New Roman</option>
+                    <option value="Georgia">Georgia</option>
+                    <option value="Verdana">Verdana</option>
+                    <option value="Courier New">Courier New</option>
+                    <option value="Impact">Impact</option>
+                    <option value="Comic Sans MS">Comic Sans MS</option>
+                  </select>
                 </div>
               </div>
 
