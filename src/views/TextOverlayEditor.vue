@@ -1054,9 +1054,41 @@ export default defineComponent({
 
     // Text object management
     const addNewText = async () => {
-      const textObj = await addTextObject('Sample Text')
-      if (textObj) {
-        console.log('✅ Text object added successfully')
+      console.log('🎯 addNewText called')
+      console.log('🎯 Canvas ready:', isCanvasReady.value)
+      console.log('🎯 Canvas exists:', !!canvas.value)
+      console.log('🎯 addTextObject function exists:', typeof addTextObject)
+
+      if (!isCanvasReady.value) {
+        console.error('❌ Canvas not ready for text creation')
+        return
+      }
+
+      if (!canvas.value) {
+        console.error('❌ Canvas is null')
+        return
+      }
+
+      try {
+        console.log('🎯 Calling addTextObject...')
+        const textObj = await addTextObject('Sample Text')
+        console.log('🎯 addTextObject returned:', !!textObj)
+
+        if (textObj) {
+          console.log('✅ Text object added successfully')
+          console.log('🎯 Canvas object count:', canvas.value.getObjects().length)
+          console.log('🎯 Text object details:', {
+            type: textObj.type,
+            text: textObj.text,
+            left: textObj.left,
+            top: textObj.top,
+            visible: textObj.visible,
+          })
+        } else {
+          console.error('❌ addTextObject returned null')
+        }
+      } catch (error) {
+        console.error('❌ Error in addNewText:', error)
       }
     }
 
