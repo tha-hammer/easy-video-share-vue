@@ -1044,6 +1044,9 @@ export default defineComponent({
 
     // Text object management
     const addNewText = async () => {
+      const startTime = Date.now()
+      console.log('🎯 addNewText START:', startTime)
+      console.trace('🎯 addNewText call stack')
       alert('🎯 addNewText function called!')
       console.log('🎯 addNewText called (Mobile mode:', isMobileView.value, ')')
       console.log('🎯 Canvas ready BABY YEAHHH:', isCanvasReady.value)
@@ -1122,6 +1125,9 @@ export default defineComponent({
       } catch (error) {
         console.error('❌ Error in addNewText:', error)
       }
+      
+      const endTime = Date.now()
+      console.log('🎯 addNewText END:', endTime, 'Duration:', endTime - startTime, 'ms')
     }
 
     const deleteSelectedText = () => {
@@ -1523,11 +1529,15 @@ export default defineComponent({
     }
 
     const exitTextEditingMode = () => {
+      const exitTime = Date.now()
+      console.log('🚪 exitTextEditingMode START:', exitTime)
+      console.trace('🚪 exitTextEditingMode call stack')
       alert('🚪 exitTextEditingMode called!')
-       console.log('🚪 Before exit - isTextEditingMode:', isTextEditingMode.value)
+      console.log('🚪 Before exit - isTextEditingMode:', isTextEditingMode.value)
       isTextEditingMode.value = false
-       console.log('🚪 After exit - isTextEditingMode:', isTextEditingMode.value)
+      console.log('🚪 After exit - isTextEditingMode:', isTextEditingMode.value)
       textContentInput.value?.blur()
+      console.log('🚪 exitTextEditingMode END:', Date.now())
     }
 
     const confirmTextEdit = () => {
@@ -1643,13 +1653,29 @@ export default defineComponent({
 
     // Handle clicks outside text input to exit text editing mode
     const handleDocumentClick = (event: Event) => {
+      const clickTime = Date.now()
+      console.log('📄 handleDocumentClick fired:', clickTime)
+      console.log('📄 Target element:', event.target)
+      console.log('📄 Target tagName:', (event.target as HTMLElement)?.tagName)
+      console.log('📄 Target className:', (event.target as HTMLElement)?.className)
+      console.log('📄 isTextEditingMode:', isTextEditingMode.value)
+      console.log('📄 isMobileView:', isMobileView.value)
+      
       if (isTextEditingMode.value && isMobileView.value) {
         const target = event.target as HTMLElement
         const textInputSection = document.querySelector('.mobile-text-input')
+        
+        console.log('📄 textInputSection exists:', !!textInputSection)
+        console.log('📄 target is inside textInputSection:', textInputSection?.contains(target))
 
         if (textInputSection && !textInputSection.contains(target)) {
+          console.log('📄 CALLING exitTextEditingMode because click is outside')
           exitTextEditingMode()
+        } else {
+          console.log('📄 NOT calling exitTextEditingMode - click is inside or no textInputSection')
         }
+      } else {
+        console.log('📄 NOT in text editing mode or not mobile - ignoring click')
       }
     }
 
