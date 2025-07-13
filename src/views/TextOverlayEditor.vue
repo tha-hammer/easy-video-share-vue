@@ -293,42 +293,107 @@
         <div class="controls-section mobile-controls-section">
 
 
-          <div v-if="!isTextEditingMode" class="main-editor-menu mobile-main-menu">
-            <div class="menu-actions" @touchstart="console.log('🔥 PARENT TOUCHSTART - menu-actions touched')" @click="console.log('🔥 PARENT CLICK - menu-actions clicked')">
-              <div @touchstart="console.log('🎭 WRAPPER TOUCHSTART - button wrapper touched')" @click="console.log('🎭 WRAPPER CLICK - button wrapper clicked')" style="display: inline-block;">
+          <!-- Mobile Text Editor Interface -->
+          <div v-if="!isTextEditingMode" class="mobile-text-editor">
+            <!-- Text Input Bar (~8% height) -->
+            <div class="mobile-text-input-bar">
+              <div class="d-flex align-items-center gap-2">
+                <input
+                  v-model="currentTextContent"
+                  @input="updateTextContent"
+                  type="text"
+                  class="form-control mobile-text-input"
+                  placeholder="Enter your text..."
+                />
                 <button
                   @click="addNewText"
-                  @touchstart="console.log('🎯 TOUCHSTART - Mobile Add Text button touched, disabled:', !isCanvasReady, 'isCanvasReady:', isCanvasReady)"
-                  @touchend="console.log('🎯 TOUCHEND - Mobile Add Text button touch ended')"
-                  @touchmove="console.log('🎯 TOUCHMOVE - Mobile Add Text button touch moved')"
-                  @touchcancel="console.log('🎯 TOUCHCANCEL - Mobile Add Text button touch cancelled')"
-                  @mousedown="console.log('🎯 MOUSEDOWN - Mobile Add Text button mouse down')"
-                  @mouseup="console.log('🎯 MOUSEUP - Mobile Add Text button mouse up')"
-                  @pointerdown="console.log('🎯 POINTERDOWN - Mobile Add Text button pointer down')"
-                  @pointerup="console.log('🎯 POINTERUP - Mobile Add Text button pointer up')"
                   class="btn btn-primary mobile-add-text-btn"
                   :disabled="!isCanvasReady"
                   title="Add Text"
                 >
                   <KTIcon icon-name="plus" icon-class="fs-6" />
                 </button>
+                <button
+                  @click="deleteSelectedText"
+                  class="btn btn-danger"
+                  :disabled="!hasActiveText"
+                  title="Delete"
+                >
+                  <KTIcon icon-name="trash" icon-class="fs-6" />
+                </button>
               </div>
-              <button
-                @click="deleteSelectedText"
-                class="btn btn-danger"
-                :disabled="!hasActiveText"
-                title="Delete"
-              >
-                <KTIcon icon-name="trash" icon-class="fs-6" />
-              </button>
-              <button
-                @click="duplicateText"
-                class="btn btn-info"
-                :disabled="!hasActiveText"
-                title="Duplicate"
-              >
-                <KTIcon icon-name="copy" icon-class="fs-6" />
-              </button>
+            </div>
+
+            <!-- Tab Bar (~6% height) -->
+            <div class="mobile-tab-nav">
+              <ul class="nav nav-tabs mobile-nav-tabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                  <button
+                    class="nav-link"
+                    :class="{ active: activeTab === 'fonts' }"
+                    @click="activeTab = 'fonts'"
+                    type="button"
+                    role="tab"
+                  >
+                    Fonts
+                  </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                  <button
+                    class="nav-link"
+                    :class="{ active: activeTab === 'styles' }"
+                    @click="activeTab = 'styles'"
+                    type="button"
+                    role="tab"
+                  >
+                    Styles
+                  </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                  <button
+                    class="nav-link"
+                    :class="{ active: activeTab === 'effects' }"
+                    @click="activeTab = 'effects'"
+                    type="button"
+                    role="tab"
+                  >
+                    Effects
+                  </button>
+                </li>
+              </ul>
+            </div>
+
+            <!-- Content Grid (~16% height) -->
+            <div class="mobile-content-grid">
+              <!-- Fonts Tab Content -->
+              <div v-if="activeTab === 'fonts'" class="tab-content">
+                <div class="grid-2-cols">
+                  <button class="grid-option" @click="setFontFamily('Arial')">Arial</button>
+                  <button class="grid-option" @click="setFontFamily('Helvetica')">Helvetica</button>
+                  <button class="grid-option" @click="setFontFamily('Times')">Times</button>
+                  <button class="grid-option" @click="setFontFamily('Georgia')">Georgia</button>
+                </div>
+              </div>
+              
+              <!-- Styles Tab Content -->
+              <div v-if="activeTab === 'styles'" class="tab-content">
+                <div class="grid-2-cols">
+                  <button class="grid-option" @click="setFontSize(24)">Small</button>
+                  <button class="grid-option" @click="setFontSize(36)">Medium</button>
+                  <button class="grid-option" @click="setFontSize(48)">Large</button>
+                  <button class="grid-option" @click="setFontSize(60)">XLarge</button>
+                </div>
+              </div>
+              
+              <!-- Effects Tab Content -->
+              <div v-if="activeTab === 'effects'" class="tab-content">
+                <div class="grid-2-cols">
+                  <button class="grid-option" @click="setTextColor('#FF0000')">Red</button>
+                  <button class="grid-option" @click="setTextColor('#00FF00')">Green</button>
+                  <button class="grid-option" @click="setTextColor('#0000FF')">Blue</button>
+                  <button class="grid-option" @click="setTextColor('#000000')">Black</button>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -1508,6 +1573,25 @@ export default defineComponent({
       }
     }
 
+    // Mobile font/style/effect methods
+    const setFontFamily = (fontFamily: string) => {
+      if (activeTextObject.value) {
+        updateTextObject(activeTextObject.value, { fontFamily })
+      }
+    }
+
+    const setFontSize = (fontSize: number) => {
+      if (activeTextObject.value) {
+        updateTextObject(activeTextObject.value, { fontSize })
+      }
+    }
+
+    const setTextColor = (color: string) => {
+      if (activeTextObject.value) {
+        updateTextObject(activeTextObject.value, { fill: color })
+      }
+    }
+
     // Set up global click listener for mobile and window resize
     onMounted(() => {
       loadSegments()
@@ -1606,6 +1690,11 @@ export default defineComponent({
       toggleTextBackground,
       updateBackgroundColor,
       updateOpacity,
+
+      // Mobile quick methods
+      setFontFamily,
+      setFontSize,
+      setTextColor,
 
       // Collapsible methods
       toggleCollapse,
@@ -2378,6 +2467,41 @@ export default defineComponent({
   color: #6c757d;
   border: none;
   border-bottom: 2px solid transparent;
+}
+
+/* Mobile Text Editor Interface */
+.mobile-text-editor {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: white;
+}
+
+/* Content Grid (~16% height) */
+.mobile-content-grid {
+  flex: 0 0 16%;
+  padding: 8px 12px;
+  overflow-y: auto;
+  min-height: 80px;
+}
+
+.grid-2-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.grid-option {
+  padding: 8px 12px;
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+  background: white;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.grid-option:hover {
+  background: #f8f9fa;
 }
 
 .mobile-nav-tabs .nav-link.active {
