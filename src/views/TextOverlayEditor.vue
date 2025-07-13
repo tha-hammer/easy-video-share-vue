@@ -608,15 +608,15 @@
           class="form-control mobile-text-input"
           placeholder="Enter your text..."
         />
-        <button 
-          @click="exitTextEditingMode" 
+        <button
+          @click="exitTextEditingMode"
           class="btn btn-sm btn-outline-secondary mobile-expand-btn"
           title="Close Text Editor"
         >
           <KTIcon icon-name="cross" icon-class="fs-6" />
         </button>
-        <button 
-          @click="confirmTextEdit" 
+        <button
+          @click="confirmTextEdit"
           class="btn btn-sm btn-success mobile-confirm-btn"
           title="Confirm Text"
         >
@@ -1065,7 +1065,7 @@ export default defineComponent({
     // Text object management
     const addNewText = async () => {
       console.log('🎯 addNewText called (Mobile mode:', isMobileView.value, ')')
-      console.log('🎯 Canvas ready:', isCanvasReady.value)
+      console.log('🎯 Canvas ready BABY YEAHHH:', isCanvasReady.value)
       console.log('🎯 Canvas exists:', !!canvas.value)
       console.log('🎯 addTextObject function exists:', typeof addTextObject)
 
