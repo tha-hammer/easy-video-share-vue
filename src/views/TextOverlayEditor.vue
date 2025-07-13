@@ -1956,6 +1956,7 @@ export default defineComponent({
   .mobile-controls-section {
     flex: 1;
     background: white;
+    z-index: 99999 !important;
     border-top: 1px solid #dee2e6;
     overflow-y: auto;
     width: 100vw;
@@ -1999,7 +2000,7 @@ export default defineComponent({
   .mobile-add-text-btn {
     pointer-events: auto !important;
     touch-action: manipulation !important;
-    z-index: 99999 !important;
+    z-index: 99998 !important;
     position: relative !important;
     background-color: #007bff !important;
     border: 2px solid #ff0000 !important; /* Red border for debugging */
