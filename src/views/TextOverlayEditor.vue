@@ -596,100 +596,139 @@
 
   <!-- Mobile Text Editing Panel -->
   <div v-if="isMobileView && isCanvasReady" class="mobile-text-editing-panel">
-    <div class="mobile-panel-header">
-      <h6 class="mb-0">Text Properties</h6>
+    <!-- Text Input Bar -->
+    <div class="mobile-text-input-bar">
+      <div class="d-flex align-items-center gap-2">
+        <input
+          v-model="currentTextContent"
+          @input="updateTextContent"
+          type="text"
+          class="form-control mobile-text-input"
+          placeholder="Enter your text..."
+        />
+        <button class="btn btn-sm btn-outline-secondary mobile-expand-btn">
+          <KTIcon icon-name="expand" icon-class="fs-6" />
+        </button>
+        <button class="btn btn-sm btn-success mobile-confirm-btn">
+          <KTIcon icon-name="check" icon-class="fs-6" />
+        </button>
+      </div>
     </div>
-    <div class="mobile-panel-content">
-      <!-- Show text editing tools when text is selected -->
-      <div v-if="hasActiveText" class="mobile-text-editing-full">
-        <!-- Text Content -->
-        <div class="form-group mb-3">
-          <label class="form-label">Text Content</label>
-          <textarea
-            v-model="currentTextContent"
-            @input="updateTextContent"
-            class="form-control"
-            rows="2"
-            placeholder="Enter your text..."
-          ></textarea>
-        </div>
 
-        <!-- Font Family -->
-        <div class="form-group mb-3">
-          <label class="form-label">Font Family</label>
-          <select v-model="currentFontFamily" @change="updateFontFamily" class="form-select">
-            <option value="Arial">Arial</option>
-            <option value="Helvetica">Helvetica</option>
-            <option value="Times New Roman">Times New Roman</option>
-            <option value="Georgia">Georgia</option>
-            <option value="Verdana">Verdana</option>
-            <option value="Courier New">Courier New</option>
-            <option value="Impact">Impact</option>
-            <option value="Comic Sans MS">Comic Sans MS</option>
-          </select>
-        </div>
+    <!-- Tab Navigation -->
+    <div class="mobile-tab-nav">
+      <ul class="nav nav-tabs mobile-nav-tabs" role="tablist">
+        <li class="nav-item" role="presentation">
+          <button
+            class="nav-link"
+            :class="{ active: activeTab === 'fonts' }"
+            @click="activeTab = 'fonts'"
+            type="button"
+            role="tab"
+          >
+            Fonts
+          </button>
+        </li>
+        <li class="nav-item" role="presentation">
+          <button
+            class="nav-link"
+            :class="{ active: activeTab === 'styles' }"
+            @click="activeTab = 'styles'"
+            type="button"
+            role="tab"
+          >
+            Styles
+          </button>
+        </li>
+        <li class="nav-item" role="presentation">
+          <button
+            class="nav-link"
+            :class="{ active: activeTab === 'effects' }"
+            @click="activeTab = 'effects'"
+            type="button"
+            role="tab"
+          >
+            Effects
+          </button>
+        </li>
+      </ul>
+    </div>
 
-        <!-- Font Size -->
-        <div class="form-group mb-3">
-          <label class="form-label">Font Size</label>
-          <div class="d-flex align-items-center gap-3">
-            <input
-              v-model.number="currentFontSize"
-              @input="updateFontSize"
-              type="range"
-              class="form-range flex-grow-1"
-              min="8"
-              max="200"
-            />
-            <span class="badge badge-light">{{ currentFontSize }}px</span>
+    <!-- Tab Content -->
+    <div class="mobile-tab-content">
+      <!-- Fonts Tab -->
+      <div v-if="activeTab === 'fonts'" class="tab-pane active">
+        <div class="row g-2">
+          <div class="col-6" v-for="font in fontOptions" :key="font">
+            <div
+              class="mobile-font-option"
+              :class="{ active: currentFontFamily === font }"
+              @click="selectFont(font)"
+            >
+              <span :style="{ fontFamily: font }">{{ font }}</span>
+            </div>
           </div>
         </div>
+      </div>
 
-        <!-- Font Color -->
-        <div class="form-group mb-3">
-          <label class="form-label">Font Color</label>
-          <div class="color-picker-group">
+      <!-- Styles Tab -->
+      <div v-if="activeTab === 'styles'" class="tab-pane active">
+        <div class="row g-2">
+          <!-- Font Size -->
+          <div class="col-12 mb-3">
+            <label class="form-label">Font Size</label>
+            <div class="d-flex align-items-center gap-3">
+              <input
+                v-model.number="currentFontSize"
+                @input="updateFontSize"
+                type="range"
+                class="form-range flex-grow-1"
+                min="8"
+                max="200"
+              />
+              <span class="badge badge-light">{{ currentFontSize }}px</span>
+            </div>
+          </div>
+
+          <!-- Font Color -->
+          <div class="col-6">
+            <label class="form-label">Color</label>
             <input
               v-model="currentFontColor"
               @input="updateFontColor"
               type="color"
-              class="form-control form-control-color me-2"
-            />
-            <input
-              v-model="currentFontColor"
-              @input="updateFontColor"
-              type="text"
-              class="form-control"
-              placeholder="#000000"
+              class="form-control form-control-color"
             />
           </div>
-        </div>
 
-        <!-- Font Style -->
-        <div class="form-group mb-3">
-          <label class="form-label">Font Style</label>
-          <div class="btn-group d-flex" role="group">
-            <button
-              @click="toggleBold"
-              :class="{ active: currentFontWeight === 'bold' }"
-              class="btn btn-outline-secondary"
-            >
-              <strong>B</strong>
-            </button>
-            <button
-              @click="toggleItalic"
-              :class="{ active: currentFontStyle === 'italic' }"
-              class="btn btn-outline-secondary"
-            >
-              <em>I</em>
-            </button>
+          <!-- Font Style -->
+          <div class="col-6">
+            <label class="form-label">Style</label>
+            <div class="btn-group d-flex" role="group">
+              <button
+                @click="toggleBold"
+                :class="{ active: currentFontWeight === 'bold' }"
+                class="btn btn-outline-secondary"
+              >
+                <strong>B</strong>
+              </button>
+              <button
+                @click="toggleItalic"
+                :class="{ active: currentFontStyle === 'italic' }"
+                class="btn btn-outline-secondary"
+              >
+                <em>I</em>
+              </button>
+            </div>
           </div>
         </div>
+      </div>
 
-        <!-- Background -->
-        <div class="form-group mb-3">
-          <label class="form-label">Background</label>
-          <div class="mb-2">
+      <!-- Effects Tab -->
+      <div v-if="activeTab === 'effects'" class="tab-pane active">
+        <div class="row g-2">
+          <!-- Background -->
+          <div class="col-12 mb-3">
             <div class="form-check">
               <input
                 v-model="hasTextBackground"
@@ -700,53 +739,33 @@
               />
               <label class="form-check-label" for="textBackgroundMobile"> Enable Background </label>
             </div>
+            <div v-if="hasTextBackground" class="mt-2">
+              <input
+                v-model="currentBackgroundColor"
+                @input="updateBackgroundColor"
+                type="color"
+                class="form-control form-control-color"
+              />
+            </div>
           </div>
-          <div v-if="hasTextBackground" class="color-picker-group">
-            <input
-              v-model="currentBackgroundColor"
-              @input="updateBackgroundColor"
-              type="color"
-              class="form-control form-control-color me-2"
-            />
-            <input
-              v-model="currentBackgroundColor"
-              @input="updateBackgroundColor"
-              type="text"
-              class="form-control"
-              placeholder="#ffffff"
-            />
+
+          <!-- Opacity -->
+          <div class="col-12">
+            <label class="form-label">Opacity</label>
+            <div class="d-flex align-items-center gap-3">
+              <input
+                v-model.number="currentOpacity"
+                @input="updateOpacity"
+                type="range"
+                class="form-range flex-grow-1"
+                min="0"
+                max="1"
+                step="0.1"
+              />
+              <span class="badge badge-light">{{ Math.round(currentOpacity * 100) }}%</span>
+            </div>
           </div>
         </div>
-
-        <!-- Opacity -->
-        <div class="form-group mb-3">
-          <label class="form-label">Opacity</label>
-          <div class="d-flex align-items-center gap-3">
-            <input
-              v-model.number="currentOpacity"
-              @input="updateOpacity"
-              type="range"
-              class="form-range flex-grow-1"
-              min="0"
-              max="1"
-              step="0.1"
-            />
-            <span class="badge badge-light">{{ Math.round(currentOpacity * 100) }}%</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Show help text when no text selected -->
-      <div v-else class="text-center py-3">
-        <KTIcon icon-name="information" icon-class="fs-3 text-muted mb-2" />
-        <h6 class="text-muted">No Text Selected</h6>
-        <p class="text-muted mb-3 small">
-          Click on a text object or add a new one to edit its properties.
-        </p>
-        <button @click="addNewText" class="btn btn-primary btn-sm">
-          <KTIcon icon-name="plus" icon-class="fs-6" />
-          Add Text
-        </button>
       </div>
     </div>
   </div>
@@ -1397,6 +1416,19 @@ export default defineComponent({
     const isTextEditingMode = ref(false)
     const textContentInput = ref<HTMLTextAreaElement | null>(null)
 
+    // Mobile tab state
+    const activeTab = ref('fonts')
+    const fontOptions = ref([
+      'Arial',
+      'Helvetica',
+      'Times New Roman',
+      'Georgia',
+      'Verdana',
+      'Courier New',
+      'Impact',
+      'Comic Sans MS',
+    ])
+
     const enterTextEditingMode = async () => {
       isTextEditingMode.value = true
 
@@ -1497,6 +1529,12 @@ export default defineComponent({
       if (isMobileView.value) {
         document.body.classList.remove('mobile-text-editor')
       }
+    }
+
+    // Mobile font selection
+    const selectFont = (font: string) => {
+      currentFontFamily.value = font
+      updateFontFamily()
     }
 
     // Handle clicks outside text input to exit text editing mode
@@ -1624,6 +1662,11 @@ export default defineComponent({
       handleTextInputBlur,
       handleCanvasClick,
       goBackToSegmentSelection,
+
+      // Mobile tab functionality
+      activeTab,
+      fontOptions,
+      selectFont,
     }
   },
 })
@@ -2295,37 +2338,70 @@ export default defineComponent({
   left: 0 !important;
   right: 0 !important;
   z-index: 9999 !important;
-  height: 50vh !important;
-  min-height: 300px !important;
-  overflow-y: auto !important;
+  height: 30vh !important;
+  min-height: 250px !important;
+  overflow: hidden !important;
   box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1) !important;
-  display: block !important;
+  display: flex !important;
+  flex-direction: column !important;
   visibility: visible !important;
 }
 
-.mobile-panel-header {
-  padding: 8px 16px;
+/* Text Input Bar (~8% of 30vh) */
+.mobile-text-input-bar {
+  flex: 0 0 auto;
+  padding: 8px 12px;
   border-bottom: 1px solid #dee2e6;
   background: #f8f9fa;
-  position: sticky;
-  top: 0;
-  z-index: 1001;
 }
 
-.mobile-panel-header h6 {
+.mobile-text-input {
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  padding: 6px 12px;
+  font-size: 14px;
+}
+
+.mobile-expand-btn,
+.mobile-confirm-btn {
+  min-width: 32px;
+  height: 32px;
+  padding: 4px;
+  border-radius: 4px;
+}
+
+/* Tab Navigation (~6% of 30vh) */
+.mobile-tab-nav {
+  flex: 0 0 auto;
+  background: white;
+  border-bottom: 1px solid #dee2e6;
+}
+
+.mobile-nav-tabs {
+  border-bottom: 1px solid #dee2e6;
+  margin-bottom: 0;
+}
+
+.mobile-nav-tabs .nav-link {
+  padding: 8px 16px;
   font-size: 12px;
-  font-weight: 600;
-  color: #495057;
-  margin: 0;
+  font-weight: 500;
+  color: #6c757d;
+  border: none;
+  border-bottom: 2px solid transparent;
 }
 
-.mobile-panel-content {
-  padding: 12px 16px !important;
-  height: calc(50vh - 40px) !important;
-  max-height: none !important;
-  overflow-y: auto !important;
-  display: block !important;
-  visibility: visible !important;
+.mobile-nav-tabs .nav-link.active {
+  color: #0d6efd;
+  border-bottom-color: #0d6efd;
+  background: none;
+}
+
+/* Tab Content (~16% of 30vh) */
+.mobile-tab-content {
+  flex: 1 1 auto;
+  padding: 12px;
+  overflow-y: auto;
 }
 
 .mobile-text-editing-full {
@@ -2389,6 +2465,90 @@ export default defineComponent({
 }
 
 .mobile-text-editing-full .form-check-label {
+  font-size: 11px;
+  color: #6c757d;
+}
+
+/* Mobile Font Options */
+.mobile-font-option {
+  padding: 8px 12px;
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+  background: white;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: center;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mobile-font-option:hover {
+  border-color: #0d6efd;
+  background: #f8f9ff;
+}
+
+.mobile-font-option.active {
+  border-color: #0d6efd;
+  background: #e7f3ff;
+  color: #0d6efd;
+}
+
+.mobile-font-option span {
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Mobile Tab Content Form Elements */
+.mobile-tab-content .form-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #6c757d;
+  margin-bottom: 4px;
+}
+
+.mobile-tab-content .form-control,
+.mobile-tab-content .form-select {
+  font-size: 12px;
+  padding: 6px 8px;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  min-height: 32px;
+}
+
+.mobile-tab-content .form-control-color {
+  width: 40px;
+  height: 32px;
+  padding: 2px;
+  border-radius: 4px;
+  border: 1px solid #ced4da;
+}
+
+.mobile-tab-content .btn-group .btn {
+  padding: 4px 8px;
+  font-size: 11px;
+  min-height: 28px;
+  border-radius: 3px;
+}
+
+.mobile-tab-content .badge {
+  font-size: 10px;
+  padding: 2px 6px;
+}
+
+.mobile-tab-content .form-range {
+  height: 20px;
+}
+
+.mobile-tab-content .form-check-input {
+  margin-top: 2px;
+}
+
+.mobile-tab-content .form-check-label {
   font-size: 11px;
   color: #6c757d;
 }
