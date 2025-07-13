@@ -367,8 +367,8 @@
             <div class="mobile-content-grid">
               <!-- Fonts Tab Content -->
               <div v-if="activeTab === 'fonts'" class="tab-content">
-              <div class="tool-group">
-                  <label class="tool-label">Font</label>
+                <div class="grid-2-cols">
+                  <label>Font</label>
                   <select
                     v-model="currentFontFamily"
                     @change="updateFontFamily"
@@ -388,8 +388,8 @@
 
               <!-- Styles Tab Content -->
               <div v-if="activeTab === 'styles'" class="tab-content">
-                <div class="tool-group">
-                  <label class="tool-label">Size</label>
+                <div class="grid-2-cols">
+                  <label>Size</label>
                   <div class="size-controls">
                     <input
                       v-model.number="currentFontSize"
@@ -406,20 +406,20 @@
 
               <!-- Effects Tab Content -->
               <div v-if="activeTab === 'effects'" class="tab-content">
-                 <div class="tool-group">
-                    <label class="tool-label">Color</label>
-                    <input
-                      v-model="currentFontColor"
-                      @input="updateFontColor"
-                      type="color"
-                      class="form-control form-control-color"
-                    />
-                  </div>
+                <div class="grid-2-cols">
+                  <label>Color</label>
+                  <input
+                    v-model="currentFontColor"
+                    @input="updateFontColor"
+                    type="color"
+                    class="form-control form-control-color"
+                  />
+                </div>
               </div>
               <!-- Font Style -->
               <div v-if="activeTab === 'style'" class="tab-content">
-                <div class="tool-group">
-                  <label class="tool-label">Style</label>
+                <div class="grid-2-cols">
+                  <label>Style</label>
                   <div class="btn-group btn-group-sm" role="group">
                     <button
                       @click="toggleBold"
@@ -440,8 +440,8 @@
               </div>
               <!-- Background -->
               <div v-if="activeTab === 'background'" class="tab-content">
-                <div class="tool-group">
-                  <label class="tool-label">Background</label>
+                <div class="grid-2-cols">
+                  <label>Background</label>
                   <div class="background-controls">
                     <button
                       @click="toggleTextBackground"
@@ -1050,7 +1050,7 @@ export default defineComponent({
 
       try {
         console.log('🎯 Calling addTextObject...')
-        const textObj = await addTextObject('Sample Text')
+        const textObj = await addTextObject('Enter Text...')
         console.log('🎯 addTextObject returned:', !!textObj)
 
         if (textObj) {
