@@ -490,7 +490,7 @@
             <!-- Text Tools (75% of controls on mobile) -->
             <div class="text-tools-section" :class="{ 'mobile-text-tools': isMobileView }">
               <!-- Font Family -->
-              <div class="tool-group">
+              <!-- <div class="tool-group">
                 <label class="tool-label">Font</label>
                 <select
                   v-model="currentFontFamily"
@@ -506,10 +506,10 @@
                   <option value="Impact">Impact</option>
                   <option value="Comic Sans MS">Comic Sans MS</option>
                 </select>
-              </div>
+              </div> -->
 
               <!-- Font Size -->
-              <div class="tool-group">
+              <!-- <div class="tool-group">
                 <label class="tool-label">Size</label>
                 <div class="size-controls">
                   <input
@@ -522,10 +522,10 @@
                   />
                   <span class="size-value">{{ currentFontSize }}px</span>
                 </div>
-              </div>
+              </div> -->
 
               <!-- Font Color -->
-              <div class="tool-group">
+              <!-- <div class="tool-group">
                 <label class="tool-label">Color</label>
                 <input
                   v-model="currentFontColor"
@@ -533,7 +533,7 @@
                   type="color"
                   class="form-control form-control-color"
                 />
-              </div>
+              </div> -->
 
               <!-- Font Style -->
               <div class="tool-group">
@@ -544,7 +544,7 @@
                     :class="{ active: currentFontWeight === 'bold' }"
                     class="btn btn-outline-secondary"
                   >
-                    <strong>B</strong>
+               <!--      <strong>B</strong>
                   </button>
                   <button
                     @click="toggleItalic"
@@ -554,10 +554,10 @@
                     <em>I</em>
                   </button>
                 </div>
-              </div>
+              </div> -->
 
               <!-- Background -->
-              <div class="tool-group">
+              <!-- <div class="tool-group">
                 <label class="tool-label">Background</label>
                 <div class="background-controls">
                   <button
@@ -575,7 +575,7 @@
                     class="form-control form-control-color form-control-sm"
                   />
                 </div>
-              </div>
+              </div> -->
             </div>
           </div>
         </div>
