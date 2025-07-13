@@ -296,6 +296,7 @@
             <div class="menu-actions">
               <button
                 @click="addNewText"
+                @touchstart="console.log('🎯 Mobile Add Text button touched, disabled:', !isCanvasReady, 'isCanvasReady:', isCanvasReady)"
                 class="btn btn-primary"
                 :disabled="!isCanvasReady"
                 title="Add Text"
@@ -1052,14 +1053,19 @@ export default defineComponent({
       const dynamicCanvasSize = calculateCanvasSize()
       console.log('📐 Dynamic canvas size:', dynamicCanvasSize)
 
-      await initializeCanvas(
-        fabricCanvasEl.value,
-        thumbnailUrl.value,
-        1080, // Video width (original)
-        1920, // Video height (original)
-        dynamicCanvasSize.width, // Dynamic max canvas width
-        dynamicCanvasSize.height, // Dynamic max canvas height
-      )
+      try {
+        await initializeCanvas(
+          fabricCanvasEl.value,
+          thumbnailUrl.value,
+          1080, // Video width (original)
+          1920, // Video height (original)
+          dynamicCanvasSize.width, // Dynamic max canvas width
+          dynamicCanvasSize.height, // Dynamic max canvas height
+        )
+        console.log('🎯 After initializeCanvas, isCanvasReady:', isCanvasReady.value)
+      } catch (error) {
+        console.error('❌ initializeCanvas failed:', error)
+      }
     }
 
     // Text object management
