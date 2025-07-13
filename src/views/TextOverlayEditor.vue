@@ -263,123 +263,300 @@
       </div>
 
       <!-- Mobile Editor Layout -->
-      <!-- Mobile Text Editing Panel -->
-      <div v-if="isMobileView && isCanvasReady" class="mobile-text-editing-panel">
-        <!-- Text Input Bar -->
-        <div class="mobile-text-input-bar">
-          <div class="d-flex align-items-center gap-2">
-            <input
-              v-model="currentTextContent"
-              @input="updateTextContent"
-              type="text"
-              class="form-control mobile-text-input"
-              placeholder="Enter your text..."
+      <div v-else class="editor-content mobile-editor-content">
+        <!-- Thumbnail/Canvas Area (Top 2/3 on mobile) -->
+        <div class="canvas-section mobile-canvas-section">
+          <div class="canvas-container">
+            <!-- Canvas will be mounted here -->
+            <canvas
+              ref="fabricCanvasEl"
+              :width="canvasSize.width"
+              :height="canvasSize.height"
+              class="fabric-canvas"
+              :style="{ opacity: isCanvasReady ? 1 : 0.3 }"
+              @click="handleCanvasClick"
             />
-            <button class="btn btn-sm btn-outline-secondary mobile-expand-btn">
-              <KTIcon icon-name="expand" icon-class="fs-6" />
-            </button>
-            <button class="btn btn-sm btn-success mobile-confirm-btn">
-              <KTIcon icon-name="check" icon-class="fs-6" />
-            </button>
+
+            <!-- Loading overlay -->
+            <div v-if="!isCanvasReady" class="loading-overlay">
+              <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading canvas...</span>
+              </div>
+              <p class="text-muted mt-3">
+                Initializing Fabric.js canvas... BOOOOOOOOOOOOOOOOOOOOOOOOOOOYAAAAAAAHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+              </p>
+            </div>
           </div>
         </div>
 
-        <!-- Tab Navigation -->
-        <div class="mobile-tab-nav">
-          <ul class="nav nav-tabs mobile-nav-tabs" role="tablist">
-            <li class="nav-item" role="presentation">
-              <button
-                class="nav-link"
-                :class="{ active: activeTab === 'fonts' }"
-                @click="activeTab = 'fonts'"
-                type="button"
-                role="tab"
-              >
-                Fonts
-              </button>
-            </li>
-            <li class="nav-item" role="presentation">
-              <button
-                class="nav-link"
-                :class="{ active: activeTab === 'styles' }"
-                @click="activeTab = 'styles'"
-                type="button"
-                role="tab"
-              >
-                Styles
-              </button>
-            </li>
-            <li class="nav-item" role="presentation">
-              <button
-                class="nav-link"
-                :class="{ active: activeTab === 'effects' }"
-                @click="activeTab = 'effects'"
-                type="button"
-                role="tab"
-              >
-                Effects
-              </button>
-            </li>
-          </ul>
-        </div>
+        <!-- Editor Controls (Bottom 1/3 on mobile) -->
+        <div class="controls-section mobile-controls-section">
 
-        <!-- Tab Content -->
-        <div class="mobile-tab-content">
-          <!-- Fonts Tab -->
-          <div v-if="activeTab === 'fonts'" class="tab-pane active">
-            <div class="row g-2">
-              <div class="col-6" v-for="font in fontOptions" :key="font">
-                <div
-                  class="mobile-font-option"
-                  :class="{ active: currentFontFamily === font }"
-                  @click="selectFont(font)"
+
+          <!-- Mobile Text Editor Interface -->
+          <div v-if="!isTextEditingMode" class="mobile-text-editor">
+            <!-- Text Input Bar (~8% height) -->
+            <div class="mobile-text-input-bar">
+              <div class="d-flex align-items-center gap-2">
+                <input
+                  v-model="currentTextContent"
+                  @input="updateTextContent"
+                  type="text"
+                  class="form-control mobile-text-input"
+                  placeholder="Enter your text..."
+                />
+                <button
+                  @click.stop="addNewText"
+                  class="btn btn-primary mobile-add-text-btn"
+                  :disabled="!isCanvasReady"
+                  title="Add Text"
                 >
-                  <span :style="{ fontFamily: font }">{{ font }}</span>
+                  <KTIcon icon-name="plus" icon-class="fs-6" />
+                </button>
+                <button
+                  @click="deleteSelectedText"
+                  class="btn btn-danger"
+                  :disabled="!hasActiveText"
+                  title="Delete"
+                >
+                  <KTIcon icon-name="trash" icon-class="fs-6" />
+                </button>
+              </div>
+            </div>
+
+            <!-- Tab Bar (~6% height) -->
+            <div class="mobile-tab-nav">
+              <ul class="nav nav-tabs mobile-nav-tabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                  <button
+                    class="nav-link"
+                    :class="{ active: activeTab === 'fonts' }"
+                    @click.stop="activeTab = 'fonts'"
+                    type="button"
+                    role="tab"
+                  >
+                    Fonts
+                  </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                  <button
+                    class="nav-link"
+                    :class="{ active: activeTab === 'styles' }"
+                    @click.stop="activeTab = 'styles'"
+                    type="button"
+                    role="tab"
+                  >
+                    Styles
+                  </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                  <button
+                    class="nav-link"
+                    :class="{ active: activeTab === 'effects' }"
+                    @click.stop="activeTab = 'effects'"
+                    type="button"
+                    role="tab"
+                  >
+                    Effects
+                  </button>
+                </li>
+                                <li class="nav-item" role="presentation">
+                  <button
+                    class="nav-link"
+                    :class="{ active: activeTab === 'background' }"
+                    @click.stop="activeTab = 'background'"
+                    type="button"
+                    role="tab"
+                  >
+                    Background
+                  </button>
+                </li>
+              </ul>
+            </div>
+
+            <!-- Content Grid (~16% height) -->
+            <div class="mobile-content-grid">
+              <!-- Fonts Tab Content -->
+              <div v-if="activeTab === 'fonts'" class="tab-content">
+                <div class="grid-2-cols">
+                  <label>Font</label>
+                  <select
+                    v-model="currentFontFamily"
+                    @change="updateFontFamily"
+                    class="form-select form-select-sm"
+                  >
+                    <option value="Arial">Arial</option>
+                    <option value="Helvetica">Helvetica</option>
+                    <option value="Times New Roman">Times New Roman</option>
+                    <option value="Georgia">Georgia</option>
+                    <option value="Verdana">Verdana</option>
+                    <option value="Courier New">Courier New</option>
+                    <option value="Impact">Impact</option>
+                    <option value="Comic Sans MS">Comic Sans MS</option>
+                  </select>
                 </div>
               </div>
+
+              <!-- Styles Tab Content -->
+              <div v-if="activeTab === 'styles'" class="tab-content">
+                <div class="grid-2-cols">
+                  <label>Size</label>
+                  <div class="size-controls">
+                    <input
+                      v-model.number="currentFontSize"
+                      @input="updateFontSize"
+                      type="range"
+                      class="form-range"
+                      min="8"
+                      max="200"
+                    />
+                    <span class="size-value">{{ currentFontSize }}px</span>
+                  </div>
+                  <div class="btn-group btn-group-sm" role="group">
+                    <button
+                      @click="toggleBold"
+                      :class="{ active: currentFontWeight === 'bold' }"
+                      class="btn btn-outline-secondary"
+                    >
+                      <strong>B</strong>
+                    </button>
+                    <button
+                      @click="toggleItalic"
+                      :class="{ active: currentFontStyle === 'italic' }"
+                      class="btn btn-outline-secondary"
+                    >
+                      <em>I</em>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Effects Tab Content -->
+              <div v-if="activeTab === 'effects'" class="tab-content">
+                <div class="grid-2-cols">
+                  <label>Color</label>
+                  <input
+                    v-model="currentFontColor"
+                    @input="updateFontColor"
+                    type="color"
+                    class="form-control form-control-color"
+                  />
+                </div>
+              </div>
+              <!-- Font Style -->
+              <div v-if="activeTab === 'style'" class="tab-content">
+                <div class="grid-2-cols">
+                  <label>Style</label>
+
+                </div>
+              </div>
+              <!-- Background -->
+              <div v-if="activeTab === 'background'" class="tab-content">
+                <div class="grid-2-cols">
+                  <label>Background</label>
+                  <div class="background-controls">
+                    <button
+                      @click="toggleTextBackground"
+                      :class="{ active: hasTextBackground }"
+                      class="btn btn-sm btn-outline-secondary"
+                    >
+                      BG
+                    </button>
+                    <input
+                      v-if="hasTextBackground"
+                      v-model="currentBackgroundColor"
+                      @input="updateBackgroundColor"
+                      type="color"
+                      class="form-control form-control-color form-control-sm"
+                    />
+                  </div>
+                </div>
+              </div>
+
+
             </div>
           </div>
 
-          <!-- Styles Tab -->
-          <div v-if="activeTab === 'styles'" class="tab-pane active">
-            <div class="row g-2">
+          <!-- Mobile Only: Text Editing Mode: Text Input + Text Tools -->
+          <div v-if="isTextEditingMode" class="text-editing-controls mobile-text-editing">
+            <!-- Text Input Area (25% of controls on mobile) -->
+           <!-- <div class="text-input-section" :class="{ 'mobile-text-input': isMobileView }">
+               <div class="text-input-header">
+                <h6 class="mb-0">Text Content</h6>
+                <button @click="exitTextEditingMode" class="btn btn-sm btn-outline-secondary">
+                  <KTIcon icon-name="cross" icon-class="fs-5" />
+                </button>
+              </div>
+              <textarea
+                ref="textContentInput"
+                v-model="currentTextContent"
+                @input="updateTextContent"
+                @focus="handleTextInputFocus"
+                @blur="handleTextInputBlur"
+                class="form-control"
+                rows="2"
+                placeholder="Enter your text..."
+              ></textarea>
+            </div>-->
+
+            <!-- Text Tools (75% of controls on mobile) -->
+            <div class="text-tools-section" :class="{ 'mobile-text-tools': isMobileView }">
+              <!-- Font Family -->
+              <!-- <div class="tool-group">
+                <label class="tool-label">Font</label>
+                <select
+                  v-model="currentFontFamily"
+                  @change="updateFontFamily"
+                  class="form-select form-select-sm"
+                >
+                  <option value="Arial">Arial</option>
+                  <option value="Helvetica">Helvetica</option>
+                  <option value="Times New Roman">Times New Roman</option>
+                  <option value="Georgia">Georgia</option>
+                  <option value="Verdana">Verdana</option>
+                  <option value="Courier New">Courier New</option>
+                  <option value="Impact">Impact</option>
+                  <option value="Comic Sans MS">Comic Sans MS</option>
+                </select>
+              </div> -->
+
               <!-- Font Size -->
-              <div class="col-12 mb-3">
-                <label class="form-label">Font Size</label>
-                <div class="d-flex align-items-center gap-3">
+              <!-- <div class="tool-group">
+                <label class="tool-label">Size</label>
+                <div class="size-controls">
                   <input
                     v-model.number="currentFontSize"
                     @input="updateFontSize"
                     type="range"
-                    class="form-range flex-grow-1"
+                    class="form-range"
                     min="8"
                     max="200"
                   />
-                  <span class="badge badge-light">{{ currentFontSize }}px</span>
+                  <span class="size-value">{{ currentFontSize }}px</span>
                 </div>
-              </div>
+              </div> -->
 
               <!-- Font Color -->
-              <div class="col-6">
-                <label class="form-label">Color</label>
+              <!-- <div class="tool-group">
+                <label class="tool-label">Color</label>
                 <input
                   v-model="currentFontColor"
                   @input="updateFontColor"
                   type="color"
                   class="form-control form-control-color"
                 />
-              </div>
+              </div> -->
 
               <!-- Font Style -->
-              <div class="col-6">
-                <label class="form-label">Style</label>
-                <div class="btn-group d-flex" role="group">
+              <!--<div class="tool-group">
+                <label class="tool-label">Style</label>
+                <div class="btn-group btn-group-sm" role="group">
                   <button
                     @click="toggleBold"
                     :class="{ active: currentFontWeight === 'bold' }"
                     class="btn btn-outline-secondary"
                   >
-                    <strong>B</strong>
+                     <strong>B</strong>
                   </button>
                   <button
                     @click="toggleItalic"
@@ -389,53 +566,28 @@
                     <em>I</em>
                   </button>
                 </div>
-              </div>
-            </div>
-          </div>
+              </div> -->
 
-          <!-- Effects Tab -->
-          <div v-if="activeTab === 'effects'" class="tab-pane active">
-            <div class="row g-2">
               <!-- Background -->
-              <div class="col-12 mb-3">
-                <div class="form-check">
+              <!-- <div class="tool-group">
+                <label class="tool-label">Background</label>
+                <div class="background-controls">
+                  <button
+                    @click="toggleTextBackground"
+                    :class="{ active: hasTextBackground }"
+                    class="btn btn-sm btn-outline-secondary"
+                  >
+                    BG
+                  </button>
                   <input
-                    v-model="hasTextBackground"
-                    @change="toggleTextBackground"
-                    class="form-check-input"
-                    type="checkbox"
-                    id="textBackgroundMobile"
-                  />
-                  <label class="form-check-label" for="textBackgroundMobile">
-                    Enable Background
-                  </label>
-                </div>
-                <div v-if="hasTextBackground" class="mt-2">
-                  <input
+                    v-if="hasTextBackground"
                     v-model="currentBackgroundColor"
                     @input="updateBackgroundColor"
                     type="color"
-                    class="form-control form-control-color"
+                    class="form-control form-control-color form-control-sm"
                   />
                 </div>
-              </div>
-
-              <!-- Opacity -->
-              <div class="col-12">
-                <label class="form-label">Opacity</label>
-                <div class="d-flex align-items-center gap-3">
-                  <input
-                    v-model.number="currentOpacity"
-                    @input="updateOpacity"
-                    type="range"
-                    class="form-range flex-grow-1"
-                    min="0"
-                    max="1"
-                    step="0.1"
-                  />
-                  <span class="badge badge-light">{{ Math.round(currentOpacity * 100) }}%</span>
-                </div>
-              </div>
+              </div> -->
             </div>
           </div>
         </div>
@@ -599,6 +751,9 @@
       </div>
     </div>
   </div>
+
+  <!-- Mobile Text Editing Panel -->
+
 </template>
 
 <script lang="ts">
@@ -872,20 +1027,29 @@ export default defineComponent({
       const dynamicCanvasSize = calculateCanvasSize()
       console.log('📐 Dynamic canvas size:', dynamicCanvasSize)
 
-      await initializeCanvas(
-        fabricCanvasEl.value,
-        thumbnailUrl.value,
-        1080, // Video width (original)
-        1920, // Video height (original)
-        dynamicCanvasSize.width, // Dynamic max canvas width
-        dynamicCanvasSize.height, // Dynamic max canvas height
-      )
+      try {
+        await initializeCanvas(
+          fabricCanvasEl.value,
+          thumbnailUrl.value,
+          1080, // Video width (original)
+          1920, // Video height (original)
+          dynamicCanvasSize.width, // Dynamic max canvas width
+          dynamicCanvasSize.height, // Dynamic max canvas height
+        )
+        console.log('🎯 After initializeCanvas, isCanvasReady:', isCanvasReady.value)
+      } catch (error) {
+        console.error('❌ initializeCanvas failed:', error)
+      }
     }
 
     // Text object management
     const addNewText = async () => {
-      console.log('🎯 addNewText called')
-      console.log('🎯 Canvas ready:', isCanvasReady.value)
+      const startTime = Date.now()
+      console.log('🎯 addNewText START:', startTime)
+      console.trace('🎯 addNewText call stack')
+      alert('🎯 addNewText function called!')
+      console.log('🎯 addNewText called (Mobile mode:', isMobileView.value, ')')
+      console.log('🎯 Canvas ready BABY YEAHHH:', isCanvasReady.value)
       console.log('🎯 Canvas exists:', !!canvas.value)
       console.log('🎯 addTextObject function exists:', typeof addTextObject)
 
@@ -901,7 +1065,7 @@ export default defineComponent({
 
       try {
         console.log('🎯 Calling addTextObject...')
-        const textObj = await addTextObject('Sample Text')
+        const textObj = await addTextObject('Enter Text...')
         console.log('🎯 addTextObject returned:', !!textObj)
 
         if (textObj) {
@@ -940,7 +1104,7 @@ export default defineComponent({
           if (isMobileView.value) {
             isTextEditingMode.value = true
             nextTick(() => {
-              const textInput = document.querySelector('.mobile-text-input') as HTMLInputElement
+              const textInput = document.querySelector('input.mobile-text-input') as HTMLInputElement
               if (textInput) {
                 textInput.focus()
                 textInput.select() // Select the default text for easy replacement
@@ -961,6 +1125,9 @@ export default defineComponent({
       } catch (error) {
         console.error('❌ Error in addNewText:', error)
       }
+
+      const endTime = Date.now()
+      console.log('🎯 addNewText END:', endTime, 'Duration:', endTime - startTime, 'ms')
     }
 
     const deleteSelectedText = () => {
@@ -974,10 +1141,26 @@ export default defineComponent({
       if (!activeTextObject.value) return
 
       const originalText = activeTextObject.value
+      // Calculate offset that keeps the duplicated text visible on canvas
+      const offsetX = 20
+      const offsetY = 20
+
+      // Ensure the duplicated text stays within canvas bounds
+      let newLeft = (originalText.left || 0) + offsetX
+      let newTop = (originalText.top || 0) + offsetY
+
+      // Check bounds and wrap around if necessary
+      if (newLeft > canvasSize.value.width - 50) {
+        newLeft = 50 // Reset to left side with padding
+      }
+      if (newTop > canvasSize.value.height - 50) {
+        newTop = 50 // Reset to top with padding
+      }
+
       const newText = await addTextObject(
         originalText.text || 'Duplicated Text',
-        (originalText.left || 0) + 20,
-        (originalText.top || 0) + 20,
+        newLeft,
+        newTop,
         {
           fontSize: originalText.fontSize,
           fontFamily: originalText.fontFamily,
@@ -1346,8 +1529,24 @@ export default defineComponent({
     }
 
     const exitTextEditingMode = () => {
+      const exitTime = Date.now()
+      console.log('🚪 exitTextEditingMode START:', exitTime)
+      console.trace('🚪 exitTextEditingMode call stack')
+      alert('🚪 exitTextEditingMode called!')
+      console.log('🚪 Before exit - isTextEditingMode:', isTextEditingMode.value)
       isTextEditingMode.value = false
+      console.log('🚪 After exit - isTextEditingMode:', isTextEditingMode.value)
       textContentInput.value?.blur()
+      console.log('🚪 exitTextEditingMode END:', Date.now())
+    }
+
+    const confirmTextEdit = () => {
+      console.log('🔄 Mobile confirm button clicked')
+      // Apply any pending changes and exit text editing mode
+      if (activeTextObject.value && currentTextContent.value.trim()) {
+        updateTextContent()
+      }
+      exitTextEditingMode()
     }
 
     const handleTextInputFocus = () => {
@@ -1454,13 +1653,48 @@ export default defineComponent({
 
     // Handle clicks outside text input to exit text editing mode
     const handleDocumentClick = (event: Event) => {
+      const clickTime = Date.now()
+      console.log('📄 handleDocumentClick fired:', clickTime)
+      console.log('📄 Target element:', event.target)
+      console.log('📄 Target tagName:', (event.target as HTMLElement)?.tagName)
+      console.log('📄 Target className:', (event.target as HTMLElement)?.className)
+      console.log('📄 isTextEditingMode:', isTextEditingMode.value)
+      console.log('📄 isMobileView:', isMobileView.value)
+
       if (isTextEditingMode.value && isMobileView.value) {
         const target = event.target as HTMLElement
         const textInputSection = document.querySelector('.mobile-text-input')
 
+        console.log('📄 textInputSection exists:', !!textInputSection)
+        console.log('📄 target is inside textInputSection:', textInputSection?.contains(target))
+
         if (textInputSection && !textInputSection.contains(target)) {
+          console.log('📄 CALLING exitTextEditingMode because click is outside')
           exitTextEditingMode()
+        } else {
+          console.log('📄 NOT calling exitTextEditingMode - click is inside or no textInputSection')
         }
+      } else {
+        console.log('📄 NOT in text editing mode or not mobile - ignoring click')
+      }
+    }
+
+    // Mobile font/style/effect methods
+    const setFontFamily = (fontFamily: string) => {
+      if (activeTextObject.value) {
+        activeTextObject.value.fontFamily = fontFamily
+      }
+    }
+
+    const setFontSize = (fontSize: number) => {
+      if (activeTextObject.value) {
+        activeTextObject.value.fontSize = fontSize
+      }
+    }
+
+    const setTextColor = (color: string) => {
+      if (activeTextObject.value) {
+        activeTextObject.value.fill = color
       }
     }
 
@@ -1563,6 +1797,11 @@ export default defineComponent({
       updateBackgroundColor,
       updateOpacity,
 
+      // Mobile quick methods
+      setFontFamily,
+      setFontSize,
+      setTextColor,
+
       // Collapsible methods
       toggleCollapse,
       collapsedSections,
@@ -1573,6 +1812,7 @@ export default defineComponent({
       textContentInput,
       enterTextEditingMode,
       exitTextEditingMode,
+      confirmTextEdit,
       handleTextInputFocus,
       handleTextInputBlur,
       handleCanvasClick,
@@ -1749,7 +1989,7 @@ export default defineComponent({
 
   .mobile-main-menu .menu-actions {
     display: flex;
-    gap: 6px;
+    gap: 10px;
     flex-wrap: wrap;
     justify-content: center;
     align-items: center;
@@ -1760,12 +2000,26 @@ export default defineComponent({
     min-width: 32px;
     max-width: 36px;
     padding: 4px 6px;
-    font-size: 10px;
+    font-size: 8px;
     min-height: 32px;
     max-height: 32px;
     border-radius: 4px;
     font-weight: 500;
     line-height: 1;
+  }
+
+  .mobile-add-text-btn {
+    pointer-events: auto !important;
+    touch-action: manipulation !important;
+    z-index: 99998 !important;
+    position: relative !important;
+    background-color: #007bff !important;
+    border: 2px solid #ff0000 !important; /* Red border for debugging */
+    min-height: 44px !important; /* Ensure touch target is large enough */
+    min-width: 44px !important;
+    user-select: none !important;
+    -webkit-user-select: none !important;
+    -webkit-touch-callout: none !important;
   }
 
   /* Text Editing Mode - Adequate space for tools */
@@ -1778,7 +2032,7 @@ export default defineComponent({
 
   /* Text Input Section - Like reference app */
   .mobile-text-input {
-    flex: 0 0 60px;
+    flex: 0 0 160px;
     border-bottom: 1px solid #dee2e6;
     padding: 8px 12px;
     background: #f8f9fa;
@@ -2260,6 +2514,7 @@ export default defineComponent({
   display: flex !important;
   flex-direction: column !important;
   visibility: visible !important;
+  pointer-events: auto !important;
 }
 
 /* Text Input Bar (~8% of 30vh) */
@@ -2268,6 +2523,9 @@ export default defineComponent({
   padding: 8px 12px;
   border-bottom: 1px solid #dee2e6;
   background: #f8f9fa;
+  pointer-events: auto;
+  z-index: 1000;
+  position: relative;
 }
 
 .mobile-text-input {
@@ -2279,10 +2537,21 @@ export default defineComponent({
 
 .mobile-expand-btn,
 .mobile-confirm-btn {
-  min-width: 32px;
-  height: 32px;
-  padding: 4px;
-  border-radius: 4px;
+  min-width: 36px;
+  height: 36px;
+  padding: 6px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.mobile-expand-btn .kt-icon,
+.mobile-confirm-btn .kt-icon {
+  font-size: 16px !important;
+  color: inherit;
 }
 
 /* Tab Navigation (~6% of 30vh) */
@@ -2304,6 +2573,41 @@ export default defineComponent({
   color: #6c757d;
   border: none;
   border-bottom: 2px solid transparent;
+}
+
+/* Mobile Text Editor Interface */
+.mobile-text-editor {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: white;
+}
+
+/* Content Grid (~16% height) */
+.mobile-content-grid {
+  flex: 0 0 16%;
+  padding: 8px 12px;
+  overflow-y: auto;
+  min-height: 80px;
+}
+
+.grid-2-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.grid-option {
+  padding: 8px 12px;
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+  background: white;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.grid-option:hover {
+  background: #f8f9fa;
 }
 
 .mobile-nav-tabs .nav-link.active {
