@@ -2047,6 +2047,9 @@ export default defineComponent({
     max-width: calc(100vw - 16px);
     max-height: calc(100% - 16px);
     object-fit: contain;
+    touch-action: none; /* Allow fabric.js to handle all touch events */
+    pointer-events: auto; /* Ensure canvas receives pointer events */
+    user-select: none; /* Prevent text selection conflicts */
   }
 }
 
