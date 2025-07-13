@@ -306,7 +306,7 @@
                   placeholder="Enter your text..."
                 />
                 <button
-                  @click="addNewText"
+                  @click.stop="addNewText"
                   class="btn btn-primary mobile-add-text-btn"
                   :disabled="!isCanvasReady"
                   title="Add Text"
@@ -331,7 +331,7 @@
                   <button
                     class="nav-link"
                     :class="{ active: activeTab === 'fonts' }"
-                    @click="activeTab = 'fonts'"
+                    @click.stop="activeTab = 'fonts'"
                     type="button"
                     role="tab"
                   >
@@ -342,7 +342,7 @@
                   <button
                     class="nav-link"
                     :class="{ active: activeTab === 'styles' }"
-                    @click="activeTab = 'styles'"
+                    @click.stop="activeTab = 'styles'"
                     type="button"
                     role="tab"
                   >
@@ -353,7 +353,7 @@
                   <button
                     class="nav-link"
                     :class="{ active: activeTab === 'effects' }"
-                    @click="activeTab = 'effects'"
+                    @click.stop="activeTab = 'effects'"
                     type="button"
                     role="tab"
                   >
@@ -364,7 +364,7 @@
                   <button
                     class="nav-link"
                     :class="{ active: activeTab === 'background' }"
-                    @click="activeTab = 'background'"
+                    @click.stop="activeTab = 'background'"
                     type="button"
                     role="tab"
                   >
