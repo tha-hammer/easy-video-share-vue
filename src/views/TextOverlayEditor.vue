@@ -293,7 +293,8 @@
         <div class="controls-section mobile-controls-section">
 
 
-          <div v-if="!isTextEditingMode" class="main-editor-menu mobile-main-menu">
+          <div class="main-editor-menu mobile-main-menu">
+            <p style="color: red; font-weight: bold;">🎯 FORCED VISIBLE!</p>
             <div class="menu-actions" @touchstart="console.log('🔥 PARENT TOUCHSTART - menu-actions touched')" @click="console.log('🔥 PARENT CLICK - menu-actions clicked')">
               <div @touchstart="console.log('🎭 WRAPPER TOUCHSTART - button wrapper touched')" @click="console.log('🎭 WRAPPER CLICK - button wrapper clicked')" style="display: inline-block;">
                 <button
