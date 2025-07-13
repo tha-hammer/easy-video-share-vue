@@ -315,8 +315,8 @@ export function useTextOverlay() {
 
   const addTextObject = async (
     text: string = 'Sample Text',
-    left: number = 100,
-    top: number = 100,
+    left?: number,
+    top?: number,
     options: any = {},
   ): Promise<any> => {
     if (!canvas.value) {
@@ -325,13 +325,19 @@ export function useTextOverlay() {
     }
 
     try {
+      // Calculate default position based on canvas size (center of canvas)
+      const defaultLeft = left !== undefined ? left : canvasSize.value.width / 2
+      const defaultTop = top !== undefined ? top : canvasSize.value.height / 2
+
       const textObj = new Text(text, {
-        left,
-        top,
+        left: defaultLeft,
+        top: defaultTop,
         fontFamily: options.fontFamily || 'Arial',
         fontSize: options.fontSize || 24,
         fill: options.fill || '#000000',
         fontWeight: options.fontWeight || 'normal',
+        originX: 'center', // Center the text horizontally at the position
+        originY: 'center', // Center the text vertically at the position
         ...options,
       })
 
