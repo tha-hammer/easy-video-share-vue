@@ -636,13 +636,13 @@ export default defineComponent({
         const margins = 16 // Minimal margins for mobile
         availableWidth = viewport.width - margins
 
-        // Calculate available height based on mobile layout
+        // Calculate available height based on mobile layout like reference
         const headerHeight = 40
-        const controlsMinHeight = isTextEditingMode.value ? 120 : 80
+        const controlsMinHeight = isTextEditingMode.value ? 250 : 200
         availableHeight = viewport.height - headerHeight - controlsMinHeight - margins
 
-        // Don't let canvas exceed 75% of viewport height (more space now)
-        availableHeight = Math.min(availableHeight, viewport.height * 0.75)
+        // Canvas is limited to about 50% of viewport height (like reference app)
+        availableHeight = Math.min(availableHeight, viewport.height * 0.5)
       } else if (isTablet) {
         // Tablet: horizontal layout with smaller text panel
         textPanelWidth = 280
@@ -658,12 +658,12 @@ export default defineComponent({
       }
 
       // Calculate maximum canvas size that fits in viewport
-      let maxCanvasWidth = Math.min(availableWidth, isMobile ? 500 : 800) // Optimized for mobile
-      let maxCanvasHeight = Math.min(availableHeight, isMobile ? 700 : 1200) // Optimized for mobile
+      let maxCanvasWidth = Math.min(availableWidth, isMobile ? 350 : 800) // Smaller for mobile like reference
+      let maxCanvasHeight = Math.min(availableHeight, isMobile ? 500 : 1200) // Smaller for mobile like reference
 
       // Ensure minimum usable size
-      maxCanvasWidth = Math.max(maxCanvasWidth, isMobile ? 280 : 400)
-      maxCanvasHeight = Math.max(maxCanvasHeight, isMobile ? 350 : 600)
+      maxCanvasWidth = Math.max(maxCanvasWidth, isMobile ? 250 : 400)
+      maxCanvasHeight = Math.max(maxCanvasHeight, isMobile ? 300 : 600)
 
       // Calculate canvas size maintaining aspect ratio
       let canvasWidth = maxCanvasWidth
@@ -1437,40 +1437,41 @@ export default defineComponent({
     height: calc(100vh - 40px);
   }
 
-  /* Thumbnail/Canvas Section - Takes most of the space */
+  /* Thumbnail/Canvas Section - Much smaller like reference */
   .mobile-canvas-section {
-    flex: 1;
+    flex: 0 0 auto;
     display: flex;
     align-items: center;
     justify-content: center;
     background: #f8f9fa;
-    padding: 8px;
+    padding: 4px; /* Reduced by 90% from 8px */
     overflow: hidden;
     width: 100vw;
     box-sizing: border-box;
-    min-height: 300px; /* Ensure minimum canvas size */
+    height: 50vh; /* Fixed height - only half the screen */
+    max-height: 400px; /* Limit max height */
   }
 
-  /* Controls Section - Compact height */
+  /* Controls Section - Takes remaining space */
   .mobile-controls-section {
     flex: 1;
     background: white;
     border-top: 1px solid #dee2e6;
-    overflow: hidden;
+    overflow-y: auto;
     width: 100vw;
     box-sizing: border-box;
-    min-height: 80px; /* Much smaller minimum height */
-    max-height: 150px; /* Limit max height to save space */
+    min-height: 200px; /* Ensure adequate space for tools */
+    /* Remove max-height to allow full remaining space */
   }
 
-  /* Main Editor Menu - Compact layout */
+  /* Main Editor Menu - Adequate space for buttons */
   .mobile-main-menu {
     height: 100%;
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 8px 12px;
-    min-height: 50px; /* Much smaller height */
+    padding: 12px 16px;
+    min-height: 80px; /* Ensure buttons are visible */
   }
 
   .mobile-main-menu .menu-actions {
@@ -1483,30 +1484,30 @@ export default defineComponent({
   }
 
   .mobile-main-menu .btn {
-    min-width: 25px;
-    max-width: 26px;
-    padding: 2px 4px;
+    min-width: 32px;
+    max-width: 36px;
+    padding: 4px 6px;
     font-size: 10px;
-    min-height: 22px;
-    max-height: 22px;
-    border-radius: 3px;
+    min-height: 32px;
+    max-height: 32px;
+    border-radius: 4px;
     font-weight: 500;
     line-height: 1;
   }
 
-  /* Text Editing Mode - Compact layout */
+  /* Text Editing Mode - Adequate space for tools */
   .mobile-text-editing {
     height: 100%;
     display: flex;
     flex-direction: column;
-    min-height: 200px; /* Reduced minimum height */
+    min-height: 250px; /* Ensure adequate space for all tools */
   }
 
-  /* Text Input Section - Compact */
+  /* Text Input Section - Like reference app */
   .mobile-text-input {
-    flex: 0 0 50px;
+    flex: 0 0 60px;
     border-bottom: 1px solid #dee2e6;
-    padding: 6px 8px;
+    padding: 8px 12px;
     background: #f8f9fa;
   }
 
@@ -1534,11 +1535,11 @@ export default defineComponent({
   }
 
   .mobile-text-input .form-control {
-    font-size: 10px;
+    font-size: 12px;
     border: 1px solid #ced4da;
-    border-radius: 3px;
-    min-height: 20px;
-    padding: 2px 4px;
+    border-radius: 4px;
+    min-height: 30px;
+    padding: 4px 8px;
   }
 
   /* Text Tools Section - Compact grid layout */
@@ -1613,14 +1614,15 @@ export default defineComponent({
 
   /* Text editing mode adjustments */
   .text-editing-mode .mobile-canvas-section {
-    /* Keep normal flex layout but reduce height slightly */
-    flex: 2; /* Give more space to canvas in text editing mode */
+    /* Reduce canvas height in text editing mode like reference */
+    height: 45vh; /* Slightly smaller when editing */
+    max-height: 350px;
   }
 
   .text-editing-mode .mobile-controls-section {
     /* Ensure adequate height for text editing tools */
-    min-height: 120px;
-    max-height: 180px;
+    min-height: 250px;
+    /* Remove max-height to allow full remaining space */
   }
 }
 
@@ -1639,7 +1641,7 @@ export default defineComponent({
 @media (max-width: 768px) {
   .mobile-canvas-section .canvas-container {
     margin: 0;
-    padding: 0;
+    padding: 2px; /* Minimal padding like reference */
     background: transparent;
     border-radius: 0;
     width: 100%;
