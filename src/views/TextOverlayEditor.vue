@@ -1147,10 +1147,26 @@ export default defineComponent({
       if (!activeTextObject.value) return
 
       const originalText = activeTextObject.value
+      // Calculate offset that keeps the duplicated text visible on canvas
+      const offsetX = 20
+      const offsetY = 20
+      
+      // Ensure the duplicated text stays within canvas bounds
+      let newLeft = (originalText.left || 0) + offsetX
+      let newTop = (originalText.top || 0) + offsetY
+      
+      // Check bounds and wrap around if necessary
+      if (newLeft > canvasSize.value.width - 50) {
+        newLeft = 50 // Reset to left side with padding
+      }
+      if (newTop > canvasSize.value.height - 50) {
+        newTop = 50 // Reset to top with padding
+      }
+
       const newText = await addTextObject(
         originalText.text || 'Duplicated Text',
-        (originalText.left || 0) + 20,
-        (originalText.top || 0) + 20,
+        newLeft,
+        newTop,
         {
           fontSize: originalText.fontSize,
           fontFamily: originalText.fontFamily,
