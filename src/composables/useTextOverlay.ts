@@ -374,8 +374,6 @@ export function useTextOverlay() {
       console.log('✅ Text object added:', text)
       console.log('🔍 Text object properties:', {
         selectable: textObj.selectable,
-        movable: textObj.movable,
-        editable: textObj.editable,
         hasControls: textObj.hasControls,
         hasBorders: textObj.hasBorders,
         evented: textObj.evented
@@ -659,7 +657,7 @@ export function useTextOverlay() {
     return textObjects.map((textObj) => {
       // Type assertion for Fabric.js text object
       const text = textObj as any
-      
+
       // Extract precise coordinates using aCoords
       const coordinates = extractTextCoordinates(text)
       const videoX = Math.round(coordinates.x * scaleFactors.value.x)
