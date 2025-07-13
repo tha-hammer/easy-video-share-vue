@@ -282,7 +282,10 @@
               <div class="spinner-border text-primary" role="status">
                 <span class="visually-hidden">Loading canvas...</span>
               </div>
-              <p class="text-muted mt-3">Initializing Fabric.js canvas...</p>
+              <p class="text-muted mt-3">
+                Initializing Fabric.js canvas... YEEEEEEEEEEEEE EHAAAAAA
+                AAHAAHAHAHAHAHAHAHAHAHHAHAHAHAHAHA
+              </p>
             </div>
           </div>
         </div>
@@ -1084,6 +1087,47 @@ export default defineComponent({
             top: textObj.top,
             visible: textObj.visible,
           })
+
+          // Automatically select the newly created text object
+          activeTextObject.value = textObj
+          canvas.value.setActiveObject(textObj)
+
+          // Sync form values with the new text object
+          currentTextContent.value = textObj.text || ''
+          currentFontFamily.value = textObj.fontFamily || 'Arial'
+          currentFontSize.value = textObj.fontSize || 24
+          currentFontColor.value =
+            (typeof textObj.fill === 'string' ? textObj.fill : '#000000') || '#000000'
+          currentFontWeight.value =
+            (typeof textObj.fontWeight === 'string'
+              ? textObj.fontWeight
+              : String(textObj.fontWeight)) || 'normal'
+          currentFontStyle.value = textObj.fontStyle || 'normal'
+          hasTextBackground.value = !!textObj.backgroundColor
+          currentBackgroundColor.value =
+            (typeof textObj.backgroundColor === 'string' ? textObj.backgroundColor : '#ffffff') ||
+            '#ffffff'
+          currentOpacity.value = textObj.opacity || 1
+
+          // Enter text editing mode
+          if (isMobileView.value) {
+            isTextEditingMode.value = true
+            nextTick(() => {
+              const textInput = document.querySelector('.mobile-text-input') as HTMLInputElement
+              if (textInput) {
+                textInput.focus()
+                textInput.select() // Select the default text for easy replacement
+              }
+            })
+          } else {
+            // On desktop, focus the text content input
+            nextTick(() => {
+              textContentInput.value?.focus()
+              textContentInput.value?.select() // Select the default text for easy replacement
+            })
+          }
+
+          canvas.value.renderAll()
         } else {
           console.error('❌ addTextObject returned null')
         }
@@ -1501,7 +1545,7 @@ export default defineComponent({
         const clickedObject = canvas.value.findTarget(mouseEvent)
 
         if (clickedObject && clickedObject.type === 'text') {
-          // If a text object is clicked, enter editing mode
+          // If a text object is clicked, select it and enter editing mode
           const textObj = clickedObject as unknown as {
             text: string
             fontFamily: string
@@ -1529,25 +1573,25 @@ export default defineComponent({
             '#ffffff'
           currentOpacity.value = textObj.opacity || 1
 
-          // On mobile, focus the text input when text is selected
+          // On mobile, enter text editing mode and focus the text input
           if (isMobileView.value) {
+            isTextEditingMode.value = true
             nextTick(() => {
               const textInput = document.querySelector('.mobile-text-input') as HTMLInputElement
               if (textInput) {
                 textInput.focus()
+                textInput.select() // Select existing text for easy editing
               }
             })
           } else {
-            isTextEditingMode.value = true
+            // On desktop, focus the text content input
             nextTick(() => {
               textContentInput.value?.focus()
+              textContentInput.value?.select() // Select existing text for easy editing
             })
           }
-        } else {
-          // If no text object is clicked, add a new one
-          console.log('🎯 Canvas clicked - adding new text object')
-          addNewText()
         }
+        // If no text object is clicked, do nothing - user must explicitly click "Add Text" button
       }
     }
 
