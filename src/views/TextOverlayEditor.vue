@@ -1104,7 +1104,7 @@ export default defineComponent({
           if (isMobileView.value) {
             isTextEditingMode.value = true
             nextTick(() => {
-              const textInput = document.querySelector('input.mobile-text-input') as HTMLInputElement
+              const textInput = document.querySelector('.mobile-text-input') as HTMLInputElement
               if (textInput) {
                 textInput.focus()
                 textInput.select() // Select the default text for easy replacement
