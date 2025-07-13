@@ -293,25 +293,19 @@
         <div class="controls-section mobile-controls-section">
 
 
-          <!-- Mobile Text Editor Interface -->
-          <div v-if="!isTextEditingMode" class="mobile-text-editor">
-            <!-- Text Input Bar (~8% height) -->
-            <div class="mobile-text-input-bar">
-              <div class="d-flex align-items-center gap-2">
-                <input
-                  v-model="currentTextContent"
-                  @input="updateTextContent"
-                  type="text"
-                  class="form-control mobile-text-input"
-                  placeholder="Enter your text..."
-                />
+          <!-- Mobile Normal Mode: Object Management -->
+          <div v-if="!isTextEditingMode" class="mobile-normal-mode">
+            <!-- Action Bar -->
+            <div class="mobile-action-bar">
+              <div class="d-flex align-items-center gap-2 p-3">
                 <button
                   @click.stop="addNewText"
-                  class="btn btn-primary mobile-add-text-btn"
+                  class="btn btn-primary flex-1"
                   :disabled="!isCanvasReady"
                   title="Add Text"
                 >
-                  <KTIcon icon-name="plus" icon-class="fs-6" />
+                  <KTIcon icon-name="plus" icon-class="fs-6 me-2" />
+                  Add Text
                 </button>
                 <button
                   @click="deleteSelectedText"
@@ -321,273 +315,119 @@
                 >
                   <KTIcon icon-name="trash" icon-class="fs-6" />
                 </button>
+                <button
+                  @click="duplicateText"
+                  class="btn btn-info"
+                  :disabled="!hasActiveText"
+                  title="Duplicate"
+                >
+                  <KTIcon icon-name="copy" icon-class="fs-6" />
+                </button>
               </div>
             </div>
 
-            <!-- Tab Bar (~6% height) -->
-            <div class="mobile-tab-nav">
-              <ul class="nav nav-tabs mobile-nav-tabs" role="tablist">
-                <li class="nav-item" role="presentation">
-                  <button
-                    class="nav-link"
-                    :class="{ active: activeTab === 'fonts' }"
-                    @click.stop="activeTab = 'fonts'"
-                    type="button"
-                    role="tab"
-                  >
-                    Fonts
-                  </button>
-                </li>
-                <li class="nav-item" role="presentation">
-                  <button
-                    class="nav-link"
-                    :class="{ active: activeTab === 'styles' }"
-                    @click.stop="activeTab = 'styles'"
-                    type="button"
-                    role="tab"
-                  >
-                    Styles
-                  </button>
-                </li>
-                <li class="nav-item" role="presentation">
-                  <button
-                    class="nav-link"
-                    :class="{ active: activeTab === 'effects' }"
-                    @click.stop="activeTab = 'effects'"
-                    type="button"
-                    role="tab"
-                  >
-                    Effects
-                  </button>
-                </li>
-                                <li class="nav-item" role="presentation">
-                  <button
-                    class="nav-link"
-                    :class="{ active: activeTab === 'background' }"
-                    @click.stop="activeTab = 'background'"
-                    type="button"
-                    role="tab"
-                  >
-                    Background
-                  </button>
-                </li>
-              </ul>
+            <!-- Text Objects List -->
+            <div class="mobile-objects-list">
+              <div class="p-3">
+                <h6 class="mb-2">Text Objects ({{ textObjectCount }})</h6>
+                <div v-if="textObjectCount === 0" class="text-center py-4 text-muted">
+                  <KTIcon icon-name="text" icon-class="fs-2x mb-2" />
+                  <p class="mb-0">No text objects yet</p>
+                  <small>Tap "Add Text" to create your first text overlay</small>
+                </div>
+                <div v-else class="text-muted">
+                  <p class="mb-0">Tap a text object on the canvas to edit it</p>
+                </div>
+              </div>
             </div>
 
-            <!-- Content Grid (~16% height) -->
-            <div class="mobile-content-grid">
-              <!-- Fonts Tab Content -->
-              <div v-if="activeTab === 'fonts'" class="tab-content">
-                <div class="grid-2-cols">
-                  <label>Font</label>
-                  <select
-                    v-model="currentFontFamily"
-                    @change="updateFontFamily"
-                    class="form-select form-select-sm"
-                  >
-                    <option value="Arial">Arial</option>
-                    <option value="Helvetica">Helvetica</option>
-                    <option value="Times New Roman">Times New Roman</option>
-                    <option value="Georgia">Georgia</option>
-                    <option value="Verdana">Verdana</option>
-                    <option value="Courier New">Courier New</option>
-                    <option value="Impact">Impact</option>
-                    <option value="Comic Sans MS">Comic Sans MS</option>
-                  </select>
-                </div>
-              </div>
+          </div>
 
-              <!-- Styles Tab Content -->
-              <div v-if="activeTab === 'styles'" class="tab-content">
-                <div class="grid-2-cols">
-                  <label>Size</label>
-                  <div class="size-controls">
-                    <input
-                      v-model.number="currentFontSize"
-                      @input="updateFontSize"
-                      type="range"
-                      class="form-range"
-                      min="8"
-                      max="200"
-                    />
-                    <span class="size-value">{{ currentFontSize }}px</span>
+          <!-- Mobile Only: Text Editing Mode: Text Input + Text Tools -->
+          <!-- Mobile Editing Mode: Text Input and Tools -->
+          <div v-if="isTextEditingMode" class="mobile-editing-mode">
+            <!-- Text Input Bar -->
+            <div class="mobile-text-input-bar">
+              <div class="d-flex align-items-center gap-2 p-3">
+                <button @click.stop="exitTextEditingMode" class="btn btn-outline-secondary btn-sm">
+                  <KTIcon icon-name="arrow-left" icon-class="fs-6" />
+                </button>
+                <input
+                  ref="textContentInput"
+                  v-model="currentTextContent"
+                  @input="updateTextContent"
+                  class="form-control mobile-text-input"
+                  placeholder="Enter your text..."
+                  type="text"
+                />
+                <button @click.stop="confirmTextEdit" class="btn btn-primary btn-sm">
+                  <KTIcon icon-name="check" icon-class="fs-6" />
+                </button>
+              </div>
+            </div>
+
+            <!-- Text Editing Tools -->
+            <div class="mobile-text-tools">
+              <div class="p-3">
+                <!-- Font and Size Row -->
+                <div class="tool-row mb-3">
+                  <div class="tool-group flex-1">
+                    <label class="tool-label">Font</label>
+                    <select v-model="currentFontFamily" @change="updateFontFamily" class="form-select form-select-sm">
+                      <option value="Arial">Arial</option>
+                      <option value="Helvetica">Helvetica</option>
+                      <option value="Times New Roman">Times New Roman</option>
+                      <option value="Georgia">Georgia</option>
+                    </select>
                   </div>
-                  <div class="btn-group btn-group-sm" role="group">
-                    <button
-                      @click="toggleBold"
-                      :class="{ active: currentFontWeight === 'bold' }"
-                      class="btn btn-outline-secondary"
-                    >
-                      <strong>B</strong>
-                    </button>
-                    <button
-                      @click="toggleItalic"
-                      :class="{ active: currentFontStyle === 'italic' }"
-                      class="btn btn-outline-secondary"
-                    >
-                      <em>I</em>
-                    </button>
+                  <div class="tool-group">
+                    <label class="tool-label">Size</label>
+                    <div class="size-controls">
+                      <input
+                        v-model.number="currentFontSize"
+                        @input="updateFontSize"
+                        type="range"
+                        class="form-range"
+                        min="12"
+                        max="100"
+                      />
+                      <span class="size-value">{{ currentFontSize }}</span>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              <!-- Effects Tab Content -->
-              <div v-if="activeTab === 'effects'" class="tab-content">
-                <div class="grid-2-cols">
-                  <label>Color</label>
-                  <input
-                    v-model="currentFontColor"
-                    @input="updateFontColor"
-                    type="color"
-                    class="form-control form-control-color"
-                  />
-                </div>
-              </div>
-              <!-- Font Style -->
-              <div v-if="activeTab === 'style'" class="tab-content">
-                <div class="grid-2-cols">
-                  <label>Style</label>
-
-                </div>
-              </div>
-              <!-- Background -->
-              <div v-if="activeTab === 'background'" class="tab-content">
-                <div class="grid-2-cols">
-                  <label>Background</label>
-                  <div class="background-controls">
-                    <button
-                      @click="toggleTextBackground"
-                      :class="{ active: hasTextBackground }"
-                      class="btn btn-sm btn-outline-secondary"
-                    >
-                      BG
-                    </button>
+                <!-- Style and Color Row -->
+                <div class="tool-row">
+                  <div class="tool-group">
+                    <label class="tool-label">Style</label>
+                    <div class="btn-group btn-group-sm" role="group">
+                      <button
+                        @click="toggleBold"
+                        :class="{ active: currentFontWeight === 'bold' }"
+                        class="btn btn-outline-secondary"
+                      >
+                        <strong>B</strong>
+                      </button>
+                      <button
+                        @click="toggleItalic"
+                        :class="{ active: currentFontStyle === 'italic' }"
+                        class="btn btn-outline-secondary"
+                      >
+                        <em>I</em>
+                      </button>
+                    </div>
+                  </div>
+                  <div class="tool-group">
+                    <label class="tool-label">Color</label>
                     <input
-                      v-if="hasTextBackground"
-                      v-model="currentBackgroundColor"
-                      @input="updateBackgroundColor"
+                      v-model="currentFontColor"
+                      @input="updateFontColor"
                       type="color"
                       class="form-control form-control-color form-control-sm"
                     />
                   </div>
                 </div>
               </div>
-
-
-            </div>
-          </div>
-
-          <!-- Mobile Only: Text Editing Mode: Text Input + Text Tools -->
-          <div v-if="isTextEditingMode" class="text-editing-controls mobile-text-editing">
-            <!-- Text Input Area (25% of controls on mobile) -->
-           <!-- <div class="text-input-section" :class="{ 'mobile-text-input': isMobileView }">
-               <div class="text-input-header">
-                <h6 class="mb-0">Text Content</h6>
-                <button @click="exitTextEditingMode" class="btn btn-sm btn-outline-secondary">
-                  <KTIcon icon-name="cross" icon-class="fs-5" />
-                </button>
-              </div>
-              <textarea
-                ref="textContentInput"
-                v-model="currentTextContent"
-                @input="updateTextContent"
-                @focus="handleTextInputFocus"
-                @blur="handleTextInputBlur"
-                class="form-control"
-                rows="2"
-                placeholder="Enter your text..."
-              ></textarea>
-            </div>-->
-
-            <!-- Text Tools (75% of controls on mobile) -->
-            <div class="text-tools-section" :class="{ 'mobile-text-tools': isMobileView }">
-              <!-- Font Family -->
-              <!-- <div class="tool-group">
-                <label class="tool-label">Font</label>
-                <select
-                  v-model="currentFontFamily"
-                  @change="updateFontFamily"
-                  class="form-select form-select-sm"
-                >
-                  <option value="Arial">Arial</option>
-                  <option value="Helvetica">Helvetica</option>
-                  <option value="Times New Roman">Times New Roman</option>
-                  <option value="Georgia">Georgia</option>
-                  <option value="Verdana">Verdana</option>
-                  <option value="Courier New">Courier New</option>
-                  <option value="Impact">Impact</option>
-                  <option value="Comic Sans MS">Comic Sans MS</option>
-                </select>
-              </div> -->
-
-              <!-- Font Size -->
-              <!-- <div class="tool-group">
-                <label class="tool-label">Size</label>
-                <div class="size-controls">
-                  <input
-                    v-model.number="currentFontSize"
-                    @input="updateFontSize"
-                    type="range"
-                    class="form-range"
-                    min="8"
-                    max="200"
-                  />
-                  <span class="size-value">{{ currentFontSize }}px</span>
-                </div>
-              </div> -->
-
-              <!-- Font Color -->
-              <!-- <div class="tool-group">
-                <label class="tool-label">Color</label>
-                <input
-                  v-model="currentFontColor"
-                  @input="updateFontColor"
-                  type="color"
-                  class="form-control form-control-color"
-                />
-              </div> -->
-
-              <!-- Font Style -->
-              <!--<div class="tool-group">
-                <label class="tool-label">Style</label>
-                <div class="btn-group btn-group-sm" role="group">
-                  <button
-                    @click="toggleBold"
-                    :class="{ active: currentFontWeight === 'bold' }"
-                    class="btn btn-outline-secondary"
-                  >
-                     <strong>B</strong>
-                  </button>
-                  <button
-                    @click="toggleItalic"
-                    :class="{ active: currentFontStyle === 'italic' }"
-                    class="btn btn-outline-secondary"
-                  >
-                    <em>I</em>
-                  </button>
-                </div>
-              </div> -->
-
-              <!-- Background -->
-              <!-- <div class="tool-group">
-                <label class="tool-label">Background</label>
-                <div class="background-controls">
-                  <button
-                    @click="toggleTextBackground"
-                    :class="{ active: hasTextBackground }"
-                    class="btn btn-sm btn-outline-secondary"
-                  >
-                    BG
-                  </button>
-                  <input
-                    v-if="hasTextBackground"
-                    v-model="currentBackgroundColor"
-                    @input="updateBackgroundColor"
-                    type="color"
-                    class="form-control form-control-color form-control-sm"
-                  />
-                </div>
-              </div> -->
             </div>
           </div>
         </div>
@@ -2069,60 +1909,72 @@ export default defineComponent({
     padding: 4px 8px;
   }
 
-  /* Text Tools Section - Compact grid layout */
+  /* New Mobile Editing Mode Styles */
+  .mobile-editing-mode {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+  }
+
+  .mobile-text-input-bar {
+    background: white;
+    border-bottom: 1px solid #dee2e6;
+    flex-shrink: 0;
+  }
+
+  .mobile-text-input-bar .mobile-text-input {
+    flex: 1;
+    font-size: 14px;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    padding: 8px 12px;
+    min-height: 40px;
+  }
+
   .mobile-text-tools {
     flex: 1;
-    padding: 6px;
+    background: #f8f9fa;
     overflow-y: auto;
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    gap: 6px;
-    align-content: start;
-    min-height: 0; /* Allow proper scrolling */
+  }
+
+  .tool-row {
+    display: flex;
+    gap: 12px;
+    align-items: end;
   }
 
   .tool-group {
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 4px;
+  }
+
+  .tool-group.flex-1 {
+    flex: 1;
   }
 
   .tool-label {
-    font-size: 8px;
+    font-size: 11px;
     font-weight: 600;
     color: #6c757d;
     margin-bottom: 2px;
-    line-height: 1;
-  }
-
-  .tool-group .form-select,
-  .tool-group .form-control {
-    font-size: 8px;
-    padding: 2px 4px;
-    border: 1px solid #ced4da;
-    border-radius: 3px;
-    min-height: 20px;
-  }
-
-  .tool-group .form-control-color {
-    width: 20px;
-    height: 20px;
-    padding: 1px;
-    border-radius: 3px;
   }
 
   .size-controls {
     display: flex;
-    flex-direction: column;
-    gap: 2px;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .size-controls .form-range {
+    width: 60px;
   }
 
   .size-value {
-    font-size: 8px;
-    color: #6c757d;
-    text-align: center;
-    font-weight: 600;
-    line-height: 1;
+    font-size: 10px;
+    font-weight: 500;
+    color: #495057;
+    min-width: 20px;
   }
 
   .background-controls {
