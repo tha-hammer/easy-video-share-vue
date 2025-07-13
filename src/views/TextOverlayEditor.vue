@@ -594,28 +594,28 @@
     </div>
   </div>
 
-  <!-- Desktop Text Editing Panel -->
-  <div v-if="!isMobileView && isCanvasReady" class="text-editing-panel">
-    <div class="panel-header">
-      <h5 class="mb-0">Text Properties</h5>
+  <!-- Mobile Text Editing Panel -->
+  <div v-if="isMobileView && isCanvasReady" class="mobile-text-editing-panel">
+    <div class="mobile-panel-header">
+      <h6 class="mb-0">Text Properties</h6>
     </div>
-    <div class="panel-content">
+    <div class="mobile-panel-content">
       <!-- Show text editing tools when text is selected -->
-      <div v-if="hasActiveText" class="desktop-text-editing">
+      <div v-if="hasActiveText" class="mobile-text-editing-full">
         <!-- Text Content -->
-        <div class="form-group mb-4">
+        <div class="form-group mb-3">
           <label class="form-label">Text Content</label>
           <textarea
             v-model="currentTextContent"
             @input="updateTextContent"
             class="form-control"
-            rows="3"
+            rows="2"
             placeholder="Enter your text..."
           ></textarea>
         </div>
 
         <!-- Font Family -->
-        <div class="form-group mb-4">
+        <div class="form-group mb-3">
           <label class="form-label">Font Family</label>
           <select v-model="currentFontFamily" @change="updateFontFamily" class="form-select">
             <option value="Arial">Arial</option>
@@ -630,7 +630,7 @@
         </div>
 
         <!-- Font Size -->
-        <div class="form-group mb-4">
+        <div class="form-group mb-3">
           <label class="form-label">Font Size</label>
           <div class="d-flex align-items-center gap-3">
             <input
@@ -646,7 +646,7 @@
         </div>
 
         <!-- Font Color -->
-        <div class="form-group mb-4">
+        <div class="form-group mb-3">
           <label class="form-label">Font Color</label>
           <div class="color-picker-group">
             <input
@@ -666,7 +666,7 @@
         </div>
 
         <!-- Font Style -->
-        <div class="form-group mb-4">
+        <div class="form-group mb-3">
           <label class="form-label">Font Style</label>
           <div class="btn-group d-flex" role="group">
             <button
@@ -687,7 +687,7 @@
         </div>
 
         <!-- Background -->
-        <div class="form-group mb-4">
+        <div class="form-group mb-3">
           <label class="form-label">Background</label>
           <div class="mb-2">
             <div class="form-check">
@@ -696,9 +696,9 @@
                 @change="toggleTextBackground"
                 class="form-check-input"
                 type="checkbox"
-                id="textBackground"
+                id="textBackgroundMobile"
               />
-              <label class="form-check-label" for="textBackground"> Enable Background </label>
+              <label class="form-check-label" for="textBackgroundMobile"> Enable Background </label>
             </div>
           </div>
           <div v-if="hasTextBackground" class="color-picker-group">
@@ -719,7 +719,7 @@
         </div>
 
         <!-- Opacity -->
-        <div class="form-group mb-4">
+        <div class="form-group mb-3">
           <label class="form-label">Opacity</label>
           <div class="d-flex align-items-center gap-3">
             <input
@@ -737,14 +737,14 @@
       </div>
 
       <!-- Show help text when no text selected -->
-      <div v-else class="text-center py-5">
-        <KTIcon icon-name="information" icon-class="fs-2x text-muted mb-3" />
-        <h5 class="text-muted">No Text Selected</h5>
-        <p class="text-muted mb-4">
+      <div v-else class="text-center py-3">
+        <KTIcon icon-name="information" icon-class="fs-3 text-muted mb-2" />
+        <h6 class="text-muted">No Text Selected</h6>
+        <p class="text-muted mb-3 small">
           Click on a text object or add a new one to edit its properties.
         </p>
-        <button @click="addNewText" class="btn btn-primary">
-          <KTIcon icon-name="plus" icon-class="fs-5" />
+        <button @click="addNewText" class="btn btn-primary btn-sm">
+          <KTIcon icon-name="plus" icon-class="fs-6" />
           Add Text
         </button>
       </div>
@@ -2283,5 +2283,100 @@ export default defineComponent({
   100% {
     left: 100%;
   }
+}
+
+/* Mobile Text Editing Panel Styles */
+.mobile-text-editing-panel {
+  background: white;
+  border-top: 1px solid #dee2e6;
+  border-radius: 0;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  max-height: 50vh;
+  overflow-y: auto;
+  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
+}
+
+.mobile-panel-header {
+  padding: 8px 16px;
+  border-bottom: 1px solid #dee2e6;
+  background: #f8f9fa;
+  position: sticky;
+  top: 0;
+  z-index: 1001;
+}
+
+.mobile-panel-header h6 {
+  font-size: 12px;
+  font-weight: 600;
+  color: #495057;
+  margin: 0;
+}
+
+.mobile-panel-content {
+  padding: 12px 16px;
+  max-height: calc(50vh - 40px);
+  overflow-y: auto;
+}
+
+.mobile-text-editing-full .form-group {
+  margin-bottom: 12px;
+}
+
+.mobile-text-editing-full .form-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #6c757d;
+  margin-bottom: 4px;
+}
+
+.mobile-text-editing-full .form-control,
+.mobile-text-editing-full .form-select {
+  font-size: 12px;
+  padding: 6px 8px;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  min-height: 32px;
+}
+
+.mobile-text-editing-full .form-control-color {
+  width: 32px;
+  height: 32px;
+  padding: 2px;
+  border-radius: 4px;
+}
+
+.mobile-text-editing-full .color-picker-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mobile-text-editing-full .btn-group .btn {
+  padding: 4px 8px;
+  font-size: 11px;
+  min-height: 28px;
+  border-radius: 3px;
+}
+
+.mobile-text-editing-full .badge {
+  font-size: 10px;
+  padding: 2px 6px;
+}
+
+.mobile-text-editing-full .form-range {
+  height: 20px;
+}
+
+.mobile-text-editing-full .form-check-input {
+  margin-top: 2px;
+}
+
+.mobile-text-editing-full .form-check-label {
+  font-size: 11px;
+  color: #6c757d;
 }
 </style>
