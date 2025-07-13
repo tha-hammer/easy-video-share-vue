@@ -1462,7 +1462,7 @@ export default defineComponent({
     }
 
     const handleCanvasClick = (event: Event) => {
-      if (!isTextEditingMode.value && isCanvasReady.value && canvas.value) {
+      if (isCanvasReady.value && canvas.value) {
         const mouseEvent = event as MouseEvent
 
         // Check if the click is on an existing text object
@@ -1496,12 +1496,24 @@ export default defineComponent({
             (typeof textObj.backgroundColor === 'string' ? textObj.backgroundColor : '#ffffff') ||
             '#ffffff'
           currentOpacity.value = textObj.opacity || 1
-          isTextEditingMode.value = true
-          nextTick(() => {
-            textContentInput.value?.focus()
-          })
+
+          // On mobile, focus the text input when text is selected
+          if (isMobileView.value) {
+            nextTick(() => {
+              const textInput = document.querySelector('.mobile-text-input') as HTMLInputElement
+              if (textInput) {
+                textInput.focus()
+              }
+            })
+          } else {
+            isTextEditingMode.value = true
+            nextTick(() => {
+              textContentInput.value?.focus()
+            })
+          }
         } else {
           // If no text object is clicked, add a new one
+          console.log('🎯 Canvas clicked - adding new text object')
           addNewText()
         }
       }
