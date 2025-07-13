@@ -360,6 +360,17 @@
                     Effects
                   </button>
                 </li>
+                                <li class="nav-item" role="presentation">
+                  <button
+                    class="nav-link"
+                    :class="{ active: activeTab === 'background' }"
+                    @click="activeTab = 'background'"
+                    type="button"
+                    role="tab"
+                  >
+                    Background
+                  </button>
+                </li>
               </ul>
             </div>
 
@@ -401,6 +412,22 @@
                     />
                     <span class="size-value">{{ currentFontSize }}px</span>
                   </div>
+                  <div class="btn-group btn-group-sm" role="group">
+                    <button
+                      @click="toggleBold"
+                      :class="{ active: currentFontWeight === 'bold' }"
+                      class="btn btn-outline-secondary"
+                    >
+                      <strong>B</strong>
+                    </button>
+                    <button
+                      @click="toggleItalic"
+                      :class="{ active: currentFontStyle === 'italic' }"
+                      class="btn btn-outline-secondary"
+                    >
+                      <em>I</em>
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -420,22 +447,7 @@
               <div v-if="activeTab === 'style'" class="tab-content">
                 <div class="grid-2-cols">
                   <label>Style</label>
-                  <div class="btn-group btn-group-sm" role="group">
-                    <button
-                      @click="toggleBold"
-                      :class="{ active: currentFontWeight === 'bold' }"
-                      class="btn btn-outline-secondary"
-                    >
-                      <strong>B</strong>
-                    </button>
-                    <button
-                      @click="toggleItalic"
-                      :class="{ active: currentFontStyle === 'italic' }"
-                      class="btn btn-outline-secondary"
-                    >
-                      <em>I</em>
-                    </button>
-                  </div>
+
                 </div>
               </div>
               <!-- Background -->
