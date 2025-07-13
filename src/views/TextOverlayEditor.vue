@@ -374,7 +374,7 @@
                   <button class="grid-option" @click="setFontFamily('Georgia')">Georgia</button>
                 </div>
               </div>
-              
+
               <!-- Styles Tab Content -->
               <div v-if="activeTab === 'styles'" class="tab-content">
                 <div class="grid-2-cols">
@@ -384,7 +384,7 @@
                   <button class="grid-option" @click="setFontSize(60)">XLarge</button>
                 </div>
               </div>
-              
+
               <!-- Effects Tab Content -->
               <div v-if="activeTab === 'effects'" class="tab-content">
                 <div class="grid-2-cols">
@@ -1576,19 +1576,19 @@ export default defineComponent({
     // Mobile font/style/effect methods
     const setFontFamily = (fontFamily: string) => {
       if (activeTextObject.value) {
-        updateTextObject(activeTextObject.value, { fontFamily })
+        activeTextObject.value.fontFamily = fontFamily
       }
     }
 
     const setFontSize = (fontSize: number) => {
       if (activeTextObject.value) {
-        updateTextObject(activeTextObject.value, { fontSize })
+        activeTextObject.value.fontSize = fontSize
       }
     }
 
     const setTextColor = (color: string) => {
       if (activeTextObject.value) {
-        updateTextObject(activeTextObject.value, { fill: color })
+        activeTextObject.value.fill = color
       }
     }
 
