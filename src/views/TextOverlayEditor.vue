@@ -608,188 +608,7 @@
   </div>
 
   <!-- Mobile Text Editing Panel -->
-  <div v-if="isMobileView && isCanvasReady" class="mobile-text-editing-panel">
-    <!-- Text Input Bar -->
-<!--     <div class="mobile-text-input-bar">
-      <div class="d-flex align-items-center gap-2">
-        <input
-          v-model="currentTextContent"
-          @input="updateTextContent"
-          type="text"
-          class="form-control mobile-text-input"
-          placeholder="Enter your text..."
-        />
-        <button
-          @click="exitTextEditingMode"
-          class="btn btn-sm btn-outline-secondary mobile-expand-btn"
-          title="Close Text Editor"
-        >
-          <KTIcon icon-name="cross" icon-class="fs-6" />
-        </button>
-        <button
-          @click="confirmTextEdit"
-          class="btn btn-sm btn-success mobile-confirm-btn"
-          title="Confirm Text"
-        >
-          <KTIcon icon-name="check" icon-class="fs-6" />
-        </button>
-      </div>
-    </div> -->
 
-    <!-- Tab Navigation -->
-    <div class="mobile-tab-nav">
-      <ul class="nav nav-tabs mobile-nav-tabs" role="tablist">
-        <li class="nav-item" role="presentation">
-          <button
-            class="nav-link"
-            :class="{ active: activeTab === 'fonts' }"
-            @click="activeTab = 'fonts'"
-            type="button"
-            role="tab"
-          >
-            Fonts
-          </button>
-        </li>
-        <li class="nav-item" role="presentation">
-          <button
-            class="nav-link"
-            :class="{ active: activeTab === 'styles' }"
-            @click="activeTab = 'styles'"
-            type="button"
-            role="tab"
-          >
-            Styles
-          </button>
-        </li>
-        <li class="nav-item" role="presentation">
-          <button
-            class="nav-link"
-            :class="{ active: activeTab === 'effects' }"
-            @click="activeTab = 'effects'"
-            type="button"
-            role="tab"
-          >
-            Effects
-          </button>
-        </li>
-      </ul>
-    </div>
-
-    <!-- Tab Content -->
-    <div class="mobile-tab-content">
-      <!-- Fonts Tab -->
-      <div v-if="activeTab === 'fonts'" class="tab-pane active">
-        <div class="row g-2">
-          <div class="col-6" v-for="font in fontOptions" :key="font">
-            <div
-              class="mobile-font-option"
-              :class="{ active: currentFontFamily === font }"
-              @click="selectFont(font)"
-            >
-              <span :style="{ fontFamily: font }">{{ font }}</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Styles Tab -->
-      <div v-if="activeTab === 'styles'" class="tab-pane active">
-        <div class="row g-2">
-          <!-- Font Size -->
-          <div class="col-12 mb-3">
-            <label class="form-label">Font Size</label>
-            <div class="d-flex align-items-center gap-3">
-              <input
-                v-model.number="currentFontSize"
-                @input="updateFontSize"
-                type="range"
-                class="form-range flex-grow-1"
-                min="8"
-                max="200"
-              />
-              <span class="badge badge-light">{{ currentFontSize }}px</span>
-            </div>
-          </div>
-
-          <!-- Font Color -->
-          <div class="col-6">
-            <label class="form-label">Color</label>
-            <input
-              v-model="currentFontColor"
-              @input="updateFontColor"
-              type="color"
-              class="form-control form-control-color"
-            />
-          </div>
-
-          <!-- Font Style -->
-          <div class="col-6">
-            <label class="form-label">Style</label>
-            <div class="btn-group d-flex" role="group">
-              <button
-                @click="toggleBold"
-                :class="{ active: currentFontWeight === 'bold' }"
-                class="btn btn-outline-secondary"
-              >
-                <strong>B</strong>
-              </button>
-              <button
-                @click="toggleItalic"
-                :class="{ active: currentFontStyle === 'italic' }"
-                class="btn btn-outline-secondary"
-              >
-                <em>I</em>
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Effects Tab -->
-      <div v-if="activeTab === 'effects'" class="tab-pane active">
-        <div class="row g-2">
-          <!-- Background -->
-          <div class="col-12 mb-3">
-            <div class="form-check">
-              <input
-                v-model="hasTextBackground"
-                @change="toggleTextBackground"
-                class="form-check-input"
-                type="checkbox"
-                id="textBackgroundMobile"
-              />
-              <label class="form-check-label" for="textBackgroundMobile"> Enable Background </label>
-            </div>
-            <div v-if="hasTextBackground" class="mt-2">
-              <input
-                v-model="currentBackgroundColor"
-                @input="updateBackgroundColor"
-                type="color"
-                class="form-control form-control-color"
-              />
-            </div>
-          </div>
-
-          <!-- Opacity -->
-          <div class="col-12">
-            <label class="form-label">Opacity</label>
-            <div class="d-flex align-items-center gap-3">
-              <input
-                v-model.number="currentOpacity"
-                @input="updateOpacity"
-                type="range"
-                class="form-range flex-grow-1"
-                min="0"
-                max="1"
-                step="0.1"
-              />
-              <span class="badge badge-light">{{ Math.round(currentOpacity * 100) }}%</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
 </template>
 
 <script lang="ts">
@@ -1934,7 +1753,6 @@ export default defineComponent({
     flex-direction: column;
     overflow: hidden;
     height: calc(100vh - 40px);
-    max-height: calc(100vh - 40px);
   }
 
   /* Thumbnail/Canvas Section - Much smaller like reference */
@@ -1948,21 +1766,19 @@ export default defineComponent({
     overflow: hidden;
     width: 100vw;
     box-sizing: border-box;
-    height: 40vh; /* Reduced from 50vh to leave more space for controls */
-    max-height: 350px; /* Reduced max height */
+    height: 50vh; /* Fixed height - only half the screen */
+    max-height: 400px; /* Limit max height */
   }
 
   /* Controls Section - Takes remaining space */
   .mobile-controls-section {
     flex: 1;
     background: white;
-    z-index: 99999 !important;
     border-top: 1px solid #dee2e6;
     overflow-y: auto;
     width: 100vw;
     box-sizing: border-box;
-    min-height: 300px; /* Increased minimum height */
-    max-height: 60vh; /* Ensure it doesn't exceed viewport */
+    min-height: 200px; /* Ensure adequate space for tools */
     /* Remove max-height to allow full remaining space */
   }
 
