@@ -293,8 +293,7 @@
         <div class="controls-section mobile-controls-section">
 
 
-          <div class="main-editor-menu mobile-main-menu">
-            <p style="color: red; font-weight: bold;">🎯 FORCED VISIBLE!</p>
+          <div v-if="!isTextEditingMode" class="main-editor-menu mobile-main-menu">
             <div class="menu-actions" @touchstart="console.log('🔥 PARENT TOUCHSTART - menu-actions touched')" @click="console.log('🔥 PARENT CLICK - menu-actions clicked')">
               <div @touchstart="console.log('🎭 WRAPPER TOUCHSTART - button wrapper touched')" @click="console.log('🎭 WRAPPER CLICK - button wrapper clicked')" style="display: inline-block;">
                 <button
@@ -1935,6 +1934,7 @@ export default defineComponent({
     flex-direction: column;
     overflow: hidden;
     height: calc(100vh - 40px);
+    max-height: calc(100vh - 40px);
   }
 
   /* Thumbnail/Canvas Section - Much smaller like reference */
@@ -1948,8 +1948,8 @@ export default defineComponent({
     overflow: hidden;
     width: 100vw;
     box-sizing: border-box;
-    height: 50vh; /* Fixed height - only half the screen */
-    max-height: 400px; /* Limit max height */
+    height: 40vh; /* Reduced from 50vh to leave more space for controls */
+    max-height: 350px; /* Reduced max height */
   }
 
   /* Controls Section - Takes remaining space */
@@ -1960,7 +1960,8 @@ export default defineComponent({
     overflow-y: auto;
     width: 100vw;
     box-sizing: border-box;
-    min-height: 200px; /* Ensure adequate space for tools */
+    min-height: 300px; /* Increased minimum height */
+    max-height: 60vh; /* Ensure it doesn't exceed viewport */
     /* Remove max-height to allow full remaining space */
   }
 
