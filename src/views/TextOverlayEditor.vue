@@ -265,7 +265,46 @@
               <div class="spinner-border text-primary" role="status">
                 <span class="visually-hidden">Loading canvas...</span>
               </div>
+<<<<<<< HEAD
               <p class="text-muted mt-3">Initializing Fabric.js canvas...</p>
+=======
+              <p class="text-muted mt-3">
+                Initializing Fabric.js canvas... BOOOOOOOOOOOOOOOOOOOOOOOOOOOYAAAAAAAHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Editor Controls (Bottom 1/3 on mobile) -->
+        <div class="controls-section mobile-controls-section">
+          <!-- Mobile Only: Normal Mode: Main Editor Menu -->
+          <div v-if="!isTextEditingMode" class="main-editor-menu mobile-main-menu">
+            <div class="menu-actions">
+              <button
+                @click="addNewText"
+                class="btn btn-primary"
+                :disabled="!isCanvasReady"
+                title="Add Text"
+              >
+                <KTIcon icon-name="plus" icon-class="fs-6" />
+              </button>
+              <button
+                @click="deleteSelectedText"
+                class="btn btn-danger"
+                :disabled="!hasActiveText"
+                title="Delete"
+              >
+                <KTIcon icon-name="trash" icon-class="fs-6" />
+              </button>
+              <button
+                @click="duplicateText"
+                class="btn btn-info"
+                :disabled="!hasActiveText"
+                title="Duplicate"
+              >
+                <KTIcon icon-name="copy" icon-class="fs-6" />
+              </button>
+>>>>>>> bb49b93 (Corrected errors made by Cursor's LLM (missing click)
             </div>
           </div>
 
@@ -429,6 +468,7 @@
             </div>
           </div>
 
+<<<<<<< HEAD
           <!-- Help Text when no text selected -->
           <div v-else-if="isCanvasReady" class="text-editing-panel">
             <div class="panel-content text-center py-5">
@@ -440,6 +480,150 @@
               <button @click="addNewText" class="btn btn-primary">
                 <KTIcon icon-name="plus" icon-class="fs-5" />
                 Add Text
+=======
+          <!-- Show help text when no text selected -->
+          <div v-else class="text-center py-5">
+            <KTIcon icon-name="information" icon-class="fs-2x text-muted mb-3" />
+            <h5 class="text-muted">No Text Selected</h5>
+            <p class="text-muted mb-4">
+              Click on a text object or add a new one to edit its properties.
+            </p>
+            <button @click="addNewText" class="btn btn-primary">
+              <KTIcon icon-name="plus" icon-class="fs-5" />
+              Add Text
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Mobile Text Editing Panel -->
+  <div v-if="isMobileView && isCanvasReady" class="mobile-text-editing-panel">
+    <!-- Text Input Bar -->
+    <div class="mobile-text-input-bar">
+      <div class="d-flex align-items-center gap-2">
+        <input
+          v-model="currentTextContent"
+          @input="updateTextContent"
+          type="text"
+          class="form-control mobile-text-input"
+          placeholder="Enter your text..."
+        />
+        <button 
+          @click="exitTextEditingMode" 
+          class="btn btn-sm btn-outline-secondary mobile-expand-btn"
+          title="Close Text Editor"
+        >
+          <KTIcon icon-name="cross" icon-class="fs-6" />
+        </button>
+        <button 
+          @click="confirmTextEdit" 
+          class="btn btn-sm btn-success mobile-confirm-btn"
+          title="Confirm Text"
+        >
+          <KTIcon icon-name="check" icon-class="fs-6" />
+        </button>
+      </div>
+    </div>
+
+    <!-- Tab Navigation -->
+    <div class="mobile-tab-nav">
+      <ul class="nav nav-tabs mobile-nav-tabs" role="tablist">
+        <li class="nav-item" role="presentation">
+          <button
+            class="nav-link"
+            :class="{ active: activeTab === 'fonts' }"
+            @click="activeTab = 'fonts'"
+            type="button"
+            role="tab"
+          >
+            Fonts
+          </button>
+        </li>
+        <li class="nav-item" role="presentation">
+          <button
+            class="nav-link"
+            :class="{ active: activeTab === 'styles' }"
+            @click="activeTab = 'styles'"
+            type="button"
+            role="tab"
+          >
+            Styles
+          </button>
+        </li>
+        <li class="nav-item" role="presentation">
+          <button
+            class="nav-link"
+            :class="{ active: activeTab === 'effects' }"
+            @click="activeTab = 'effects'"
+            type="button"
+            role="tab"
+          >
+            Effects
+          </button>
+        </li>
+      </ul>
+    </div>
+
+    <!-- Tab Content -->
+    <div class="mobile-tab-content">
+      <!-- Fonts Tab -->
+      <div v-if="activeTab === 'fonts'" class="tab-pane active">
+        <div class="row g-2">
+          <div class="col-6" v-for="font in fontOptions" :key="font">
+            <div
+              class="mobile-font-option"
+              :class="{ active: currentFontFamily === font }"
+              @click="selectFont(font)"
+            >
+              <span :style="{ fontFamily: font }">{{ font }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Styles Tab -->
+      <div v-if="activeTab === 'styles'" class="tab-pane active">
+        <div class="row g-2">
+          <!-- Font Size -->
+          <div class="col-12 mb-3">
+            <label class="form-label">Font Size</label>
+            <div class="d-flex align-items-center gap-3">
+              <input
+                v-model.number="currentFontSize"
+                @input="updateFontSize"
+                type="range"
+                class="form-range flex-grow-1"
+                min="8"
+                max="200"
+              />
+              <span class="badge badge-light">{{ currentFontSize }}px</span>
+            </div>
+          </div>
+
+          <!-- Font Color -->
+          <div class="col-6">
+            <label class="form-label">Color</label>
+            <input
+              v-model="currentFontColor"
+              @input="updateFontColor"
+              type="color"
+              class="form-control form-control-color"
+            />
+          </div>
+
+          <!-- Font Style -->
+          <div class="col-6">
+            <label class="form-label">Style</label>
+            <div class="btn-group d-flex" role="group">
+              <button
+                @click="toggleBold"
+                :class="{ active: currentFontWeight === 'bold' }"
+                class="btn btn-outline-secondary"
+              >
+                <strong>B</strong>
+>>>>>>> bb49b93 (Corrected errors made by Cursor's LLM (missing click)
               </button>
             </div>
           </div>
@@ -632,9 +816,88 @@ export default defineComponent({
 
     // Text object management
     const addNewText = async () => {
+<<<<<<< HEAD
       const textObj = await addTextObject('Sample Text')
       if (textObj) {
         console.log('✅ Text object added successfully')
+=======
+      console.log('🎯 addNewText called (Mobile mode:', isMobileView.value, ')')
+      console.log('🎯 Canvas ready:', isCanvasReady.value)
+      console.log('🎯 Canvas exists:', !!canvas.value)
+      console.log('🎯 addTextObject function exists:', typeof addTextObject)
+
+      if (!isCanvasReady.value) {
+        console.error('❌ Canvas not ready for text creation')
+        return
+      }
+
+      if (!canvas.value) {
+        console.error('❌ Canvas is null')
+        return
+      }
+
+      try {
+        console.log('🎯 Calling addTextObject...')
+        const textObj = await addTextObject('Sample Text')
+        console.log('🎯 addTextObject returned:', !!textObj)
+
+        if (textObj) {
+          console.log('✅ Text object added successfully')
+          console.log('🎯 Canvas object count:', canvas.value.getObjects().length)
+          console.log('🎯 Text object details:', {
+            type: textObj.type,
+            text: textObj.text,
+            left: textObj.left,
+            top: textObj.top,
+            visible: textObj.visible,
+          })
+
+          // Automatically select the newly created text object
+          activeTextObject.value = textObj
+          canvas.value.setActiveObject(textObj)
+
+          // Sync form values with the new text object
+          currentTextContent.value = textObj.text || ''
+          currentFontFamily.value = textObj.fontFamily || 'Arial'
+          currentFontSize.value = textObj.fontSize || 24
+          currentFontColor.value =
+            (typeof textObj.fill === 'string' ? textObj.fill : '#000000') || '#000000'
+          currentFontWeight.value =
+            (typeof textObj.fontWeight === 'string'
+              ? textObj.fontWeight
+              : String(textObj.fontWeight)) || 'normal'
+          currentFontStyle.value = textObj.fontStyle || 'normal'
+          hasTextBackground.value = !!textObj.backgroundColor
+          currentBackgroundColor.value =
+            (typeof textObj.backgroundColor === 'string' ? textObj.backgroundColor : '#ffffff') ||
+            '#ffffff'
+          currentOpacity.value = textObj.opacity || 1
+
+          // Enter text editing mode
+          if (isMobileView.value) {
+            isTextEditingMode.value = true
+            nextTick(() => {
+              const textInput = document.querySelector('.mobile-text-input') as HTMLInputElement
+              if (textInput) {
+                textInput.focus()
+                textInput.select() // Select the default text for easy replacement
+              }
+            })
+          } else {
+            // On desktop, focus the text content input
+            nextTick(() => {
+              textContentInput.value?.focus()
+              textContentInput.value?.select() // Select the default text for easy replacement
+            })
+          }
+
+          canvas.value.renderAll()
+        } else {
+          console.error('❌ addTextObject returned null')
+        }
+      } catch (error) {
+        console.error('❌ Error in addNewText:', error)
+>>>>>>> bb49b93 (Corrected errors made by Cursor's LLM (missing click)
       }
     }
 
@@ -649,6 +912,25 @@ export default defineComponent({
       if (!activeTextObject.value) return
 
       const originalText = activeTextObject.value
+<<<<<<< HEAD
+=======
+      // Calculate offset that keeps the duplicated text visible on canvas
+      const offsetX = 20
+      const offsetY = 20
+
+      // Ensure the duplicated text stays within canvas bounds
+      let newLeft = (originalText.left || 0) + offsetX
+      let newTop = (originalText.top || 0) + offsetY
+
+      // Check bounds and wrap around if necessary
+      if (newLeft > canvasSize.value.width - 50) {
+        newLeft = 50 // Reset to left side with padding
+      }
+      if (newTop > canvasSize.value.height - 50) {
+        newTop = 50 // Reset to top with padding
+      }
+
+>>>>>>> bb49b93 (Corrected errors made by Cursor's LLM (missing click)
       const newText = await addTextObject(
         originalText.text || 'Duplicated Text',
         (originalText.left || 0) + 20,
@@ -954,6 +1236,212 @@ export default defineComponent({
       }
     }
 
+<<<<<<< HEAD
+=======
+    // New methods for mobile/desktop layout
+    const windowWidth = ref(window.innerWidth)
+
+    const isMobileView = computed(() => {
+      return windowWidth.value <= 768
+    })
+
+    // Update window width on resize
+    const updateWindowWidth = () => {
+      windowWidth.value = window.innerWidth
+    }
+
+    const isTextEditingMode = ref(false)
+    const textContentInput = ref<HTMLTextAreaElement | null>(null)
+
+    // Mobile tab state
+    const activeTab = ref('fonts')
+    const fontOptions = ref([
+      'Arial',
+      'Helvetica',
+      'Times New Roman',
+      'Georgia',
+      'Verdana',
+      'Courier New',
+      'Impact',
+      'Comic Sans MS',
+    ])
+
+    const enterTextEditingMode = async () => {
+      isTextEditingMode.value = true
+
+      // Add a new text object if none exists
+      if (!hasActiveText.value) {
+        await addNewText()
+      }
+
+      nextTick(() => {
+        textContentInput.value?.focus()
+      })
+    }
+
+    const exitTextEditingMode = () => {
+      isTextEditingMode.value = false
+      textContentInput.value?.blur()
+    }
+
+    const confirmTextEdit = () => {
+      console.log('🔄 Mobile confirm button clicked')
+      // Apply any pending changes and exit text editing mode
+      if (activeTextObject.value && currentTextContent.value.trim()) {
+        updateTextContent()
+      }
+      exitTextEditingMode()
+    }
+
+    const handleTextInputFocus = () => {
+      // Prevent viewport from scrolling when keyboard opens
+      if (isMobileView.value) {
+        document.body.style.overflow = 'hidden'
+      }
+    }
+
+    const handleTextInputBlur = () => {
+      // Restore normal scrolling when keyboard closes
+      if (isMobileView.value) {
+        document.body.style.overflow = 'auto'
+      }
+    }
+
+    const handleCanvasClick = (event: Event) => {
+      if (isCanvasReady.value && canvas.value) {
+        const mouseEvent = event as MouseEvent
+
+        // Check if the click is on an existing text object
+        const clickedObject = canvas.value.findTarget(mouseEvent)
+
+        if (clickedObject && clickedObject.type === 'text') {
+          // If a text object is clicked, select it and enter editing mode
+          const textObj = clickedObject as unknown as {
+            text: string
+            fontFamily: string
+            fontSize: number
+            fill: string
+            fontWeight: string | number
+            fontStyle: string
+            backgroundColor: string
+            opacity: number
+          }
+          activeTextObject.value = clickedObject
+          currentTextContent.value = textObj.text || ''
+          currentFontFamily.value = textObj.fontFamily || 'Arial'
+          currentFontSize.value = textObj.fontSize || 24
+          currentFontColor.value =
+            (typeof textObj.fill === 'string' ? textObj.fill : '#000000') || '#000000'
+          currentFontWeight.value =
+            (typeof textObj.fontWeight === 'string'
+              ? textObj.fontWeight
+              : String(textObj.fontWeight)) || 'normal'
+          currentFontStyle.value = textObj.fontStyle || 'normal'
+          hasTextBackground.value = !!textObj.backgroundColor
+          currentBackgroundColor.value =
+            (typeof textObj.backgroundColor === 'string' ? textObj.backgroundColor : '#ffffff') ||
+            '#ffffff'
+          currentOpacity.value = textObj.opacity || 1
+
+          // On mobile, enter text editing mode and focus the text input
+          if (isMobileView.value) {
+            isTextEditingMode.value = true
+            nextTick(() => {
+              const textInput = document.querySelector('.mobile-text-input') as HTMLInputElement
+              if (textInput) {
+                textInput.focus()
+                textInput.select() // Select existing text for easy editing
+              }
+            })
+          } else {
+            // On desktop, focus the text content input
+            nextTick(() => {
+              textContentInput.value?.focus()
+              textContentInput.value?.select() // Select existing text for easy editing
+            })
+          }
+        }
+        // If no text object is clicked, do nothing - user must explicitly click "Add Text" button
+      }
+    }
+
+    const goBackToSegmentSelection = () => {
+      isTextEditingMode.value = false
+      thumbnailUrl.value = ''
+      if (canvas.value) {
+        canvas.value.clear()
+      }
+      // Reset form values to default
+      currentTextContent.value = ''
+      currentFontFamily.value = 'Arial'
+      currentFontSize.value = 24
+      currentFontColor.value = '#000000'
+      currentFontWeight.value = 'normal'
+      currentFontStyle.value = 'normal'
+      hasTextBackground.value = false
+      currentBackgroundColor.value = '#ffffff'
+      currentOpacity.value = 1
+      activeTextObject.value = null
+
+      // Remove mobile class when going back to segment selection
+      if (isMobileView.value) {
+        document.body.classList.remove('mobile-text-editor')
+      }
+    }
+
+    // Mobile font selection
+    const selectFont = (font: string) => {
+      currentFontFamily.value = font
+      updateFontFamily()
+    }
+
+    // Handle clicks outside text input to exit text editing mode
+    const handleDocumentClick = (event: Event) => {
+      if (isTextEditingMode.value && isMobileView.value) {
+        const target = event.target as HTMLElement
+        const textInputSection = document.querySelector('.mobile-text-input')
+
+        if (textInputSection && !textInputSection.contains(target)) {
+          exitTextEditingMode()
+        }
+      }
+    }
+
+    // Set up global click listener for mobile and window resize
+    onMounted(() => {
+      loadSegments()
+
+      // Add window resize listener
+      window.addEventListener('resize', handleWindowResize)
+
+      if (isMobileView.value) {
+        document.addEventListener('click', handleDocumentClick)
+        // Add class to body to hide header/sidebar on mobile
+        document.body.classList.add('mobile-text-editor')
+      }
+    })
+
+    onUnmounted(() => {
+      if (canvas.value) {
+        dispose()
+      }
+
+      // Clear resize timeout
+      if (resizeTimeout) {
+        clearTimeout(resizeTimeout)
+      }
+
+      // Remove window resize listener
+      window.removeEventListener('resize', handleWindowResize)
+
+      if (isMobileView.value) {
+        document.removeEventListener('click', handleDocumentClick)
+        // Remove class from body when component unmounts
+        document.body.classList.remove('mobile-text-editor')
+      }
+    })
+
+>>>>>>> bb49b93 (Corrected errors made by Cursor's LLM (missing click)
     return {
       // Refs
       fabricCanvasEl,
@@ -1018,6 +1506,30 @@ export default defineComponent({
       toggleTextBackground,
       updateBackgroundColor,
       updateOpacity,
+<<<<<<< HEAD
+=======
+
+      // Collapsible methods
+      toggleCollapse,
+      collapsedSections,
+
+      // New methods for mobile/desktop layout
+      isMobileView,
+      isTextEditingMode,
+      textContentInput,
+      enterTextEditingMode,
+      exitTextEditingMode,
+      confirmTextEdit,
+      handleTextInputFocus,
+      handleTextInputBlur,
+      handleCanvasClick,
+      goBackToSegmentSelection,
+
+      // Mobile tab functionality
+      activeTab,
+      fontOptions,
+      selectFont,
+>>>>>>> bb49b93 (Corrected errors made by Cursor's LLM (missing click)
     }
   },
 })
@@ -1222,4 +1734,247 @@ export default defineComponent({
     left: 100%;
   }
 }
+<<<<<<< HEAD
+=======
+
+/* Mobile Text Editing Panel Styles */
+.mobile-text-editing-panel {
+  background: white !important;
+  border-top: 1px solid #dee2e6 !important;
+  border-radius: 0 !important;
+  position: fixed !important;
+  bottom: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  z-index: 9999 !important;
+  height: 30vh !important;
+  min-height: 250px !important;
+  overflow: hidden !important;
+  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  visibility: visible !important;
+  pointer-events: auto !important;
+}
+
+/* Text Input Bar (~8% of 30vh) */
+.mobile-text-input-bar {
+  flex: 0 0 auto;
+  padding: 8px 12px;
+  border-bottom: 1px solid #dee2e6;
+  background: #f8f9fa;
+  pointer-events: auto;
+  z-index: 1000;
+  position: relative;
+}
+
+.mobile-text-input {
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  padding: 6px 12px;
+  font-size: 14px;
+}
+
+.mobile-expand-btn,
+.mobile-confirm-btn {
+  min-width: 36px;
+  height: 36px;
+  padding: 6px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.mobile-expand-btn .kt-icon,
+.mobile-confirm-btn .kt-icon {
+  font-size: 16px !important;
+  color: inherit;
+}
+
+/* Tab Navigation (~6% of 30vh) */
+.mobile-tab-nav {
+  flex: 0 0 auto;
+  background: white;
+  border-bottom: 1px solid #dee2e6;
+}
+
+.mobile-nav-tabs {
+  border-bottom: 1px solid #dee2e6;
+  margin-bottom: 0;
+}
+
+.mobile-nav-tabs .nav-link {
+  padding: 8px 16px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #6c757d;
+  border: none;
+  border-bottom: 2px solid transparent;
+}
+
+.mobile-nav-tabs .nav-link.active {
+  color: #0d6efd;
+  border-bottom-color: #0d6efd;
+  background: none;
+}
+
+/* Tab Content (~16% of 30vh) */
+.mobile-tab-content {
+  flex: 1 1 auto;
+  padding: 12px;
+  overflow-y: auto;
+}
+
+.mobile-text-editing-full {
+  display: block !important;
+  visibility: visible !important;
+}
+
+.mobile-text-editing-full .form-group {
+  margin-bottom: 12px !important;
+  display: block !important;
+  visibility: visible !important;
+}
+
+.mobile-text-editing-full .form-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #6c757d;
+  margin-bottom: 4px;
+}
+
+.mobile-text-editing-full .form-control,
+.mobile-text-editing-full .form-select {
+  font-size: 12px;
+  padding: 6px 8px;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  min-height: 32px;
+}
+
+.mobile-text-editing-full .form-control-color {
+  width: 32px;
+  height: 32px;
+  padding: 2px;
+  border-radius: 4px;
+}
+
+.mobile-text-editing-full .color-picker-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mobile-text-editing-full .btn-group .btn {
+  padding: 4px 8px;
+  font-size: 11px;
+  min-height: 28px;
+  border-radius: 3px;
+}
+
+.mobile-text-editing-full .badge {
+  font-size: 10px;
+  padding: 2px 6px;
+}
+
+.mobile-text-editing-full .form-range {
+  height: 20px;
+}
+
+.mobile-text-editing-full .form-check-input {
+  margin-top: 2px;
+}
+
+.mobile-text-editing-full .form-check-label {
+  font-size: 11px;
+  color: #6c757d;
+}
+
+/* Mobile Font Options */
+.mobile-font-option {
+  padding: 8px 12px;
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+  background: white;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: center;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mobile-font-option:hover {
+  border-color: #0d6efd;
+  background: #f8f9ff;
+}
+
+.mobile-font-option.active {
+  border-color: #0d6efd;
+  background: #e7f3ff;
+  color: #0d6efd;
+}
+
+.mobile-font-option span {
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Mobile Tab Content Form Elements */
+.mobile-tab-content .form-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #6c757d;
+  margin-bottom: 4px;
+}
+
+.mobile-tab-content .form-control,
+.mobile-tab-content .form-select {
+  font-size: 12px;
+  padding: 6px 8px;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  min-height: 32px;
+}
+
+.mobile-tab-content .form-control-color {
+  width: 40px;
+  height: 32px;
+  padding: 2px;
+  border-radius: 4px;
+  border: 1px solid #ced4da;
+}
+
+.mobile-tab-content .btn-group .btn {
+  padding: 4px 8px;
+  font-size: 11px;
+  min-height: 28px;
+  border-radius: 3px;
+}
+
+.mobile-tab-content .badge {
+  font-size: 10px;
+  padding: 2px 6px;
+}
+
+.mobile-tab-content .form-range {
+  height: 20px;
+}
+
+.mobile-tab-content .form-check-input {
+  margin-top: 2px;
+}
+
+.mobile-tab-content .form-check-label {
+  font-size: 11px;
+  color: #6c757d;
+}
+>>>>>>> bb49b93 (Corrected errors made by Cursor's LLM (missing click)
 </style>
