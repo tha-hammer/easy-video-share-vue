@@ -291,9 +291,9 @@
 
         <!-- Editor Controls (Bottom 1/3 on mobile) -->
         <div class="controls-section mobile-controls-section">
-          <!-- Mobile Only: Normal Mode: Main Editor Menu -->
+
+
           <div v-if="!isTextEditingMode" class="main-editor-menu mobile-main-menu">
-            <p style="color: red; font-weight: bold;">🎯 ADD TEXT BUTTON SECTION VISIBLE!</p>
             <div class="menu-actions" @touchstart="console.log('🔥 PARENT TOUCHSTART - menu-actions touched')" @click="console.log('🔥 PARENT CLICK - menu-actions clicked')">
               <div @touchstart="console.log('🎭 WRAPPER TOUCHSTART - button wrapper touched')" @click="console.log('🎭 WRAPPER CLICK - button wrapper clicked')" style="display: inline-block;">
                 <button
