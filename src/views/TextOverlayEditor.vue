@@ -388,23 +388,80 @@
 
               <!-- Styles Tab Content -->
               <div v-if="activeTab === 'styles'" class="tab-content">
-                <div class="grid-2-cols">
-                  <button class="grid-option" @click="setFontSize(24)">Small</button>
-                  <button class="grid-option" @click="setFontSize(36)">Medium</button>
-                  <button class="grid-option" @click="setFontSize(48)">Large</button>
-                  <button class="grid-option" @click="setFontSize(60)">XLarge</button>
+                <div class="tool-group">
+                  <label class="tool-label">Size</label>
+                  <div class="size-controls">
+                    <input
+                      v-model.number="currentFontSize"
+                      @input="updateFontSize"
+                      type="range"
+                      class="form-range"
+                      min="8"
+                      max="200"
+                    />
+                    <span class="size-value">{{ currentFontSize }}px</span>
+                  </div>
                 </div>
               </div>
 
               <!-- Effects Tab Content -->
               <div v-if="activeTab === 'effects'" class="tab-content">
-                <div class="grid-2-cols">
-                  <button class="grid-option" @click="setTextColor('#FF0000')">Red</button>
-                  <button class="grid-option" @click="setTextColor('#00FF00')">Green</button>
-                  <button class="grid-option" @click="setTextColor('#0000FF')">Blue</button>
-                  <button class="grid-option" @click="setTextColor('#000000')">Black</button>
+                 <div class="tool-group">
+                    <label class="tool-label">Color</label>
+                    <input
+                      v-model="currentFontColor"
+                      @input="updateFontColor"
+                      type="color"
+                      class="form-control form-control-color"
+                    />
+                  </div>
+              </div>
+              <!-- Font Style -->
+              <div v-if="activeTab === 'style'" class="tab-content">
+                <div class="tool-group">
+                  <label class="tool-label">Style</label>
+                  <div class="btn-group btn-group-sm" role="group">
+                    <button
+                      @click="toggleBold"
+                      :class="{ active: currentFontWeight === 'bold' }"
+                      class="btn btn-outline-secondary"
+                    >
+                      <strong>B</strong>
+                    </button>
+                    <button
+                      @click="toggleItalic"
+                      :class="{ active: currentFontStyle === 'italic' }"
+                      class="btn btn-outline-secondary"
+                    >
+                      <em>I</em>
+                    </button>
+                  </div>
                 </div>
               </div>
+              <!-- Background -->
+              <div v-if="activeTab === 'background'" class="tab-content">
+                <div class="tool-group">
+                  <label class="tool-label">Background</label>
+                  <div class="background-controls">
+                    <button
+                      @click="toggleTextBackground"
+                      :class="{ active: hasTextBackground }"
+                      class="btn btn-sm btn-outline-secondary"
+                    >
+                      BG
+                    </button>
+                    <input
+                      v-if="hasTextBackground"
+                      v-model="currentBackgroundColor"
+                      @input="updateBackgroundColor"
+                      type="color"
+                      class="form-control form-control-color form-control-sm"
+                    />
+                  </div>
+                </div>
+              </div>
+
+
             </div>
           </div>
 
