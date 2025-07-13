@@ -80,6 +80,9 @@ export function useTextOverlay() {
         height: canvasHeight,
         backgroundColor: '#ffffff',
         preserveObjectStacking: true,
+        selection: true, // Enable object selection
+        allowTouchScrolling: false, // Prevent touch scrolling conflicts
+        enableRetinaScaling: true, // Better mobile display
       })
 
       // Load background image
@@ -285,29 +288,45 @@ export function useTextOverlay() {
 
     // Selection events
     canvas.value.on('selection:created', (e: any) => {
+      console.log('🎯 Canvas selection:created event fired', e)
       const selected = e.selected?.[0]
       if (selected && selected.type === 'text') {
+        console.log('✅ Text object selected:', selected.text)
         activeTextObject.value = selected
       }
     })
 
     canvas.value.on('selection:updated', (e: any) => {
+      console.log('🎯 Canvas selection:updated event fired', e)
       const selected = e.selected?.[0]
       if (selected && selected.type === 'text') {
+        console.log('✅ Text object updated:', selected.text)
         activeTextObject.value = selected
       }
     })
 
     canvas.value.on('selection:cleared', () => {
+      console.log('🎯 Canvas selection:cleared event fired')
       activeTextObject.value = null
     })
 
     // Object modification events
     canvas.value.on('object:modified', (e: any) => {
+      console.log('🎯 Canvas object:modified event fired', e)
       const obj = e.target
       if (obj && obj.type === 'text') {
+        console.log('✅ Text object modified:', obj.text)
         obj.setCoords()
       }
+    })
+
+    // Add touch/mouse interaction debugging
+    canvas.value.on('mouse:down', (e: any) => {
+      console.log('🎯 Canvas mouse:down event fired', e.target?.type || 'background')
+    })
+
+    canvas.value.on('mouse:up', (e: any) => {
+      console.log('🎯 Canvas mouse:up event fired', e.target?.type || 'background')
     })
   }
 
@@ -338,6 +357,11 @@ export function useTextOverlay() {
         fontWeight: options.fontWeight || 'normal',
         originX: 'center', // Center the text horizontally at the position
         originY: 'center', // Center the text vertically at the position
+        selectable: true, // Ensure text object is selectable
+        movable: true, // Ensure text object can be moved
+        editable: true, // Ensure text object can be edited
+        hasControls: true, // Show resize/rotate controls
+        hasBorders: true, // Show selection borders
         ...options,
       })
 
@@ -348,6 +372,14 @@ export function useTextOverlay() {
       activeTextObject.value = textObj
 
       console.log('✅ Text object added:', text)
+      console.log('🔍 Text object properties:', {
+        selectable: textObj.selectable,
+        movable: textObj.movable,
+        editable: textObj.editable,
+        hasControls: textObj.hasControls,
+        hasBorders: textObj.hasBorders,
+        evented: textObj.evented
+      })
       return textObj
     } catch (error) {
       console.error('❌ Failed to add text object:', error)
