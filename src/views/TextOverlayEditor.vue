@@ -239,9 +239,33 @@
         </div>
       </div>
 
-      <div class="editor-content" :class="{ 'mobile-editor-content': isMobileView }">
+      <!-- Desktop Editor Layout -->
+      <div v-if="!isMobileView" class="editor-layout card">
+        <div class="canvas-container">
+          <!-- Canvas will be mounted here -->
+          <canvas
+            ref="fabricCanvasEl"
+            :width="canvasSize.width"
+            :height="canvasSize.height"
+            class="fabric-canvas"
+            :style="{ opacity: isCanvasReady ? 1 : 0.3 }"
+            @click="handleCanvasClick"
+          />
+
+          <!-- Loading overlay -->
+          <div v-if="!isCanvasReady" class="loading-overlay">
+            <div class="spinner-border text-primary" role="status">
+              <span class="visually-hidden">Loading canvas...</span>
+            </div>
+            <p class="text-muted mt-3">Initializing Fabric.js canvas...</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Mobile Editor Layout -->
+      <div v-else class="editor-content mobile-editor-content">
         <!-- Thumbnail/Canvas Area (Top 2/3 on mobile) -->
-        <div class="canvas-section" :class="{ 'mobile-canvas-section': isMobileView }">
+        <div class="canvas-section mobile-canvas-section">
           <div class="canvas-container">
             <!-- Canvas will be mounted here -->
             <canvas
@@ -264,13 +288,9 @@
         </div>
 
         <!-- Editor Controls (Bottom 1/3 on mobile) -->
-        <div class="controls-section" :class="{ 'mobile-controls-section': isMobileView }">
-          <!-- Normal Mode: Main Editor Menu -->
-          <div
-            v-if="!isTextEditingMode"
-            class="main-editor-menu"
-            :class="{ 'mobile-main-menu': isMobileView }"
-          >
+        <div class="controls-section mobile-controls-section">
+          <!-- Mobile Only: Normal Mode: Main Editor Menu -->
+          <div v-if="!isTextEditingMode" class="main-editor-menu mobile-main-menu">
             <div class="menu-actions">
               <button
                 @click="enterTextEditingMode"
@@ -299,12 +319,8 @@
             </div>
           </div>
 
-          <!-- Text Editing Mode: Text Input + Text Tools -->
-          <div
-            v-if="isTextEditingMode"
-            class="text-editing-controls"
-            :class="{ 'mobile-text-editing': isMobileView }"
-          >
+          <!-- Mobile Only: Text Editing Mode: Text Input + Text Tools -->
+          <div v-if="isTextEditingMode" class="text-editing-controls mobile-text-editing">
             <!-- Text Input Area (25% of controls on mobile) -->
             <div class="text-input-section" :class="{ 'mobile-text-input': isMobileView }">
               <div class="text-input-header">
@@ -416,20 +432,333 @@
               </div>
             </div>
           </div>
+        </div>
+      </div>
 
-          <!-- Help Text when no text selected -->
-          <div v-else-if="isCanvasReady" class="text-editing-panel">
-            <div class="panel-content text-center py-5">
-              <KTIcon icon-name="information" icon-class="fs-2x text-muted mb-3" />
-              <h5 class="text-muted">No Text Selected</h5>
-              <p class="text-muted mb-4">
-                Click on a text object or add a new one to edit its properties.
-              </p>
-              <button @click="addNewText" class="btn btn-primary">
-                <KTIcon icon-name="plus" icon-class="fs-5" />
-                Add Text
-              </button>
+      <!-- Desktop Text Editing Panel -->
+      <div v-if="!isMobileView && isCanvasReady" class="text-editing-panel">
+            <div class="panel-header">
+              <h5 class="mb-0">Text Properties</h5>
             </div>
+            <div class="panel-content">
+              <!-- Show text editing tools when text is selected -->
+              <div v-if="hasActiveText" class="desktop-text-editing">
+                <!-- Text Content -->
+                <div class="form-group mb-4">
+                  <label class="form-label">Text Content</label>
+                  <textarea
+                    v-model="currentTextContent"
+                    @input="updateTextContent"
+                    class="form-control"
+                    rows="3"
+                    placeholder="Enter your text..."
+                  ></textarea>
+                </div>
+
+                <!-- Font Family -->
+                <div class="form-group mb-4">
+                  <label class="form-label">Font Family</label>
+                  <select
+                    v-model="currentFontFamily"
+                    @change="updateFontFamily"
+                    class="form-select"
+                  >
+                    <option value="Arial">Arial</option>
+                    <option value="Helvetica">Helvetica</option>
+                    <option value="Times New Roman">Times New Roman</option>
+                    <option value="Georgia">Georgia</option>
+                    <option value="Verdana">Verdana</option>
+                    <option value="Courier New">Courier New</option>
+                    <option value="Impact">Impact</option>
+                    <option value="Comic Sans MS">Comic Sans MS</option>
+                  </select>
+                </div>
+
+                <!-- Font Size -->
+                <div class="form-group mb-4">
+                  <label class="form-label">Font Size</label>
+                  <div class="d-flex align-items-center gap-3">
+                    <input
+                      v-model.number="currentFontSize"
+                      @input="updateFontSize"
+                      type="range"
+                      class="form-range flex-grow-1"
+                      min="8"
+                      max="200"
+                    />
+                    <span class="badge badge-light">{{ currentFontSize }}px</span>
+                  </div>
+                </div>
+
+                <!-- Font Color -->
+                <div class="form-group mb-4">
+                  <label class="form-label">Font Color</label>
+                  <div class="color-picker-group">
+                    <input
+                      v-model="currentFontColor"
+                      @input="updateFontColor"
+                      type="color"
+                      class="form-control form-control-color me-2"
+                    />
+                    <input
+                      v-model="currentFontColor"
+                      @input="updateFontColor"
+                      type="text"
+                      class="form-control"
+                      placeholder="#000000"
+                    />
+                  </div>
+                </div>
+
+                <!-- Font Style -->
+                <div class="form-group mb-4">
+                  <label class="form-label">Font Style</label>
+                  <div class="btn-group d-flex" role="group">
+                    <button
+                      @click="toggleBold"
+                      :class="{ active: currentFontWeight === 'bold' }"
+                      class="btn btn-outline-secondary"
+                    >
+                      <strong>B</strong>
+                    </button>
+                    <button
+                      @click="toggleItalic"
+                      :class="{ active: currentFontStyle === 'italic' }"
+                      class="btn btn-outline-secondary"
+                    >
+                      <em>I</em>
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Background -->
+                <div class="form-group mb-4">
+                  <label class="form-label">Background</label>
+                  <div class="mb-2">
+                    <div class="form-check">
+                      <input
+                        v-model="hasTextBackground"
+                        @change="toggleTextBackground"
+                        class="form-check-input"
+                        type="checkbox"
+                        id="textBackground"
+                      />
+                      <label class="form-check-label" for="textBackground">
+                        Enable Background
+                      </label>
+                    </div>
+                  </div>
+                  <div v-if="hasTextBackground" class="color-picker-group">
+                    <input
+                      v-model="currentBackgroundColor"
+                      @input="updateBackgroundColor"
+                      type="color"
+                      class="form-control form-control-color me-2"
+                    />
+                    <input
+                      v-model="currentBackgroundColor"
+                      @input="updateBackgroundColor"
+                      type="text"
+                      class="form-control"
+                      placeholder="#ffffff"
+                    />
+                  </div>
+                </div>
+
+                <!-- Opacity -->
+                <div class="form-group mb-4">
+                  <label class="form-label">Opacity</label>
+                  <div class="d-flex align-items-center gap-3">
+                    <input
+                      v-model.number="currentOpacity"
+                      @input="updateOpacity"
+                      type="range"
+                      class="form-range flex-grow-1"
+                      min="0"
+                      max="1"
+                      step="0.1"
+                    />
+                    <span class="badge badge-light">{{ Math.round(currentOpacity * 100) }}%</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Show help text when no text selected -->
+              <div v-else class="text-center py-5">
+                <KTIcon icon-name="information" icon-class="fs-2x text-muted mb-3" />
+                <h5 class="text-muted">No Text Selected</h5>
+                <p class="text-muted mb-4">
+                  Click on a text object or add a new one to edit its properties.
+                </p>
+                <button @click="addNewText" class="btn btn-primary">
+                  <KTIcon icon-name="plus" icon-class="fs-5" />
+                  Add Text
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Desktop Text Editing Panel -->
+      <div v-if="!isMobileView && isCanvasReady" class="text-editing-panel">
+        <div class="panel-header">
+          <h5 class="mb-0">Text Properties</h5>
+        </div>
+        <div class="panel-content">
+          <!-- Show text editing tools when text is selected -->
+          <div v-if="hasActiveText" class="desktop-text-editing">
+            <!-- Text Content -->
+            <div class="form-group mb-4">
+              <label class="form-label">Text Content</label>
+              <textarea
+                v-model="currentTextContent"
+                @input="updateTextContent"
+                class="form-control"
+                rows="3"
+                placeholder="Enter your text..."
+              ></textarea>
+            </div>
+
+            <!-- Font Family -->
+            <div class="form-group mb-4">
+              <label class="form-label">Font Family</label>
+              <select
+                v-model="currentFontFamily"
+                @change="updateFontFamily"
+                class="form-select"
+              >
+                <option value="Arial">Arial</option>
+                <option value="Helvetica">Helvetica</option>
+                <option value="Times New Roman">Times New Roman</option>
+                <option value="Georgia">Georgia</option>
+                <option value="Verdana">Verdana</option>
+                <option value="Courier New">Courier New</option>
+                <option value="Impact">Impact</option>
+                <option value="Comic Sans MS">Comic Sans MS</option>
+              </select>
+            </div>
+
+            <!-- Font Size -->
+            <div class="form-group mb-4">
+              <label class="form-label">Font Size</label>
+              <div class="d-flex align-items-center gap-3">
+                <input
+                  v-model.number="currentFontSize"
+                  @input="updateFontSize"
+                  type="range"
+                  class="form-range flex-grow-1"
+                  min="8"
+                  max="200"
+                />
+                <span class="badge badge-light">{{ currentFontSize }}px</span>
+              </div>
+            </div>
+
+            <!-- Font Color -->
+            <div class="form-group mb-4">
+              <label class="form-label">Font Color</label>
+              <div class="color-picker-group">
+                <input
+                  v-model="currentFontColor"
+                  @input="updateFontColor"
+                  type="color"
+                  class="form-control form-control-color me-2"
+                />
+                <input
+                  v-model="currentFontColor"
+                  @input="updateFontColor"
+                  type="text"
+                  class="form-control"
+                  placeholder="#000000"
+                />
+              </div>
+            </div>
+
+            <!-- Font Style -->
+            <div class="form-group mb-4">
+              <label class="form-label">Font Style</label>
+              <div class="btn-group d-flex" role="group">
+                <button
+                  @click="toggleBold"
+                  :class="{ active: currentFontWeight === 'bold' }"
+                  class="btn btn-outline-secondary"
+                >
+                  <strong>B</strong>
+                </button>
+                <button
+                  @click="toggleItalic"
+                  :class="{ active: currentFontStyle === 'italic' }"
+                  class="btn btn-outline-secondary"
+                >
+                  <em>I</em>
+                </button>
+              </div>
+            </div>
+
+            <!-- Background -->
+            <div class="form-group mb-4">
+              <label class="form-label">Background</label>
+              <div class="mb-2">
+                <div class="form-check">
+                  <input
+                    v-model="hasTextBackground"
+                    @change="toggleTextBackground"
+                    class="form-check-input"
+                    type="checkbox"
+                    id="textBackground"
+                  />
+                  <label class="form-check-label" for="textBackground">
+                    Enable Background
+                  </label>
+                </div>
+              </div>
+              <div v-if="hasTextBackground" class="color-picker-group">
+                <input
+                  v-model="currentBackgroundColor"
+                  @input="updateBackgroundColor"
+                  type="color"
+                  class="form-control form-control-color me-2"
+                />
+                <input
+                  v-model="currentBackgroundColor"
+                  @input="updateBackgroundColor"
+                  type="text"
+                  class="form-control"
+                  placeholder="#ffffff"
+                />
+              </div>
+            </div>
+
+            <!-- Opacity -->
+            <div class="form-group mb-4">
+              <label class="form-label">Opacity</label>
+              <div class="d-flex align-items-center gap-3">
+                <input
+                  v-model.number="currentOpacity"
+                  @input="updateOpacity"
+                  type="range"
+                  class="form-range flex-grow-1"
+                  min="0"
+                  max="1"
+                  step="0.1"
+                />
+                <span class="badge badge-light">{{ Math.round(currentOpacity * 100) }}%</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Show help text when no text selected -->
+          <div v-else class="text-center py-5">
+            <KTIcon icon-name="information" icon-class="fs-2x text-muted mb-3" />
+            <h5 class="text-muted">No Text Selected</h5>
+            <p class="text-muted mb-4">
+              Click on a text object or add a new one to edit its properties.
+            </p>
+            <button @click="addNewText" class="btn btn-primary">
+              <KTIcon icon-name="plus" icon-class="fs-5" />
+              Add Text
+            </button>
           </div>
         </div>
       </div>
