@@ -3,8 +3,8 @@
     class="text-overlay-editor"
     :class="{ 'mobile-editor': isMobileView, 'text-editing-mode': isTextEditingMode }"
   >
-    <!-- Desktop Header (hidden on mobile after thumbnail loads) -->
-    <div v-if="!isMobileView || !thumbnailUrl" class="editor-header mb-6">
+    <!-- Desktop Header (hidden after thumbnail loads) -->
+    <div v-if="!thumbnailUrl" class="editor-header mb-6">
       <h1 class="display-6 fw-bold text-gray-900 mb-2">Text Overlay Editor</h1>
       <p class="text-muted fs-5 mb-0">
         Design text overlays for your video segments using Fabric.js canvas editor
@@ -240,7 +240,9 @@
       </div>
 
       <!-- Desktop Editor Layout -->
+      <!-- Desktop Editor Layout: Canvas Left, Panel Right -->
       <div v-if="!isMobileView" class="editor-layout card">
+        <!-- Canvas Container (Left Side) -->
         <div class="canvas-container">
           <!-- Canvas will be mounted here -->
           <canvas
@@ -258,6 +260,163 @@
               <span class="visually-hidden">Loading canvas...</span>
             </div>
             <p class="text-muted mt-3">Initializing Fabric.js canvas...</p>
+          </div>
+        </div>
+
+        <!-- Text Editing Panel (Right Side) -->
+        <div v-if="isCanvasReady" class="text-editing-panel">
+          <div class="panel-header">
+            <h5 class="mb-0">Text Properties</h5>
+          </div>
+          <div class="panel-content">
+            <!-- Show text editing tools when text is selected -->
+            <div v-if="hasActiveText" class="desktop-text-editing">
+              <!-- Text Content -->
+              <div class="form-group mb-4">
+                <label class="form-label">Text Content</label>
+                <textarea
+                  v-model="currentTextContent"
+                  @input="updateTextContent"
+                  class="form-control"
+                  rows="3"
+                  placeholder="Enter your text..."
+                ></textarea>
+              </div>
+
+              <!-- Font Family -->
+              <div class="form-group mb-4">
+                <label class="form-label">Font Family</label>
+                <select v-model="currentFontFamily" @change="updateFontFamily" class="form-select">
+                  <option value="Arial">Arial</option>
+                  <option value="Helvetica">Helvetica</option>
+                  <option value="Times New Roman">Times New Roman</option>
+                  <option value="Georgia">Georgia</option>
+                  <option value="Verdana">Verdana</option>
+                  <option value="Courier New">Courier New</option>
+                  <option value="Impact">Impact</option>
+                  <option value="Comic Sans MS">Comic Sans MS</option>
+                </select>
+              </div>
+
+              <!-- Font Size -->
+              <div class="form-group mb-4">
+                <label class="form-label">Font Size</label>
+                <div class="d-flex align-items-center gap-3">
+                  <input
+                    v-model.number="currentFontSize"
+                    @input="updateFontSize"
+                    type="range"
+                    class="form-range flex-grow-1"
+                    min="8"
+                    max="200"
+                  />
+                  <span class="badge badge-light">{{ currentFontSize }}px</span>
+                </div>
+              </div>
+
+              <!-- Font Color -->
+              <div class="form-group mb-4">
+                <label class="form-label">Font Color</label>
+                <div class="color-picker-group">
+                  <input
+                    v-model="currentFontColor"
+                    @input="updateFontColor"
+                    type="color"
+                    class="form-control form-control-color me-2"
+                  />
+                  <input
+                    v-model="currentFontColor"
+                    @input="updateFontColor"
+                    type="text"
+                    class="form-control"
+                    placeholder="#000000"
+                  />
+                </div>
+              </div>
+
+              <!-- Font Style -->
+              <div class="form-group mb-4">
+                <label class="form-label">Font Style</label>
+                <div class="btn-group d-flex" role="group">
+                  <button
+                    @click="toggleBold"
+                    :class="{ active: currentFontWeight === 'bold' }"
+                    class="btn btn-outline-secondary"
+                  >
+                    <strong>B</strong>
+                  </button>
+                  <button
+                    @click="toggleItalic"
+                    :class="{ active: currentFontStyle === 'italic' }"
+                    class="btn btn-outline-secondary"
+                  >
+                    <em>I</em>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Background -->
+              <div class="form-group mb-4">
+                <label class="form-label">Background</label>
+                <div class="mb-2">
+                  <div class="form-check">
+                    <input
+                      v-model="hasTextBackground"
+                      @change="toggleTextBackground"
+                      class="form-check-input"
+                      type="checkbox"
+                      id="textBackground"
+                    />
+                    <label class="form-check-label" for="textBackground"> Enable Background </label>
+                  </div>
+                </div>
+                <div v-if="hasTextBackground" class="color-picker-group">
+                  <input
+                    v-model="currentBackgroundColor"
+                    @input="updateBackgroundColor"
+                    type="color"
+                    class="form-control form-control-color me-2"
+                  />
+                  <input
+                    v-model="currentBackgroundColor"
+                    @input="updateBackgroundColor"
+                    type="text"
+                    class="form-control"
+                    placeholder="#ffffff"
+                  />
+                </div>
+              </div>
+
+              <!-- Opacity -->
+              <div class="form-group mb-4">
+                <label class="form-label">Opacity</label>
+                <div class="d-flex align-items-center gap-3">
+                  <input
+                    v-model.number="currentOpacity"
+                    @input="updateOpacity"
+                    type="range"
+                    class="form-range flex-grow-1"
+                    min="0"
+                    max="1"
+                    step="0.1"
+                  />
+                  <span class="badge badge-light">{{ Math.round(currentOpacity * 100) }}%</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Show help text when no text selected -->
+            <div v-else class="text-center py-5">
+              <KTIcon icon-name="information" icon-class="fs-2x text-muted mb-3" />
+              <h5 class="text-muted">No Text Selected</h5>
+              <p class="text-muted mb-4">
+                Click on a text object or add a new one to edit its properties.
+              </p>
+              <button @click="addNewText" class="btn btn-primary">
+                <KTIcon icon-name="plus" icon-class="fs-5" />
+                Add Text
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -433,162 +592,6 @@
         </div>
       </div>
 
-      <!-- Desktop Text Editing Panel -->
-      <div v-if="!isMobileView && isCanvasReady" class="text-editing-panel">
-        <div class="panel-header">
-          <h5 class="mb-0">Text Properties</h5>
-        </div>
-        <div class="panel-content">
-          <!-- Show text editing tools when text is selected -->
-          <div v-if="hasActiveText" class="desktop-text-editing">
-            <!-- Text Content -->
-            <div class="form-group mb-4">
-              <label class="form-label">Text Content</label>
-              <textarea
-                v-model="currentTextContent"
-                @input="updateTextContent"
-                class="form-control"
-                rows="3"
-                placeholder="Enter your text..."
-              ></textarea>
-            </div>
-
-            <!-- Font Family -->
-            <div class="form-group mb-4">
-              <label class="form-label">Font Family</label>
-              <select v-model="currentFontFamily" @change="updateFontFamily" class="form-select">
-                <option value="Arial">Arial</option>
-                <option value="Helvetica">Helvetica</option>
-                <option value="Times New Roman">Times New Roman</option>
-                <option value="Georgia">Georgia</option>
-                <option value="Verdana">Verdana</option>
-                <option value="Courier New">Courier New</option>
-                <option value="Impact">Impact</option>
-                <option value="Comic Sans MS">Comic Sans MS</option>
-              </select>
-            </div>
-
-            <!-- Font Size -->
-            <div class="form-group mb-4">
-              <label class="form-label">Font Size</label>
-              <div class="d-flex align-items-center gap-3">
-                <input
-                  v-model.number="currentFontSize"
-                  @input="updateFontSize"
-                  type="range"
-                  class="form-range flex-grow-1"
-                  min="8"
-                  max="200"
-                />
-                <span class="badge badge-light">{{ currentFontSize }}px</span>
-              </div>
-            </div>
-
-            <!-- Font Color -->
-            <div class="form-group mb-4">
-              <label class="form-label">Font Color</label>
-              <div class="color-picker-group">
-                <input
-                  v-model="currentFontColor"
-                  @input="updateFontColor"
-                  type="color"
-                  class="form-control form-control-color me-2"
-                />
-                <input
-                  v-model="currentFontColor"
-                  @input="updateFontColor"
-                  type="text"
-                  class="form-control"
-                  placeholder="#000000"
-                />
-              </div>
-            </div>
-
-            <!-- Font Style -->
-            <div class="form-group mb-4">
-              <label class="form-label">Font Style</label>
-              <div class="btn-group d-flex" role="group">
-                <button
-                  @click="toggleBold"
-                  :class="{ active: currentFontWeight === 'bold' }"
-                  class="btn btn-outline-secondary"
-                >
-                  <strong>B</strong>
-                </button>
-                <button
-                  @click="toggleItalic"
-                  :class="{ active: currentFontStyle === 'italic' }"
-                  class="btn btn-outline-secondary"
-                >
-                  <em>I</em>
-                </button>
-              </div>
-            </div>
-
-            <!-- Background -->
-            <div class="form-group mb-4">
-              <label class="form-label">Background</label>
-              <div class="mb-2">
-                <div class="form-check">
-                  <input
-                    v-model="hasTextBackground"
-                    @change="toggleTextBackground"
-                    class="form-check-input"
-                    type="checkbox"
-                    id="textBackground"
-                  />
-                  <label class="form-check-label" for="textBackground"> Enable Background </label>
-                </div>
-              </div>
-              <div v-if="hasTextBackground" class="color-picker-group">
-                <input
-                  v-model="currentBackgroundColor"
-                  @input="updateBackgroundColor"
-                  type="color"
-                  class="form-control form-control-color me-2"
-                />
-                <input
-                  v-model="currentBackgroundColor"
-                  @input="updateBackgroundColor"
-                  type="text"
-                  class="form-control"
-                  placeholder="#ffffff"
-                />
-              </div>
-            </div>
-
-            <!-- Opacity -->
-            <div class="form-group mb-4">
-              <label class="form-label">Opacity</label>
-              <div class="d-flex align-items-center gap-3">
-                <input
-                  v-model.number="currentOpacity"
-                  @input="updateOpacity"
-                  type="range"
-                  class="form-range flex-grow-1"
-                  min="0"
-                  max="1"
-                  step="0.1"
-                />
-                <span class="badge badge-light">{{ Math.round(currentOpacity * 100) }}%</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- Show help text when no text selected -->
-          <div v-else class="text-center py-5">
-            <KTIcon icon-name="information" icon-class="fs-2x text-muted mb-3" />
-            <h5 class="text-muted">No Text Selected</h5>
-            <p class="text-muted mb-4">
-              Click on a text object or add a new one to edit its properties.
-            </p>
-            <button @click="addNewText" class="btn btn-primary">
-              <KTIcon icon-name="plus" icon-class="fs-5" />
-              Add Text
-            </button>
-          </div>
-        </div>
-      </div>
     </div>
   </div>
 
