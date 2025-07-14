@@ -93,6 +93,9 @@ export function useTextOverlay() {
       // Set up event handlers
       setupEventHandlers()
 
+      // Force canvas to recalculate all coordinates for mobile compatibility
+      canvas.value.calcOffset()
+
       isCanvasReady.value = true
       console.log('✅ Canvas initialized successfully')
     } catch (error) {
@@ -344,9 +347,13 @@ export function useTextOverlay() {
     }
 
     try {
-      // Calculate default position based on canvas size (center of canvas)
-      const defaultLeft = left !== undefined ? left : canvasSize.value.width / 2
-      const defaultTop = top !== undefined ? top : canvasSize.value.height / 2
+      // Calculate default position - offset to visually center the text
+      // Since we're using left/top origin, we need to account for text dimensions
+      const estimatedTextWidth = (options.fontSize || 24) * (text.length * 0.6) // Rough estimate
+      const estimatedTextHeight = (options.fontSize || 24)
+      
+      const defaultLeft = left !== undefined ? left : (canvasSize.value.width / 2) - (estimatedTextWidth / 2)
+      const defaultTop = top !== undefined ? top : (canvasSize.value.height / 2) - (estimatedTextHeight / 2)
 
       const textObj = new Text(text, {
         left: defaultLeft,
@@ -355,8 +362,8 @@ export function useTextOverlay() {
         fontSize: options.fontSize || 24,
         fill: options.fill || '#000000',
         fontWeight: options.fontWeight || 'normal',
-        originX: 'center', // Center the text horizontally at the position
-        originY: 'center', // Center the text vertically at the position
+        originX: 'left', // Use left origin for better control positioning
+        originY: 'top', // Use top origin for better control positioning
         selectable: true, // Ensure text object is selectable
         movable: true, // Ensure text object can be moved
         editable: true, // Ensure text object can be edited
@@ -367,6 +374,9 @@ export function useTextOverlay() {
 
       canvas.value.add(textObj)
       canvas.value.setActiveObject(textObj)
+      
+      // Force coordinate recalculation for proper control positioning
+      textObj.setCoords()
       canvas.value.renderAll()
 
       activeTextObject.value = textObj
@@ -376,8 +386,14 @@ export function useTextOverlay() {
         selectable: textObj.selectable,
         hasControls: textObj.hasControls,
         hasBorders: textObj.hasBorders,
-        evented: textObj.evented
+        evented: textObj.evented,
+        left: textObj.left,
+        top: textObj.top,
+        originX: textObj.originX,
+        originY: textObj.originY
       })
+      console.log('🔍 Canvas size:', canvasSize.value)
+      console.log('🔍 Text object aCoords:', textObj.aCoords)
       return textObj
     } catch (error) {
       console.error('❌ Failed to add text object:', error)
