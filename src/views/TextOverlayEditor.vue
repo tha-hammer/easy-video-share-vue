@@ -259,7 +259,7 @@
             <div class="spinner-border text-primary" role="status">
               <span class="visually-hidden">Loading canvas...</span>
             </div>
-            <p class="text-muted mt-3">Initializing Fabric.js canvas...</p>
+            <p class="text-muted mt-3">Initializing Fabric.js canvas... WOOOOOOOOOOOOOOOOOOOHOOOOOOOOOOOOOOOOOO</p>
           </div>
         </div>
 
