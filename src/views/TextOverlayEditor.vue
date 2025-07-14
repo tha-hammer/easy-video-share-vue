@@ -2087,8 +2087,10 @@ export default defineComponent({
 
 .editor-layout {
   display: flex;
+  flex-direction: row; /* Explicit left-right layout */
   min-height: 500px;
   gap: 0;
+  width: 100%; /* Ensure full width */
 }
 
 .canvas-container {
@@ -2102,15 +2104,21 @@ export default defineComponent({
   position: relative;
   min-width: 0; /* Allow flex item to shrink below content size */
   overflow: hidden; /* Prevent canvas from overflowing */
+  /* Temporary debug aid */
+  border: 2px solid red;
 }
 
 .text-editing-panel {
   width: 320px;
   min-width: 320px; /* Prevent panel from shrinking */
+  flex-shrink: 0; /* Prevent shrinking */
   background: white;
   border-left: 1px solid #dee2e6;
   border-radius: 0 8px 8px 0;
   overflow-y: auto; /* Allow scrolling if content is too tall */
+  height: fit-content; /* Don't force full height */
+  /* Temporary debug aid */
+  border: 2px solid blue;
 }
 
 /* Mobile responsive design */
