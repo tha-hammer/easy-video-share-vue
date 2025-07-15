@@ -1,18 +1,15 @@
 <template>
-  <div
-    class="text-overlay-editor"
-    :class="{ 'mobile-editor': isMobileView, 'text-editing-mode': isTextEditingMode }"
-  >
-    <!-- Desktop Header (hidden after thumbnail loads) -->
-    <div v-if="!thumbnailUrl" class="editor-header mb-6">
+  <div class="text-overlay-editor">
+    <!-- Header -->
+    <div class="editor-header mb-6">
       <h1 class="display-6 fw-bold text-gray-900 mb-2">Text Overlay Editor</h1>
       <p class="text-muted fs-5 mb-0">
         Design text overlays for your video segments using Fabric.js canvas editor
       </p>
     </div>
 
-    <!-- Segment Selection (hidden on mobile after thumbnail loads) -->
-    <div v-if="!isMobileView || !thumbnailUrl" class="segment-selection card mb-6">
+    <!-- Segment Selection -->
+    <div class="segment-selection card mb-6">
       <div class="card-header">
         <h3 class="card-title">Select Video Segment</h3>
       </div>
@@ -49,24 +46,21 @@
             </select>
           </div>
           <div class="col-md-6" v-if="selectedSegment">
-            <!--             <label class="form-label">Segment Details:</label>
+            <label class="form-label">Segment Details:</label>
             <div class="bg-light p-3 rounded">
               <small class="text-muted">
                 <strong>Video ID:</strong> {{ selectedSegment.video_id }}<br />
                 <strong>Duration:</strong> {{ formatDuration(selectedSegment.duration) }}<br />
                 <strong>File Size:</strong> {{ formatFileSize(selectedSegment.file_size) }}
               </small>
-            </div> -->
+            </div>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- Thumbnail Generation (hidden on mobile after thumbnail loads) -->
-    <div
-      v-if="(!isMobileView || !thumbnailUrl) && selectedSegment && !thumbnailUrl"
-      class="thumbnail-generation card mb-6"
-    >
+    <!-- Thumbnail Generation -->
+    <div v-if="selectedSegment && !thumbnailUrl" class="thumbnail-generation card mb-6">
       <div class="card-header">
         <h3 class="card-title">Generate Thumbnail</h3>
       </div>
@@ -96,6 +90,45 @@
           </div>
           <h5>Generating Thumbnail...</h5>
           <p class="text-muted">This may take a few moments.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Status Panel -->
+    <div v-if="selectedSegment && thumbnailUrl" class="status-panel card mb-6">
+      <div class="card-header">
+        <h3 class="card-title">Canvas Status</h3>
+      </div>
+      <div class="card-body">
+        <div class="row g-4">
+          <div class="col-md-3">
+            <div class="status-item">
+              <span class="status-label">Canvas Ready:</span>
+              <span :class="isCanvasReady ? 'text-success' : 'text-warning'">
+                {{ isCanvasReady ? '✅ Ready' : '⏳ Loading...' }}
+              </span>
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div class="status-item">
+              <span class="status-label">Text Objects:</span>
+              <span class="text-info">{{ textObjectCount }}</span>
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div class="status-item">
+              <span class="status-label">Active Text:</span>
+              <span :class="hasActiveText ? 'text-success' : 'text-muted'">
+                {{ hasActiveText ? 'Selected' : 'None' }}
+              </span>
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div class="status-item">
+              <span class="status-label">Canvas Size:</span>
+              <span class="text-info">{{ canvasSize.width }}×{{ canvasSize.height }}</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -173,33 +206,8 @@
     </div>
 
     <!-- Main Editor Area -->
-    <div
-      v-if="selectedSegment && thumbnailUrl"
-      class="editor-area"
-      :class="{ 'mobile-layout': isMobileView }"
-    >
-      <!-- Mobile Header Bar -->
-      <div v-if="isMobileView" class="mobile-header">
-        <button
-          @click="goBackToSegmentSelection"
-          class="btn btn-sm btn-outline-secondary mobile-header-btn"
-        >
-          <KTIcon icon-name="arrow-left" icon-class="fs-6" />
-        </button>
-        <h6 class="mb-0 flex-grow-1 text-center mobile-header-title">
-          {{ selectedSegment.title || `Segment ${selectedSegment.segment_number}` }}
-        </h6>
-        <button
-          @click="saveTextOverlays"
-          class="btn btn-sm btn-success mobile-header-btn"
-          :disabled="!isCanvasReady || textObjectCount === 0 || processingVideo"
-        >
-          <KTIcon :icon-name="processingVideo ? 'hourglass' : 'document-save'" icon-class="fs-6" />
-        </button>
-      </div>
-
-      <!-- Desktop Header -->
-      <div v-if="!isMobileView" class="card-header">
+    <div v-if="selectedSegment && thumbnailUrl" class="editor-area card">
+      <div class="card-header">
         <h3 class="card-title">
           Text Overlay Editor
           <span class="badge badge-light-primary ms-2">
@@ -239,41 +247,80 @@
         </div>
       </div>
 
-      <!-- Desktop Editor Layout -->
-      <!-- Desktop Editor Layout: Canvas Left, Panel Right -->
-      <div v-if="!isMobileView" class="editor-layout card">
-        <!-- Canvas Container (Left Side) -->
-        <div class="canvas-container">
-          <!-- Canvas will be mounted here -->
-          <canvas
-            ref="fabricCanvasEl"
-            :width="canvasSize.width"
-            :height="canvasSize.height"
-            class="fabric-canvas"
-            :style="{ opacity: isCanvasReady ? 1 : 0.3 }"
-            @click="handleCanvasClick"
-          />
+      <div class="card-body p-0">
+        <div class="editor-layout">
+          <!-- Canvas Area -->
+          <div class="canvas-container">
+            <!-- Canvas will be mounted here -->
+            <canvas
+              ref="fabricCanvasEl"
+              :width="canvasSize.width"
+              :height="canvasSize.height"
+              class="fabric-canvas"
+              :style="{ opacity: isCanvasReady ? 1 : 0.3 }"
+            />
 
-          <!-- Loading overlay -->
-          <div v-if="!isCanvasReady" class="loading-overlay">
-            <div class="spinner-border text-primary" role="status">
-              <span class="visually-hidden">Loading canvas...</span>
+            <!-- Loading overlay -->
+            <div v-if="!isCanvasReady" class="loading-overlay">
+              <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading canvas...</span>
+              </div>
+<<<<<<< HEAD
+              <p class="text-muted mt-3">Initializing Fabric.js canvas...</p>
+=======
+              <p class="text-muted mt-3">
+                Initializing Fabric.js canvas... BOOOOOOOOOOOOOOOOOOOOOOOOOOOYAAAAAAAHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+              </p>
             </div>
-            <p class="text-muted mt-3">Initializing Fabric.js canvas... WOOOOOOOOOOOOOOOOOOOHOOOOOOOOOOOOOOOOOO</p>
           </div>
         </div>
 
-        <!-- Text Editing Panel (Right Side) -->
-        <div v-if="isCanvasReady" class="text-editing-panel">
-          <div class="panel-header">
-            <h5 class="mb-0">Text Properties</h5>
+        <!-- Editor Controls (Bottom 1/3 on mobile) -->
+        <div class="controls-section mobile-controls-section">
+          <!-- Mobile Only: Normal Mode: Main Editor Menu -->
+          <div v-if="!isTextEditingMode" class="main-editor-menu mobile-main-menu">
+            <div class="menu-actions">
+              <button
+                @click="addNewText"
+                class="btn btn-primary"
+                :disabled="!isCanvasReady"
+                title="Add Text"
+              >
+                <KTIcon icon-name="plus" icon-class="fs-6" />
+              </button>
+              <button
+                @click="deleteSelectedText"
+                class="btn btn-danger"
+                :disabled="!hasActiveText"
+                title="Delete"
+              >
+                <KTIcon icon-name="trash" icon-class="fs-6" />
+              </button>
+              <button
+                @click="duplicateText"
+                class="btn btn-info"
+                :disabled="!hasActiveText"
+                title="Duplicate"
+              >
+                <KTIcon icon-name="copy" icon-class="fs-6" />
+              </button>
+>>>>>>> bb49b93 (Corrected errors made by Cursor's LLM (missing click)
+            </div>
           </div>
-          <div class="panel-content">
-            <!-- Show text editing tools when text is selected -->
-            <div v-if="hasActiveText" class="desktop-text-editing">
+
+          <!-- Text Editing Panel -->
+          <div v-if="hasActiveText" class="text-editing-panel">
+            <div class="panel-header">
+              <h5 class="mb-0">
+                <KTIcon icon-name="edit" icon-class="fs-4 me-2" />
+                Text Properties
+              </h5>
+            </div>
+
+            <div class="panel-content">
               <!-- Text Content -->
               <div class="form-group mb-4">
-                <label class="form-label">Text Content</label>
+                <label class="form-label fw-bold">Text Content</label>
                 <textarea
                   v-model="currentTextContent"
                   @input="updateTextContent"
@@ -285,7 +332,7 @@
 
               <!-- Font Family -->
               <div class="form-group mb-4">
-                <label class="form-label">Font Family</label>
+                <label class="form-label fw-bold">Font Family</label>
                 <select v-model="currentFontFamily" @change="updateFontFamily" class="form-select">
                   <option value="Arial">Arial</option>
                   <option value="Helvetica">Helvetica</option>
@@ -300,35 +347,43 @@
 
               <!-- Font Size -->
               <div class="form-group mb-4">
-                <label class="form-label">Font Size</label>
-                <div class="d-flex align-items-center gap-3">
+                <label class="form-label fw-bold">Font Size</label>
+                <div class="input-group">
                   <input
                     v-model.number="currentFontSize"
                     @input="updateFontSize"
-                    type="range"
-                    class="form-range flex-grow-1"
+                    type="number"
+                    class="form-control"
                     min="8"
                     max="200"
                   />
-                  <span class="badge badge-light">{{ currentFontSize }}px</span>
+                  <span class="input-group-text">px</span>
                 </div>
+                <input
+                  v-model.number="currentFontSize"
+                  @input="updateFontSize"
+                  type="range"
+                  class="form-range mt-2"
+                  min="8"
+                  max="200"
+                />
               </div>
 
               <!-- Font Color -->
               <div class="form-group mb-4">
-                <label class="form-label">Font Color</label>
+                <label class="form-label fw-bold">Font Color</label>
                 <div class="color-picker-group">
                   <input
                     v-model="currentFontColor"
                     @input="updateFontColor"
                     type="color"
-                    class="form-control form-control-color me-2"
+                    class="form-control form-control-color"
                   />
                   <input
                     v-model="currentFontColor"
                     @input="updateFontColor"
                     type="text"
-                    class="form-control"
+                    class="form-control ms-2"
                     placeholder="#000000"
                   />
                 </div>
@@ -336,8 +391,8 @@
 
               <!-- Font Style -->
               <div class="form-group mb-4">
-                <label class="form-label">Font Style</label>
-                <div class="btn-group d-flex" role="group">
+                <label class="form-label fw-bold">Font Style</label>
+                <div class="btn-group w-100" role="group">
                   <button
                     @click="toggleBold"
                     :class="{ active: currentFontWeight === 'bold' }"
@@ -357,31 +412,29 @@
 
               <!-- Background -->
               <div class="form-group mb-4">
-                <label class="form-label">Background</label>
-                <div class="mb-2">
-                  <div class="form-check">
-                    <input
-                      v-model="hasTextBackground"
-                      @change="toggleTextBackground"
-                      class="form-check-input"
-                      type="checkbox"
-                      id="textBackground"
-                    />
-                    <label class="form-check-label" for="textBackground"> Enable Background </label>
-                  </div>
+                <label class="form-label fw-bold">Text Background</label>
+                <div class="form-check mb-2">
+                  <input
+                    v-model="hasTextBackground"
+                    @change="toggleTextBackground"
+                    class="form-check-input"
+                    type="checkbox"
+                    id="backgroundToggle"
+                  />
+                  <label class="form-check-label" for="backgroundToggle"> Enable Background </label>
                 </div>
                 <div v-if="hasTextBackground" class="color-picker-group">
                   <input
                     v-model="currentBackgroundColor"
                     @input="updateBackgroundColor"
                     type="color"
-                    class="form-control form-control-color me-2"
+                    class="form-control form-control-color"
                   />
                   <input
                     v-model="currentBackgroundColor"
                     @input="updateBackgroundColor"
                     type="text"
-                    class="form-control"
+                    class="form-control ms-2"
                     placeholder="#ffffff"
                   />
                 </div>
@@ -389,24 +442,36 @@
 
               <!-- Opacity -->
               <div class="form-group mb-4">
-                <label class="form-label">Opacity</label>
-                <div class="d-flex align-items-center gap-3">
+                <label class="form-label fw-bold">Opacity</label>
+                <div class="input-group">
                   <input
                     v-model.number="currentOpacity"
                     @input="updateOpacity"
-                    type="range"
-                    class="form-range flex-grow-1"
+                    type="number"
+                    class="form-control"
                     min="0"
                     max="1"
                     step="0.1"
                   />
-                  <span class="badge badge-light">{{ Math.round(currentOpacity * 100) }}%</span>
+                  <span class="input-group-text">%</span>
                 </div>
+                <input
+                  v-model.number="currentOpacity"
+                  @input="updateOpacity"
+                  type="range"
+                  class="form-range mt-2"
+                  min="0"
+                  max="1"
+                  step="0.1"
+                />
               </div>
             </div>
+          </div>
 
-            <!-- Show help text when no text selected -->
-            <div v-else class="text-center py-5">
+<<<<<<< HEAD
+          <!-- Help Text when no text selected -->
+          <div v-else-if="isCanvasReady" class="text-editing-panel">
+            <div class="panel-content text-center py-5">
               <KTIcon icon-name="information" icon-class="fs-2x text-muted mb-3" />
               <h5 class="text-muted">No Text Selected</h5>
               <p class="text-muted mb-4">
@@ -415,188 +480,157 @@
               <button @click="addNewText" class="btn btn-primary">
                 <KTIcon icon-name="plus" icon-class="fs-5" />
                 Add Text
+=======
+          <!-- Show help text when no text selected -->
+          <div v-else class="text-center py-5">
+            <KTIcon icon-name="information" icon-class="fs-2x text-muted mb-3" />
+            <h5 class="text-muted">No Text Selected</h5>
+            <p class="text-muted mb-4">
+              Click on a text object or add a new one to edit its properties.
+            </p>
+            <button @click="addNewText" class="btn btn-primary">
+              <KTIcon icon-name="plus" icon-class="fs-5" />
+              Add Text
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Mobile Text Editing Panel -->
+  <div v-if="isMobileView && isCanvasReady" class="mobile-text-editing-panel">
+    <!-- Text Input Bar -->
+    <div class="mobile-text-input-bar">
+      <div class="d-flex align-items-center gap-2">
+        <input
+          v-model="currentTextContent"
+          @input="updateTextContent"
+          type="text"
+          class="form-control mobile-text-input"
+          placeholder="Enter your text..."
+        />
+        <button
+          @click="exitTextEditingMode"
+          class="btn btn-sm btn-outline-secondary mobile-expand-btn"
+          title="Close Text Editor"
+        >
+          <KTIcon icon-name="cross" icon-class="fs-6" />
+        </button>
+        <button
+          @click="confirmTextEdit"
+          class="btn btn-sm btn-success mobile-confirm-btn"
+          title="Confirm Text"
+        >
+          <KTIcon icon-name="check" icon-class="fs-6" />
+        </button>
+      </div>
+    </div>
+
+    <!-- Tab Navigation -->
+    <div class="mobile-tab-nav">
+      <ul class="nav nav-tabs mobile-nav-tabs" role="tablist">
+        <li class="nav-item" role="presentation">
+          <button
+            class="nav-link"
+            :class="{ active: activeTab === 'fonts' }"
+            @click="activeTab = 'fonts'"
+            type="button"
+            role="tab"
+          >
+            Fonts
+          </button>
+        </li>
+        <li class="nav-item" role="presentation">
+          <button
+            class="nav-link"
+            :class="{ active: activeTab === 'styles' }"
+            @click="activeTab = 'styles'"
+            type="button"
+            role="tab"
+          >
+            Styles
+          </button>
+        </li>
+        <li class="nav-item" role="presentation">
+          <button
+            class="nav-link"
+            :class="{ active: activeTab === 'effects' }"
+            @click="activeTab = 'effects'"
+            type="button"
+            role="tab"
+          >
+            Effects
+          </button>
+        </li>
+      </ul>
+    </div>
+
+    <!-- Tab Content -->
+    <div class="mobile-tab-content">
+      <!-- Fonts Tab -->
+      <div v-if="activeTab === 'fonts'" class="tab-pane active">
+        <div class="row g-2">
+          <div class="col-6" v-for="font in fontOptions" :key="font">
+            <div
+              class="mobile-font-option"
+              :class="{ active: currentFontFamily === font }"
+              @click="selectFont(font)"
+            >
+              <span :style="{ fontFamily: font }">{{ font }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Styles Tab -->
+      <div v-if="activeTab === 'styles'" class="tab-pane active">
+        <div class="row g-2">
+          <!-- Font Size -->
+          <div class="col-12 mb-3">
+            <label class="form-label">Font Size</label>
+            <div class="d-flex align-items-center gap-3">
+              <input
+                v-model.number="currentFontSize"
+                @input="updateFontSize"
+                type="range"
+                class="form-range flex-grow-1"
+                min="8"
+                max="200"
+              />
+              <span class="badge badge-light">{{ currentFontSize }}px</span>
+            </div>
+          </div>
+
+          <!-- Font Color -->
+          <div class="col-6">
+            <label class="form-label">Color</label>
+            <input
+              v-model="currentFontColor"
+              @input="updateFontColor"
+              type="color"
+              class="form-control form-control-color"
+            />
+          </div>
+
+          <!-- Font Style -->
+          <div class="col-6">
+            <label class="form-label">Style</label>
+            <div class="btn-group d-flex" role="group">
+              <button
+                @click="toggleBold"
+                :class="{ active: currentFontWeight === 'bold' }"
+                class="btn btn-outline-secondary"
+              >
+                <strong>B</strong>
+>>>>>>> bb49b93 (Corrected errors made by Cursor's LLM (missing click)
               </button>
             </div>
           </div>
         </div>
       </div>
-
-      <!-- Mobile Editor Layout -->
-      <div v-else class="editor-content mobile-editor-content">
-        <!-- Thumbnail/Canvas Area (Top 2/3 on mobile) -->
-        <div class="canvas-section mobile-canvas-section">
-          <div class="canvas-container">
-            <!-- Canvas will be mounted here -->
-            <canvas
-              ref="fabricCanvasEl"
-              :width="canvasSize.width"
-              :height="canvasSize.height"
-              class="fabric-canvas"
-              :style="{ opacity: isCanvasReady ? 1 : 0.3 }"
-              @click="handleCanvasClick"
-            />
-
-            <!-- Loading overlay -->
-            <div v-if="!isCanvasReady" class="loading-overlay">
-              <div class="spinner-border text-primary" role="status">
-                <span class="visually-hidden">Loading canvas...</span>
-              </div>
-              <p class="text-muted mt-3">
-                Initializing Fabric.js canvas... BOOOOOOOOOOOOOOOOOOOOOOOOOOOYAAAAAAAHHHHHHHHHHHHHHHHHHHHHHHHHHHH
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <!-- Editor Controls (Bottom 1/3 on mobile) -->
-        <div class="controls-section mobile-controls-section">
-
-
-          <!-- Mobile Normal Mode: Object Management -->
-          <div v-if="!isTextEditingMode" class="mobile-normal-mode">
-            <!-- Action Bar -->
-            <div class="mobile-action-bar">
-              <div class="d-flex align-items-center gap-2 p-3">
-                <button
-                  @click.stop="addNewText"
-                  class="btn btn-primary flex-1"
-                  :disabled="!isCanvasReady"
-                  title="Add Text"
-                >
-                  <KTIcon icon-name="plus" icon-class="fs-6 me-2" />
-                  Add Text
-                </button>
-                <button
-                  @click="deleteSelectedText"
-                  class="btn btn-danger"
-                  :disabled="!hasActiveText"
-                  title="Delete"
-                >
-                  <KTIcon icon-name="trash" icon-class="fs-6" />
-                </button>
-                <button
-                  @click="duplicateText"
-                  class="btn btn-info"
-                  :disabled="!hasActiveText"
-                  title="Duplicate"
-                >
-                  <KTIcon icon-name="copy" icon-class="fs-6" />
-                </button>
-              </div>
-            </div>
-
-            <!-- Text Objects List -->
-            <div class="mobile-objects-list">
-              <div class="p-3">
-                <h6 class="mb-2">Text Objects ({{ textObjectCount }})</h6>
-                <div v-if="textObjectCount === 0" class="text-center py-4 text-muted">
-                  <KTIcon icon-name="text" icon-class="fs-2x mb-2" />
-                  <p class="mb-0">No text objects yet</p>
-                  <small>Tap "Add Text" to create your first text overlay</small>
-                </div>
-                <div v-else class="text-muted">
-                  <p class="mb-0">Tap a text object on the canvas to edit it</p>
-                </div>
-              </div>
-            </div>
-
-          </div>
-
-          <!-- Mobile Only: Text Editing Mode: Text Input + Text Tools -->
-          <!-- Mobile Editing Mode: Text Input and Tools -->
-          <div v-if="isTextEditingMode" class="mobile-editing-mode">
-            <!-- Text Input Bar -->
-            <div class="mobile-text-input-bar">
-              <div class="d-flex align-items-center gap-2 p-3">
-                <button @click.stop="exitTextEditingMode" class="btn btn-outline-secondary btn-sm">
-                  <KTIcon icon-name="arrow-left" icon-class="fs-6" />
-                </button>
-                <input
-                  ref="textContentInput"
-                  v-model="currentTextContent"
-                  @input="updateTextContent"
-                  class="form-control mobile-text-input"
-                  placeholder="Enter your text..."
-                  type="text"
-                />
-                <button @click.stop="confirmTextEdit" class="btn btn-primary btn-sm">
-                  <KTIcon icon-name="check" icon-class="fs-6" />
-                </button>
-              </div>
-            </div>
-
-            <!-- Text Editing Tools -->
-            <div class="mobile-text-tools">
-              <div class="p-3">
-                <!-- Font and Size Row -->
-                <div class="tool-row mb-3">
-                  <div class="tool-group flex-1">
-                    <label class="tool-label">Font</label>
-                    <select v-model="currentFontFamily" @change="updateFontFamily" class="form-select form-select-sm">
-                      <option value="Arial">Arial</option>
-                      <option value="Helvetica">Helvetica</option>
-                      <option value="Times New Roman">Times New Roman</option>
-                      <option value="Georgia">Georgia</option>
-                    </select>
-                  </div>
-                  <div class="tool-group">
-                    <label class="tool-label">Size</label>
-                    <div class="size-controls">
-                      <input
-                        v-model.number="currentFontSize"
-                        @input="updateFontSize"
-                        type="range"
-                        class="form-range"
-                        min="12"
-                        max="100"
-                      />
-                      <span class="size-value">{{ currentFontSize }}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <!-- Style and Color Row -->
-                <div class="tool-row">
-                  <div class="tool-group">
-                    <label class="tool-label">Style</label>
-                    <div class="btn-group btn-group-sm" role="group">
-                      <button
-                        @click="toggleBold"
-                        :class="{ active: currentFontWeight === 'bold' }"
-                        class="btn btn-outline-secondary"
-                      >
-                        <strong>B</strong>
-                      </button>
-                      <button
-                        @click="toggleItalic"
-                        :class="{ active: currentFontStyle === 'italic' }"
-                        class="btn btn-outline-secondary"
-                      >
-                        <em>I</em>
-                      </button>
-                    </div>
-                  </div>
-                  <div class="tool-group">
-                    <label class="tool-label">Color</label>
-                    <input
-                      v-model="currentFontColor"
-                      @input="updateFontColor"
-                      type="color"
-                      class="form-control form-control-color form-control-sm"
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
     </div>
   </div>
-
-  <!-- Mobile Text Editing Panel -->
-
 </template>
 
 <script lang="ts">
@@ -641,7 +675,11 @@ export default defineComponent({
       removeTextObject,
       dispose,
       // FFmpeg translation functions
+      extractTextCoordinates,
       extractTextOverlaysData,
+      convertAllTextToFFmpegFilters,
+      generateFFmpegCommand,
+      canvasToVideoCoordinates,
     } = useTextOverlay()
 
     // Text editing reactive properties
@@ -654,23 +692,6 @@ export default defineComponent({
     const hasTextBackground = ref(false)
     const currentBackgroundColor = ref('#ffffff')
     const currentOpacity = ref(1)
-
-    // Collapsible sections state
-    const collapsedSections = ref<Record<string, boolean>>({
-      'font-family': true,
-      'font-size': true,
-      'font-color': true,
-      'font-style': true,
-      background: true,
-      opacity: true,
-    })
-
-    // Toggle collapse function
-    const toggleCollapse = (section: string) => {
-      if (section in collapsedSections.value) {
-        collapsedSections.value[section] = !collapsedSections.value[section]
-      }
-    }
 
     // Auth store
     const authStore = useAuthStore()
@@ -735,11 +756,6 @@ export default defineComponent({
 
         // Initialize canvas with the thumbnail
         await initializeEditor()
-
-        // Add mobile class when thumbnail is generated
-        if (isMobileView.value) {
-          document.body.classList.add('mobile-text-editor')
-        }
       } catch (error) {
         console.error('❌ Failed to generate thumbnail:', error)
 
@@ -767,89 +783,11 @@ export default defineComponent({
         if (selectedSegment.value.thumbnail_url) {
           thumbnailUrl.value = selectedSegment.value.thumbnail_url
           initializeEditor()
-
-          // Add mobile class when thumbnail is loaded
-          if (isMobileView.value) {
-            document.body.classList.add('mobile-text-editor')
-          }
         }
       }
     }
 
-    // Dynamic canvas sizing with viewport constraints
-    const calculateCanvasSize = () => {
-      const viewport = {
-        width: window.innerWidth,
-        height: window.innerHeight,
-      }
-
-      // Check if we're on mobile (layout changes to vertical)
-      const isMobile = viewport.width <= 768
-      const isTablet = viewport.width > 768 && viewport.width <= 1024
-
-      // Video aspect ratio (vertical format: 9:16)
-      const videoAspectRatio = 1080 / 1920 // 0.5625
-
-      let availableWidth, availableHeight, textPanelWidth
-
-      if (isMobile) {
-        // Mobile: vertical layout, text panel below canvas
-        textPanelWidth = 0 // No side panel on mobile
-        const margins = 16 // Minimal margins for mobile
-        availableWidth = viewport.width - margins
-
-        // Calculate available height based on mobile layout like reference
-        const headerHeight = 40
-        const controlsMinHeight = isTextEditingMode.value ? 250 : 200
-        availableHeight = viewport.height - headerHeight - controlsMinHeight - margins
-
-        // Canvas is limited to about 50% of viewport height (like reference app)
-        availableHeight = Math.min(availableHeight, viewport.height * 0.5)
-      } else if (isTablet) {
-        // Tablet: horizontal layout with smaller text panel
-        textPanelWidth = 280
-        const margins = 60
-        availableWidth = viewport.width - textPanelWidth - margins
-        availableHeight = viewport.height - 400
-      } else {
-        // Desktop: horizontal layout with full text panel
-        textPanelWidth = 320
-        const margins = 80
-        availableWidth = viewport.width - textPanelWidth - margins
-        availableHeight = viewport.height - 400
-      }
-
-      // Calculate maximum canvas size that fits in viewport
-      let maxCanvasWidth = Math.min(availableWidth, isMobile ? 350 : 800) // Smaller for mobile like reference
-      let maxCanvasHeight = Math.min(availableHeight, isMobile ? 500 : 1200) // Smaller for mobile like reference
-
-      // Ensure minimum usable size
-      maxCanvasWidth = Math.max(maxCanvasWidth, isMobile ? 250 : 400)
-      maxCanvasHeight = Math.max(maxCanvasHeight, isMobile ? 300 : 600)
-
-      // Calculate canvas size maintaining aspect ratio
-      let canvasWidth = maxCanvasWidth
-      let canvasHeight = maxCanvasWidth / videoAspectRatio
-
-      // If height exceeds available space, scale down
-      if (canvasHeight > maxCanvasHeight) {
-        canvasHeight = maxCanvasHeight
-        canvasWidth = maxCanvasHeight * videoAspectRatio
-      }
-
-      // Ensure width doesn't exceed available space
-      if (canvasWidth > maxCanvasWidth) {
-        canvasWidth = maxCanvasWidth
-        canvasHeight = maxCanvasWidth / videoAspectRatio
-      }
-
-      return {
-        width: Math.floor(canvasWidth),
-        height: Math.floor(canvasHeight),
-      }
-    }
-
-    // Canvas initialization with dynamic sizing
+    // Canvas initialization
     const initializeEditor = async () => {
       if (!thumbnailUrl.value || !selectedSegment.value) return
 
@@ -866,33 +804,25 @@ export default defineComponent({
       console.log('🎨 Initializing Text Overlay Editor')
       console.log('🖼️ Using thumbnail:', thumbnailUrl.value)
 
-      // Calculate dynamic canvas size based on viewport
-      const dynamicCanvasSize = calculateCanvasSize()
-      console.log('📐 Dynamic canvas size:', dynamicCanvasSize)
-
-      try {
-        await initializeCanvas(
-          fabricCanvasEl.value,
-          thumbnailUrl.value,
-          1080, // Video width (original)
-          1920, // Video height (original)
-          dynamicCanvasSize.width, // Dynamic max canvas width
-          dynamicCanvasSize.height, // Dynamic max canvas height
-        )
-        console.log('🎯 After initializeCanvas, isCanvasReady:', isCanvasReady.value)
-      } catch (error) {
-        console.error('❌ initializeCanvas failed:', error)
-      }
+      await initializeCanvas(
+        fabricCanvasEl.value,
+        thumbnailUrl.value,
+        1080, // Default video width - could be enhanced to get from segment metadata
+        1920, // Default video height - could be enhanced to get from segment metadata
+        540, // max canvas width (scaled down for display)
+        960, // max canvas height (scaled down for display)
+      )
     }
 
     // Text object management
     const addNewText = async () => {
-      const startTime = Date.now()
-      console.log('🎯 addNewText START:', startTime)
-      console.trace('🎯 addNewText call stack')
-      alert('🎯 addNewText function called!')
+<<<<<<< HEAD
+      const textObj = await addTextObject('Sample Text')
+      if (textObj) {
+        console.log('✅ Text object added successfully')
+=======
       console.log('🎯 addNewText called (Mobile mode:', isMobileView.value, ')')
-      console.log('🎯 Canvas ready BABY YEAHHH:', isCanvasReady.value)
+      console.log('🎯 Canvas ready:', isCanvasReady.value)
       console.log('🎯 Canvas exists:', !!canvas.value)
       console.log('🎯 addTextObject function exists:', typeof addTextObject)
 
@@ -908,7 +838,7 @@ export default defineComponent({
 
       try {
         console.log('🎯 Calling addTextObject...')
-        const textObj = await addTextObject('Enter Text...')
+        const textObj = await addTextObject('Sample Text')
         console.log('🎯 addTextObject returned:', !!textObj)
 
         if (textObj) {
@@ -967,10 +897,8 @@ export default defineComponent({
         }
       } catch (error) {
         console.error('❌ Error in addNewText:', error)
+>>>>>>> bb49b93 (Corrected errors made by Cursor's LLM (missing click)
       }
-
-      const endTime = Date.now()
-      console.log('🎯 addNewText END:', endTime, 'Duration:', endTime - startTime, 'ms')
     }
 
     const deleteSelectedText = () => {
@@ -984,6 +912,8 @@ export default defineComponent({
       if (!activeTextObject.value) return
 
       const originalText = activeTextObject.value
+<<<<<<< HEAD
+=======
       // Calculate offset that keeps the duplicated text visible on canvas
       const offsetX = 20
       const offsetY = 20
@@ -1000,10 +930,11 @@ export default defineComponent({
         newTop = 50 // Reset to top with padding
       }
 
+>>>>>>> bb49b93 (Corrected errors made by Cursor's LLM (missing click)
       const newText = await addTextObject(
         originalText.text || 'Duplicated Text',
-        newLeft,
-        newTop,
+        (originalText.left || 0) + 20,
+        (originalText.top || 0) + 20,
         {
           fontSize: originalText.fontSize,
           fontFamily: originalText.fontFamily,
@@ -1131,10 +1062,6 @@ export default defineComponent({
 
             // Get the processed video URL from the job status response
             try {
-              console.log('🔍 Full job status response:', JSON.stringify(status, null, 2))
-              console.log('🔍 status.output_urls:', status.output_urls)
-              console.log('🔍 typeof status.output_urls:', typeof status.output_urls)
-              
               if (status.output_urls && status.output_urls.length > 0) {
                 // Use the first processed video URL from the job status response
                 processedVideoUrl.value = status.output_urls[0]
@@ -1275,39 +1202,14 @@ export default defineComponent({
       return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
     }
 
-    // Debounced window resize handler for dynamic canvas sizing
-    let resizeTimeout: NodeJS.Timeout | null = null
+    // Lifecycle
+    onMounted(() => {
+      loadSegments()
+    })
 
-    const handleWindowResize = () => {
-      // Update window width immediately for mobile detection
-      updateWindowWidth()
-
-      // Clear existing timeout
-      if (resizeTimeout) {
-        clearTimeout(resizeTimeout)
-      }
-
-      // Debounce resize events to prevent excessive recalculations
-      resizeTimeout = setTimeout(() => {
-        if (isCanvasReady.value && canvas.value) {
-          console.log('🔄 Window resized, recalculating canvas size...')
-          const newCanvasSize = calculateCanvasSize()
-
-          // Update canvas dimensions
-          canvas.value.setDimensions({
-            width: newCanvasSize.width,
-            height: newCanvasSize.height,
-          })
-
-          // Update reactive canvas size
-          canvasSize.value = newCanvasSize
-
-          console.log('✅ Canvas resized to:', newCanvasSize)
-        }
-      }, 250) // 250ms debounce delay
-    }
-
-    // Lifecycle hooks are handled below with mobile functionality
+    onUnmounted(() => {
+      dispose()
+    })
 
     // Download processed video
     const downloadProcessedVideo = async () => {
@@ -1334,6 +1236,8 @@ export default defineComponent({
       }
     }
 
+<<<<<<< HEAD
+=======
     // New methods for mobile/desktop layout
     const windowWidth = ref(window.innerWidth)
 
@@ -1376,15 +1280,8 @@ export default defineComponent({
     }
 
     const exitTextEditingMode = () => {
-      const exitTime = Date.now()
-      console.log('🚪 exitTextEditingMode START:', exitTime)
-      console.trace('🚪 exitTextEditingMode call stack')
-      alert('🚪 exitTextEditingMode called!')
-      console.log('🚪 Before exit - isTextEditingMode:', isTextEditingMode.value)
       isTextEditingMode.value = false
-      console.log('🚪 After exit - isTextEditingMode:', isTextEditingMode.value)
       textContentInput.value?.blur()
-      console.log('🚪 exitTextEditingMode END:', Date.now())
     }
 
     const confirmTextEdit = () => {
@@ -1500,48 +1397,13 @@ export default defineComponent({
 
     // Handle clicks outside text input to exit text editing mode
     const handleDocumentClick = (event: Event) => {
-      const clickTime = Date.now()
-      console.log('📄 handleDocumentClick fired:', clickTime)
-      console.log('📄 Target element:', event.target)
-      console.log('📄 Target tagName:', (event.target as HTMLElement)?.tagName)
-      console.log('📄 Target className:', (event.target as HTMLElement)?.className)
-      console.log('📄 isTextEditingMode:', isTextEditingMode.value)
-      console.log('📄 isMobileView:', isMobileView.value)
-
       if (isTextEditingMode.value && isMobileView.value) {
         const target = event.target as HTMLElement
         const textInputSection = document.querySelector('.mobile-text-input')
 
-        console.log('📄 textInputSection exists:', !!textInputSection)
-        console.log('📄 target is inside textInputSection:', textInputSection?.contains(target))
-
         if (textInputSection && !textInputSection.contains(target)) {
-          console.log('📄 CALLING exitTextEditingMode because click is outside')
           exitTextEditingMode()
-        } else {
-          console.log('📄 NOT calling exitTextEditingMode - click is inside or no textInputSection')
         }
-      } else {
-        console.log('📄 NOT in text editing mode or not mobile - ignoring click')
-      }
-    }
-
-    // Mobile font/style/effect methods
-    const setFontFamily = (fontFamily: string) => {
-      if (activeTextObject.value) {
-        activeTextObject.value.fontFamily = fontFamily
-      }
-    }
-
-    const setFontSize = (fontSize: number) => {
-      if (activeTextObject.value) {
-        activeTextObject.value.fontSize = fontSize
-      }
-    }
-
-    const setTextColor = (color: string) => {
-      if (activeTextObject.value) {
-        activeTextObject.value.fill = color
       }
     }
 
@@ -1579,6 +1441,7 @@ export default defineComponent({
       }
     })
 
+>>>>>>> bb49b93 (Corrected errors made by Cursor's LLM (missing click)
     return {
       // Refs
       fabricCanvasEl,
@@ -1643,11 +1506,8 @@ export default defineComponent({
       toggleTextBackground,
       updateBackgroundColor,
       updateOpacity,
-
-      // Mobile quick methods
-      setFontFamily,
-      setFontSize,
-      setTextColor,
+<<<<<<< HEAD
+=======
 
       // Collapsible methods
       toggleCollapse,
@@ -1669,6 +1529,7 @@ export default defineComponent({
       activeTab,
       fontOptions,
       selectFont,
+>>>>>>> bb49b93 (Corrected errors made by Cursor's LLM (missing click)
     }
   },
 })
@@ -1679,340 +1540,18 @@ export default defineComponent({
   padding: 20px;
 }
 
-/* Mobile Layout */
-@media (max-width: 768px) {
-  /* Reset body styles for mobile editor */
-  body.mobile-text-editor {
-    overflow: hidden !important;
-    position: fixed !important;
-    width: 100vw !important;
-    height: 100vh !important;
-    margin: 0 !important;
-    padding: 0 !important;
-  }
-
-  .text-overlay-editor.mobile-editor {
-    padding: 0;
-    height: 100vh;
-    width: 100vw;
-    overflow: hidden;
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    z-index: 9999;
-    box-sizing: border-box;
-  }
-
-  /* Reset any parent containers */
-  .text-overlay-editor.mobile-editor * {
-    box-sizing: border-box;
-  }
-
-  /* Hide the main header (includes PageTitle, toolbar, etc.) on mobile */
-  body.mobile-text-editor #kt_header {
-    display: none !important;
-  }
-
-  /* Also hide the aside/sidebar on mobile */
-  body.mobile-text-editor #kt_aside {
-    display: none !important;
-  }
-
-  /* Make sure the main content takes full width and height */
-  body.mobile-text-editor #kt_wrapper {
-    padding-left: 0 !important;
-    padding-top: 0 !important;
-    padding-right: 0 !important;
-    padding-bottom: 0 !important;
-    margin: 0 !important;
-    width: 100vw !important;
-    height: 100vh !important;
-    overflow: hidden !important;
-  }
-
-  /* Ensure the main content area takes full viewport */
-  body.mobile-text-editor #kt_content {
-    padding: 0 !important;
-    margin: 0 !important;
-    width: 100vw !important;
-    height: 100vh !important;
-    overflow: hidden !important;
-  }
-
-  /* Hide any containers that might add padding/margin */
-  body.mobile-text-editor .container,
-  body.mobile-text-editor .container-fluid,
-  body.mobile-text-editor .container-xxl {
-    padding: 0 !important;
-    margin: 0 !important;
-    width: 100% !important;
-    max-width: 100% !important;
-  }
-
-  /* If PageTitle is somehow still showing, hide it specifically */
-  body.mobile-text-editor .page-title {
-    display: none !important;
-  }
-
-  .mobile-layout {
-    height: 100vh;
-    display: flex;
-    flex-direction: column;
-  }
-
-  .mobile-header {
-    display: flex;
-    align-items: center;
-    padding: 8px 12px;
-    background: white;
-    border-bottom: 1px solid #dee2e6;
-    gap: 8px;
-    flex-shrink: 0;
-    height: 40px;
-    min-height: 40px;
-  }
-
-  .mobile-header-btn {
-    min-width: 24px;
-    max-width: 24px;
-    min-height: 24px;
-    max-height: 24px;
-    padding: 2px;
-    border-radius: 3px;
-    font-size: 8px;
-  }
-
-  .mobile-header-title {
-    font-size: 12px;
-    font-weight: 600;
-  }
-
-  .mobile-editor-content {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    height: calc(100vh - 40px);
-  }
-
-  /* Thumbnail/Canvas Section - Much smaller like reference */
-  .mobile-canvas-section {
-    flex: 0 0 auto;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: #f8f9fa;
-    padding: 4px; /* Reduced by 90% from 8px */
-    overflow: hidden;
-    width: 100vw;
-    box-sizing: border-box;
-    height: 50vh; /* Fixed height - only half the screen */
-    max-height: 400px; /* Limit max height */
-  }
-
-  /* Controls Section - Takes remaining space */
-  .mobile-controls-section {
-    flex: 1;
-    background: white;
-    border-top: 1px solid #dee2e6;
-    overflow-y: auto;
-    width: 100vw;
-    box-sizing: border-box;
-    min-height: 200px; /* Ensure adequate space for tools */
-    /* Remove max-height to allow full remaining space */
-  }
-
-  /* Main Editor Menu - Adequate space for buttons */
-  .mobile-main-menu {
-    height: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 12px 16px;
-    min-height: 80px; /* Ensure buttons are visible */
-  }
-
-  .mobile-main-menu .menu-actions {
-    display: flex;
-    gap: 10px;
-    flex-wrap: wrap;
-    justify-content: center;
-    align-items: center;
-    width: 100%;
-  }
-
-  .mobile-main-menu .btn {
-    min-width: 32px;
-    max-width: 36px;
-    padding: 4px 6px;
-    font-size: 8px;
-    min-height: 32px;
-    max-height: 32px;
-    border-radius: 4px;
-    font-weight: 500;
-    line-height: 1;
-  }
-
-  .mobile-add-text-btn {
-    pointer-events: auto !important;
-    touch-action: manipulation !important;
-    z-index: 99998 !important;
-    position: relative !important;
-    background-color: #007bff !important;
-    border: 2px solid #ff0000 !important; /* Red border for debugging */
-    min-height: 44px !important; /* Ensure touch target is large enough */
-    min-width: 44px !important;
-    user-select: none !important;
-    -webkit-user-select: none !important;
-    -webkit-touch-callout: none !important;
-  }
-
-  /* Text Editing Mode - Adequate space for tools */
-  .mobile-text-editing {
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-    min-height: 250px; /* Ensure adequate space for all tools */
-  }
-
-  /* Text Input Section - Like reference app */
-  .mobile-text-input {
-    flex: 0 0 160px;
-    border-bottom: 1px solid #dee2e6;
-    padding: 8px 12px;
-    background: #f8f9fa;
-  }
-
-  .text-input-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 4px;
-  }
-
-  .text-input-header h6 {
-    font-size: 10px;
-    font-weight: 600;
-    color: #495057;
-  }
-
-  .text-input-header .btn {
-    min-width: 16px;
-    max-width: 16px;
-    min-height: 16px;
-    max-height: 16px;
-    padding: 0;
-    font-size: 8px;
-    border-radius: 2px;
-  }
-
-  .mobile-text-input .form-control {
-    font-size: 12px;
-    border: 1px solid #ced4da;
-    border-radius: 4px;
-    min-height: 30px;
-    padding: 4px 8px;
-  }
-
-  /* New Mobile Editing Mode Styles */
-  .mobile-editing-mode {
-    display: flex;
-    flex-direction: column;
-    height: 100%;
-  }
-
-  .mobile-text-input-bar {
-    background: white;
-    border-bottom: 1px solid #dee2e6;
-    flex-shrink: 0;
-  }
-
-  .mobile-text-input-bar .mobile-text-input {
-    flex: 1;
-    font-size: 14px;
-    border: 1px solid #ced4da;
-    border-radius: 4px;
-    padding: 8px 12px;
-    min-height: 40px;
-  }
-
-  .mobile-text-tools {
-    flex: 1;
-    background: #f8f9fa;
-    overflow-y: auto;
-  }
-
-  .tool-row {
-    display: flex;
-    gap: 12px;
-    align-items: end;
-  }
-
-  .tool-group {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-
-  .tool-group.flex-1 {
-    flex: 1;
-  }
-
-  .tool-label {
-    font-size: 11px;
-    font-weight: 600;
-    color: #6c757d;
-    margin-bottom: 2px;
-  }
-
-  .size-controls {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .size-controls .form-range {
-    width: 60px;
-  }
-
-  .size-value {
-    font-size: 10px;
-    font-weight: 500;
-    color: #495057;
-    min-width: 20px;
-  }
-
-  .background-controls {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-  }
-
-  .btn-group-sm .btn {
-    padding: 2px 4px;
-    font-size: 8px;
-    min-height: 18px;
-    max-height: 18px;
-    border-radius: 2px;
-  }
-
-  /* Text editing mode adjustments */
-  .text-editing-mode .mobile-canvas-section {
-    /* Reduce canvas height in text editing mode like reference */
-    height: 45vh; /* Slightly smaller when editing */
-    max-height: 350px;
-  }
-
-  .text-editing-mode .mobile-controls-section {
-    /* Ensure adequate height for text editing tools */
-    min-height: 250px;
-    /* Remove max-height to allow full remaining space */
-  }
+.status-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
 }
 
-/* Desktop Layout */
+.status-label {
+  font-weight: 500;
+  color: #6c757d;
+}
+
 .canvas-container {
   display: flex;
   justify-content: center;
@@ -2024,40 +1563,11 @@ export default defineComponent({
   position: relative;
 }
 
-@media (max-width: 768px) {
-  .mobile-canvas-section .canvas-container {
-    margin: 0;
-    padding: 2px; /* Minimal padding like reference */
-    background: transparent;
-    border-radius: 0;
-    width: 100%;
-    height: 100%;
-    max-width: 100vw;
-    max-height: 100%;
-    box-sizing: border-box;
-  }
-}
-
 .fabric-canvas {
   border: 2px solid #dee2e6;
   border-radius: 8px;
   background: white;
   transition: opacity 0.3s ease;
-  max-width: 100%;
-  max-height: 100%;
-}
-
-@media (max-width: 768px) {
-  .mobile-canvas-section .fabric-canvas {
-    border: 1px solid #dee2e6;
-    border-radius: 4px;
-    max-width: calc(100vw - 16px);
-    max-height: calc(100% - 16px);
-    object-fit: contain;
-    touch-action: none; /* Allow fabric.js to handle all touch events */
-    pointer-events: auto; /* Ensure canvas receives pointer events */
-    user-select: none; /* Prevent text selection conflicts */
-  }
 }
 
 .loading-overlay {
@@ -2091,10 +1601,7 @@ export default defineComponent({
 
 .editor-layout {
   display: flex;
-  flex-direction: row; /* Explicit left-right layout */
   min-height: 500px;
-  gap: 0;
-  width: 100%; /* Ensure full width */
 }
 
 .canvas-container {
@@ -2106,105 +1613,13 @@ export default defineComponent({
   background: #f8f9fa;
   border-radius: 8px 0 0 8px;
   position: relative;
-  min-width: 0; /* Allow flex item to shrink below content size */
-  overflow: hidden; /* Prevent canvas from overflowing */
-  /* Temporary debug aid */
-  border: 2px solid red;
 }
 
 .text-editing-panel {
   width: 320px;
-  min-width: 320px; /* Prevent panel from shrinking */
-  flex-shrink: 0; /* Prevent shrinking */
   background: white;
   border-left: 1px solid #dee2e6;
   border-radius: 0 8px 8px 0;
-  overflow-y: auto; /* Allow scrolling if content is too tall */
-  height: fit-content; /* Don't force full height */
-  /* Temporary debug aid */
-  border: 2px solid blue;
-}
-
-/* Mobile responsive design */
-@media (max-width: 768px) {
-  .editor-layout {
-    flex-direction: column;
-    min-height: auto;
-    gap: 0;
-  }
-
-  .canvas-container {
-    border-radius: 8px 8px 0 0;
-    padding: 10px;
-    min-height: 350px;
-    max-height: 65vh; /* Give more space to canvas */
-  }
-
-  .text-editing-panel {
-    width: 100%;
-    min-width: 100%;
-    border-left: none;
-    border-top: 1px solid #dee2e6;
-    border-radius: 0 0 8px 8px;
-    max-height: 35vh; /* Reduced height for collapsible design */
-  }
-
-  .panel-content {
-    height: auto;
-    max-height: calc(35vh - 60px); /* Account for panel header */
-    padding: 10px;
-    overflow-y: auto;
-  }
-
-  .fabric-canvas {
-    max-width: 100%;
-    max-height: 100%;
-    object-fit: contain;
-  }
-
-  /* Improve touch interactions on mobile */
-  .btn {
-    min-height: 44px; /* iOS recommended touch target size */
-    padding: 8px 16px;
-  }
-
-  .form-control {
-    min-height: 44px;
-  }
-
-  /* Collapsible button styling for mobile */
-  .btn[data-bs-toggle='collapse'] {
-    font-size: 14px;
-    padding: 8px 12px;
-  }
-
-  /* Collapse content styling */
-  .collapse .p-2 {
-    padding: 8px !important;
-  }
-
-  /* Compact form groups */
-  .form-group {
-    margin-bottom: 8px;
-  }
-
-  /* Smaller textarea for mobile */
-  textarea.form-control {
-    rows: 1;
-    min-height: 44px;
-  }
-}
-
-/* Tablet responsive design */
-@media (min-width: 769px) and (max-width: 1024px) {
-  .text-editing-panel {
-    width: 280px;
-    min-width: 280px;
-  }
-
-  .canvas-container {
-    padding: 15px;
-  }
 }
 
 .panel-header {
@@ -2311,53 +1726,6 @@ export default defineComponent({
   animation: shimmer 2s infinite;
 }
 
-/* Collapsible button styles */
-.btn.collapsed {
-  transition: all 0.2s ease;
-  border: 1px solid #dee2e6;
-  background-color: #f8f9fa;
-}
-
-.btn.collapsed:hover {
-  background-color: #e9ecef;
-  border-color: #adb5bd;
-}
-
-.btn:not(.collapsed) {
-  background-color: #007bff;
-  color: white;
-  border-color: #007bff;
-}
-
-.btn:not(.collapsed) .kt-icon {
-  transform: rotate(180deg);
-}
-
-/* Collapse content styling */
-.collapse-content {
-  background-color: #f8f9fa;
-  border: 1px solid #dee2e6;
-  border-top: none;
-  transition: all 0.3s ease;
-}
-
-/* Badge styling for status indicators */
-.badge {
-  font-size: 0.75em;
-  padding: 0.25em 0.5em;
-}
-
-/* Color preview styling */
-.color-preview {
-  border: 2px solid #dee2e6;
-  border-radius: 4px;
-  transition: border-color 0.2s ease;
-}
-
-.color-preview:hover {
-  border-color: #adb5bd;
-}
-
 @keyframes shimmer {
   0% {
     left: -100%;
@@ -2366,6 +1734,8 @@ export default defineComponent({
     left: 100%;
   }
 }
+<<<<<<< HEAD
+=======
 
 /* Mobile Text Editing Panel Styles */
 .mobile-text-editing-panel {
@@ -2443,41 +1813,6 @@ export default defineComponent({
   color: #6c757d;
   border: none;
   border-bottom: 2px solid transparent;
-}
-
-/* Mobile Text Editor Interface */
-.mobile-text-editor {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  background: white;
-}
-
-/* Content Grid (~16% height) */
-.mobile-content-grid {
-  flex: 0 0 16%;
-  padding: 8px 12px;
-  overflow-y: auto;
-  min-height: 80px;
-}
-
-.grid-2-cols {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
-
-.grid-option {
-  padding: 8px 12px;
-  border: 1px solid #dee2e6;
-  border-radius: 4px;
-  background: white;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.grid-option:hover {
-  background: #f8f9fa;
 }
 
 .mobile-nav-tabs .nav-link.active {
@@ -2641,4 +1976,5 @@ export default defineComponent({
   font-size: 11px;
   color: #6c757d;
 }
-</style>
+>>>>>>> bb49b93 (Corrected errors made by Cursor's LLM (missing click)
+</style>s
