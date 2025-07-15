@@ -1131,6 +1131,10 @@ export default defineComponent({
 
             // Get the processed video URL from the job status response
             try {
+              console.log('🔍 Full job status response:', JSON.stringify(status, null, 2))
+              console.log('🔍 status.output_urls:', status.output_urls)
+              console.log('🔍 typeof status.output_urls:', typeof status.output_urls)
+              
               if (status.output_urls && status.output_urls.length > 0) {
                 // Use the first processed video URL from the job status response
                 processedVideoUrl.value = status.output_urls[0]
